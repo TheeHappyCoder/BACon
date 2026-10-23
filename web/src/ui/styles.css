@@ -1,0 +1,672 @@
+@import "tailwindcss";
+@import "tw-animate/dist/index.css";
+@import "./novacore-tokens.css";
+@source "../";
+
+@custom-variant dark (&:is(.dark *));
+
+/* The select panel unfolds from the trigger, then its options resolve in order. */
+.nova-select-motion {
+  --select-motion-direction: 1;
+  clip-path: inset(0 0 0 0 round 1rem);
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  transform-origin: top center;
+  transition: clip-path 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 400ms cubic-bezier(0.2, 1.4, 0.3, 1),
+    opacity 130ms ease-out;
+}
+
+[data-side="top"] > .nova-select-motion {
+  --select-motion-direction: -1;
+  transform-origin: bottom center;
+}
+
+.nova-select-motion[data-starting-style],
+.nova-select-motion[data-ending-style] {
+  clip-path: inset(0 0 100% 0 round 1rem);
+  opacity: 0;
+  transform: translateY(calc(-4px * var(--select-motion-direction))) scaleY(0.82);
+}
+
+[data-side="top"] > .nova-select-motion[data-starting-style],
+[data-side="top"] > .nova-select-motion[data-ending-style] {
+  clip-path: inset(100% 0 0 0 round 1rem);
+}
+
+.nova-select-motion[data-ending-style] {
+  transition-duration: 180ms, 210ms, 110ms;
+  transition-delay: 60ms, 0ms, 50ms;
+}
+
+.nova-select-motion [data-slot="select-item"] {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+  transition: opacity 160ms ease-out, transform 210ms cubic-bezier(0.22, 1, 0.36, 1), filter 160ms ease-out;
+  transition-delay: calc(25ms + (var(--select-item-index, 0) * 22ms));
+}
+
+.nova-select-motion [data-slot="select-item"]:nth-child(2) { --select-item-index: 1; }
+.nova-select-motion [data-slot="select-item"]:nth-child(3) { --select-item-index: 2; }
+.nova-select-motion [data-slot="select-item"]:nth-child(4) { --select-item-index: 3; }
+.nova-select-motion [data-slot="select-item"]:nth-child(5) { --select-item-index: 4; }
+.nova-select-motion [data-slot="select-item"]:nth-child(6) { --select-item-index: 5; }
+.nova-select-motion [data-slot="select-item"]:nth-child(7) { --select-item-index: 6; }
+.nova-select-motion [data-slot="select-item"]:nth-child(8) { --select-item-index: 7; }
+.nova-select-motion [data-slot="select-item"]:nth-child(9) { --select-item-index: 8; }
+.nova-select-motion [data-slot="select-item"]:nth-child(n+10) { --select-item-index: 9; }
+
+.nova-select-motion[data-starting-style] [data-slot="select-item"],
+.nova-select-motion[data-ending-style] [data-slot="select-item"] {
+  opacity: 0;
+  transform: translateY(-6px);
+  filter: blur(3px);
+  transition-delay: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nova-select-motion,
+  .nova-select-motion [data-slot="select-item"] {
+    transition-duration: 0ms;
+    transition-delay: 0ms;
+  }
+}
+
+/* Semantic (shadcn) names mapped onto the novacore tokens in novacore-tokens.css. A #f6f6f6 stage, white sheets
+   with an ink-8% hairline, blue only for the primary action, links and selection. */
+:root {
+  /* Component surfaces read --background as white; the page stage is --surface-page on body. */
+  --background: var(--surface-card);
+  --surface: var(--surface-card);
+  --outer-shell: var(--surface-page);
+  --content-frame: var(--surface-page);
+  --surface-border: var(--border-subtle);
+  --foreground: var(--text-strong);
+  --title: var(--text-strong);
+  --description: var(--text-muted);
+  --tertiary: var(--text-muted);
+  --card: var(--surface-card);
+  --graphic-canvas-default-bg: var(--surface-page);
+  --card-foreground: var(--text-strong);
+  --popover: var(--surface-popover);
+  --popover-foreground: var(--text-strong);
+  --primary: var(--action-primary);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-card-muted);
+  --secondary-foreground: var(--text-strong);
+  --muted: var(--surface-card-muted);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--surface-hover);
+  --accent-foreground: var(--text-strong);
+  --destructive: var(--status-alarm-strong);
+  --destructive-foreground: var(--status-alarm-strong);
+  --border: var(--border-subtle);
+  --input: var(--border-default);
+  --ring: #3ba6f1;
+  --chart-1: var(--chart-series-1);
+  --chart-2: var(--chart-series-2);
+  --chart-3: var(--chart-series-3);
+  --chart-4: var(--chart-series-4);
+  --chart-5: var(--chart-compare);
+  --sidebar: var(--surface-section);
+  --sidebar-foreground: var(--text-strong);
+  --sidebar-primary: var(--action-primary);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--surface-card-muted);
+  --sidebar-accent-foreground: var(--text-strong);
+  --sidebar-border: var(--border-subtle);
+  --sidebar-ring: #3ba6f1;
+  --font-geist-mono: var(--font-geist-sans); /* this app uses Geist everywhere, no mono */
+  --font-sans: var(--font-geist-sans);
+  --font-heading: var(--font-geist-sans);
+  --font-serif: Georgia, serif;
+  --font-mono: var(--font-geist-sans);
+  --radius: 10px;
+  --shadow-2xs: var(--shadow-sheet);
+  --shadow-xs: var(--shadow-sheet);
+  --shadow-sm: var(--shadow-pill);
+  --shadow: var(--shadow-pill);
+  --shadow-md: var(--shadow-popover);
+  --shadow-lg: var(--shadow-2);
+  --shadow-xl: var(--shadow-2);
+  --shadow-2xl: var(--shadow-side-sheet);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+  --info: var(--status-info-strong);
+  --info-foreground: var(--status-info-strong);
+  --success: var(--status-ok-strong);
+  --success-foreground: var(--status-ok-strong);
+  --warning: var(--status-warn-strong);
+  --warning-foreground: var(--status-warn-strong);
+
+  /* Sheets: white, ink-8% hairline, a 1px lift. Selected = white pill with its own lift. Floating layers get the
+     soft ladder; side sheets the deep one. */
+  --surface-raised: var(--surface-card);
+  --surface-recessed: var(--surface-card-muted);
+  --elevation-sheet: var(--shadow-sheet);
+  --elevation-raised: var(--shadow-pill);
+  --elevation-recessed: none;
+  --elevation-floating: var(--shadow-popover);
+  --elevation-edge-start: none;
+  --elevation-edge-end: none;
+  --elevation-drawer-start: var(--shadow-side-sheet);
+  --elevation-drawer-end: var(--shadow-side-sheet);
+
+  /* The app frame: a #f6f6f6 stage for the rail, panel, command bar and gutters; white sheets on it; paper wells
+     inside the sheets; ink-8% hairlines. */
+  --frame-stage: var(--surface-section);
+  --frame-sheet: var(--surface-card);
+  --frame-raised: var(--surface-card);
+  --frame-well: var(--surface-card-muted);
+  --frame-hairline: var(--border-subtle);
+  --app-shell-border: var(--border-subtle);
+}
+
+.dark {
+  --primary-foreground: #ffffff;
+  --chart-5: var(--chart-compare);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-surface: var(--surface);
+  --color-outer-shell: var(--outer-shell);
+  --color-content-frame: var(--content-frame);
+  --color-hairline: color-mix(in srgb, var(--foreground) 12%, transparent);
+  --color-surface-border: var(--surface-border);
+  --color-title: var(--title);
+  --color-description: var(--description);
+  --color-tertiary: var(--tertiary);
+  --font-sans: var(--font-geist-sans);
+  --font-heading: var(--font-geist-sans);
+  --font-mono: var(--font-geist-sans);
+  --font-serif: Georgia, serif;
+
+  /* Novacore radii: menu items 9-10, data rows and inputs 12, sheets 16, side sheets 18. rounded-2xl is the sheet
+     radius. Buttons, badges and chips are rounded-full. No squircles. */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 16px;
+  --radius-3xl: 18px;
+  --radius-4xl: 24px;
+
+  /* Medium is the heaviest weight anywhere. */
+  --font-weight-semibold: 500;
+  --font-weight-bold: 500;
+  --font-weight-extrabold: 500;
+  --font-weight-black: 500;
+
+  --shadow-2xs: var(--shadow-2xs);
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow: var(--shadow);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
+  --animate-skeleton: skeleton 2s -1s infinite linear;
+  --animate-caret-blink: 1s ease-out infinite caret-blink;
+  --animate-toast-success-odd: toast-success-odd 0.32s cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-success-even: toast-success-even 0.32s cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-error-odd: toast-error-odd 0.28s cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-error-even: toast-error-even 0.28s cubic-bezier(0.5, 1, 0.89, 1);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning: var(--warning);
+  --color-success-foreground: var(--success-foreground);
+  --color-success: var(--success);
+  --color-info-foreground: var(--info-foreground);
+  --color-info: var(--info);
+  @keyframes skeleton {
+  to {
+    background-position: -200% 0;
+    }
+  }
+  @keyframes caret-blink {
+  0%, 70%, to {
+    opacity: 1;
+    }
+  20%, 50% {
+    opacity: 0;
+    }
+  }
+  @keyframes toast-success-odd {
+  0% {
+    scale: 1;
+    }
+  30% {
+    scale: 1.025;
+    }
+  60% {
+    scale: 0.99;
+    }
+  100% {
+    scale: 1;
+    }
+  }
+  @keyframes toast-error-odd {
+  0% {
+    translate: 0 0;
+    }
+  25% {
+    translate: -3px 0;
+    }
+  50% {
+    translate: 3px 0;
+    }
+  75% {
+    translate: -3px 0;
+    }
+  100% {
+    translate: 0 0;
+    }
+  }
+  @keyframes toast-success-even {
+  0% {
+    scale: 1;
+    }
+  30% {
+    scale: 1.025;
+    }
+  60% {
+    scale: 0.99;
+    }
+  100% {
+    scale: 1;
+    }
+  }
+  @keyframes toast-error-even {
+  0% {
+    translate: 0 0;
+    }
+  25% {
+    translate: -3px 0;
+    }
+  50% {
+    translate: 3px 0;
+    }
+  75% {
+    translate: -3px 0;
+    }
+  100% {
+    translate: 0 0;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply text-foreground;
+    background: var(--surface-page);
+    overflow-x: clip;
+  }
+  .dark body {
+    background: var(--surface-page);
+  }
+}
+
+@layer base {
+  html {
+    --novacore-interface-scale: 100%;
+    font-size: var(--novacore-interface-scale);
+  }
+
+  @media (min-width: 2560px) {
+    html {
+      --novacore-interface-scale: 110%;
+    }
+  }
+
+  @media (min-width: 3840px) {
+    html {
+      --novacore-interface-scale: 115%;
+    }
+  }
+
+  html, body {
+    overscroll-behavior: none;
+    height: 100%;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  h1, h2, h3, h4, h5, h6, strong, b, th {
+    font-weight: 500;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--action-primary) 30%, transparent);
+  }
+
+  body {
+    position: relative;
+    font-weight: 400;
+    font-family: var(--font-sans);
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    caret-color: var(--foreground);
+  }
+
+  input::-ms-reveal,
+  input::-ms-clear,
+  input::-webkit-credentials-auto-fill-button {
+    display: none !important;
+  }
+}
+
+@layer base {
+  :root[data-reduced-motion="true"] {
+    scroll-behavior: auto !important;
+  }
+
+  :root[data-reduced-motion="true"] *,
+  :root[data-reduced-motion="true"] *::before,
+  :root[data-reduced-motion="true"] *::after {
+    animation-delay: 0s !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  [data-disabled="true"] {
+    cursor: not-allowed !important;
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  [data-disabled="true"] * {
+    pointer-events: none;
+  }
+
+  button:not([data-disabled="true"]),
+  [role="button"]:not([data-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+/* Elevation utilities: one place for every depth treatment. Selected = raised, inputs and wells = recessed. */
+@utility elevation-sheet { box-shadow: var(--elevation-sheet); }
+@utility elevation-raised { background-color: var(--surface-raised); box-shadow: var(--elevation-raised); }
+@utility elevation-recessed { background-color: var(--surface-recessed); box-shadow: var(--elevation-recessed); }
+@utility elevation-floating { box-shadow: var(--elevation-floating); }
+@utility elevation-edge-start { box-shadow: var(--elevation-edge-start); }
+@utility elevation-edge-end { box-shadow: var(--elevation-edge-end); }
+@utility elevation-drawer-start { box-shadow: var(--elevation-drawer-start); }
+@utility elevation-drawer-end { box-shadow: var(--elevation-drawer-end); }
+
+@layer utilities {
+  [data-menu-page-shell] .page-header-content {
+    max-width: none;
+  }
+
+  [data-menu-page-shell="standard"] .page-header-frame {
+    padding-inline: 0;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .landing-header-noise {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.92' numOctaves='3' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='96' height='96' filter='url(%23n)' opacity='.34'/></svg>");
+    background-size: 96px 96px;
+    mix-blend-mode: overlay;
+  }
+
+  .landing-signal-field {
+    background-image:
+      radial-gradient(ellipse at 50% 16%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 58%),
+      radial-gradient(circle, color-mix(in srgb, var(--primary) 24%, transparent) 0 0.75px, transparent 1px);
+    background-size: 100% 100%, 14px 14px;
+    mask-image: linear-gradient(to bottom, black, transparent 84%);
+    opacity: 0.55;
+  }
+
+  .landing-core-grid {
+    background-image:
+      radial-gradient(ellipse at 72% 18%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 50%),
+      linear-gradient(color-mix(in srgb, var(--ink) 4%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--ink) 4%, transparent) 1px, transparent 1px);
+    background-size: 100% 100%, 32px 32px, 32px 32px;
+    mask-image: linear-gradient(to bottom, black, transparent 82%);
+    opacity: 0.7;
+  }
+
+  .landing-step-dots {
+    background-image:
+      radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 48%),
+      radial-gradient(circle, color-mix(in srgb, var(--primary) 30%, transparent) 0 0.9px, transparent 1.1px);
+    background-size: 100% 100%, 9px 9px;
+    mask-image: linear-gradient(135deg, black, transparent 72%);
+    opacity: 0.65;
+  }
+
+  .landing-closing-dots {
+    background-image: radial-gradient(circle, color-mix(in srgb, var(--primary) 22%, transparent) 0 0.8px, transparent 1px);
+    background-size: 11px 11px;
+    mask-image: linear-gradient(to left, black, transparent 82%);
+    opacity: 0.6;
+  }
+
+  .landing-link {
+    border-radius: 0.375rem;
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: left calc(100% - 1px);
+    background-repeat: no-repeat;
+    background-size: 0 1px;
+    outline: none;
+    transition: color 180ms ease, background-size 300ms ease;
+  }
+
+  .landing-link:hover,
+  .landing-link:focus-visible {
+    color: var(--foreground);
+    background-size: 100% 1px;
+  }
+
+  .landing-link:focus-visible {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 24%, transparent);
+  }
+
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .status-pulse {
+    animation: status-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+
+  /* A page's blocks arriving in turn: each rises 8px out of a 4px blur, 60ms after the one before. An animation,
+     because the blocks mount in their final state; blur(0) stays declared so the layer is never torn down (that
+     late repaint reads as a blink). The reduced-motion rule above shortens it to nothing. */
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  }
+  .rise-in > * {
+    filter: blur(0);
+    animation: rise-in 0.5s cubic-bezier(0.19, 1, 0.22, 1) both;
+  }
+  .rise-in > :nth-child(2) { animation-delay: 60ms; }
+  .rise-in > :nth-child(3) { animation-delay: 120ms; }
+  .rise-in > :nth-child(4) { animation-delay: 180ms; }
+  .rise-in > :nth-child(n + 5) { animation-delay: 240ms; }
+
+  /* Novacore motion. A view arrives with a blur-fade (8px blur, 14px rise, 500ms power2.out); side sheets and the
+     bulk bar use the same curve with a larger offset; loaded content sharpens out of a 3px blur; a changed live
+     value swaps with a 2px blur and a 3px rise. blur(0) stays declared so the layer is never torn down. */
+  @keyframes nc-blur-fade {
+    from { opacity: 0; filter: blur(var(--reveal-blur)); translate: 0 var(--reveal-offset); }
+    to { opacity: 1; filter: blur(0); translate: 0 0; }
+  }
+  @keyframes nc-blur-fade-right {
+    from { opacity: 0; filter: blur(10px); translate: 40px 0; }
+    to { opacity: 1; filter: blur(0); translate: 0 0; }
+  }
+  @keyframes nc-blur-fade-up {
+    from { opacity: 0; filter: blur(10px); translate: 0 16px; }
+    to { opacity: 1; filter: blur(0); translate: 0 0; }
+  }
+  @keyframes nc-skel-in {
+    from { opacity: 0; filter: blur(3px); }
+    to { opacity: 1; filter: blur(0); }
+  }
+  @keyframes nc-text-swap {
+    from { opacity: 0; filter: blur(2px); transform: translateY(3px); }
+    to { opacity: 1; filter: blur(0); transform: translateY(0); }
+  }
+  @keyframes nc-ping {
+    0% { transform: scale(1); opacity: 0.6; }
+    80%, 100% { transform: scale(2.6); opacity: 0; }
+  }
+  .nc-view-in {
+    filter: blur(0);
+    animation: nc-blur-fade 0.5s var(--ease-power2-out) both;
+  }
+  .nc-sheet-in {
+    filter: blur(0);
+    animation: nc-blur-fade-right 0.5s var(--ease-power2-out) both;
+  }
+  .nc-bar-in {
+    filter: blur(0);
+    animation: nc-blur-fade-up 0.4s var(--ease-power2-out) both;
+  }
+  .nc-skel-in {
+    filter: blur(0);
+    animation: nc-skel-in 0.4s ease-in-out both;
+  }
+  .nc-text-swap {
+    animation: nc-text-swap 0.3s var(--ease-out) both;
+  }
+  .nc-ping {
+    animation: nc-ping 1.6s var(--ease-out) infinite;
+  }
+  .nc-press:active {
+    transform: translateY(1px) scale(0.98);
+  }
+}
+
+#nprogress .bar {
+  background: var(--action-primary);
+  position: fixed;
+  z-index: 9999;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+}
+
+#nprogress .peg {
+  display: block;
+  position: absolute;
+  right: 0;
+  width: 180px;
+  height: 100%;
+  background: linear-gradient(to right, transparent, var(--action-primary));
+  box-shadow: none;
+  opacity: 1;
+  transform: none;
+}
+
+[data-chart-motion-active="true"] .novacore-chart-motion-series .recharts-line-curve,
+[data-chart-motion-active="true"] .novacore-chart-motion-series .recharts-area-curve,
+[data-chart-motion-active="true"] .novacore-chart-motion-series .recharts-area-area,
+[data-chart-motion-active="true"] .novacore-chart-motion-series .recharts-radar-polygon,
+[data-chart-motion-active="true"] .novacore-chart-motion-item {
+  opacity: 0.28;
+}
+
+.novacore-chart-motion-series .recharts-line-curve,
+.novacore-chart-motion-series .recharts-area-curve,
+.novacore-chart-motion-series .recharts-area-area,
+.novacore-chart-motion-series .recharts-radar-polygon,
+.novacore-chart-motion-item {
+  transition: opacity 180ms ease-in-out;
+}
+
+[data-reduced-motion="true"] .novacore-chart-motion-series .recharts-line-curve,
+[data-reduced-motion="true"] .novacore-chart-motion-series .recharts-area-curve,
+[data-reduced-motion="true"] .novacore-chart-motion-series .recharts-area-area,
+[data-reduced-motion="true"] .novacore-chart-motion-series .recharts-radar-polygon,
+[data-reduced-motion="true"] .novacore-chart-motion-item {
+  transition-duration: 0ms;
+}
+
+.novacore-chart-reveal .novacore-chart-motion-series {
+  animation: novacore-chart-series-reveal 500ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes novacore-chart-series-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+    opacity: 0.35;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .novacore-chart-reveal .novacore-chart-motion-series {
+    animation: none;
+  }
+}
+
+:root[data-reduced-motion="true"] .novacore-chart-reveal .novacore-chart-motion-series {
+  animation: none;
+}

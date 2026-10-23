@@ -1,0 +1,251 @@
+/* Novacore design tokens, from the novacore-app-ux skill (ds/tokens/colors.css, effects.css, motion.css and the
+ * reference templates in ds/templates). Ink on white on a #f6f6f6 stage, hairlines are ink at 8%, one blue for
+ * action, and the lime / yellow / cyan / coral tints carry meaning, never decoration. Radii live in the @theme block
+ * of styles.css so Tailwind's rounded-* scale matches. On :root so portals, sheets and menus all read them. */
+
+:root {
+  /* ink + neutrals */
+  --ink: #292929;
+  --ink-2: #6d6d6d;
+  --ink-3: #969696;
+  --ink-4: #c4c4c4;
+  --paper: #f6f6f6;
+  --paper-2: #f0f0f0;
+  --paper-3: #e9e9e9;
+  --pill-dark: #1c1c1f;
+  --pill-dark-2: #26262a;
+  --pill-dark-hover: #3a3a3f;
+
+  /* brand blue: primary button, Open live view, links, selection */
+  --color-primary-50: #f3f6fd;
+  --color-primary-100: #e8eefc;
+  --color-primary-200: #d0dcf8;
+  --color-primary-300: #a8bdf1;
+  --color-primary-400: #6c8de8;
+  --color-primary-500: #305dde;
+  --color-primary-600: #2a53c8;
+  --color-primary-700: #2446a8;
+  --color-primary-800: #3a3480;
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-background-1: #fcfcfc;
+  --color-background-2: #f9f9f9;
+  --color-background-3: #f6f6f6;
+  --color-background-4: #f0f0f0;
+  --color-background-5: #191919;
+  --color-background-6: #212121;
+  --color-background-7: #242424;
+  --color-background-8: #141414;
+  --color-background-9: #2e2e2e;
+  --color-background-10: #e9e9e9;
+  --color-background-11: #c4c4c4;
+  --color-background-12: #ececec;
+  --color-stroke-1: #dfe4eb;
+  --color-stroke-2: #e3e7ed;
+  --color-stroke-3: #d7dde5;
+  --color-stroke-4: #eceff4;
+  --color-stroke-5: #262626;
+  --color-stroke-6: #2b2b2b;
+  --color-stroke-7: #333333;
+  --color-stroke-8: #3d3d3d;
+
+  /* highlight tints: backgrounds only, ink text on top */
+  --color-ns-green: #c6f56f;
+  --color-ns-green-light: #e8fbc6;
+  --color-ns-yellow: #f9eb57;
+  --color-ns-yellow-light: #fdf7bc;
+  --color-ns-cyan: #83e7ee;
+  --color-ns-cyan-light: #cdf5f8;
+  --color-ns-cyan-row: #e6fafb;
+  --color-ns-red: #ffb9a2;
+  --color-ns-red-light: #ffe3d9;
+
+  --text-strong: var(--ink);
+  --text-muted: var(--ink-2);
+  --text-faint: var(--ink-3);
+  --text-disabled: var(--ink-4);
+  --text-on-dark: #fcfcfc;
+  --text-on-dark-muted: rgba(252, 252, 252, 0.6);
+
+  --surface-page: var(--paper);
+  /* The rail sits one step below the panel and the stage, so rail, panel and sheet read as three layers. */
+  --surface-rail: var(--paper-2);
+  --surface-rail-active: #e3e3e3;
+  --surface-section: var(--paper);
+  --surface-card: #ffffff;
+  --surface-popover: #ffffff;
+  --surface-card-muted: var(--paper);
+  --surface-input: #ffffff;
+  --surface-hover: var(--paper);
+  --surface-track: var(--paper-2);
+  --surface-checked: var(--color-ns-cyan-row);
+  --surface-inverse: var(--ink);
+  --border-default: rgba(41, 41, 41, 0.14);
+  --border-subtle: rgba(41, 41, 41, 0.08);
+  --border-divider: rgba(41, 41, 41, 0.06);
+  --border-panel: rgba(41, 41, 41, 0.08);
+  --border-strong: rgba(41, 41, 41, 0.22);
+  --action-primary: var(--color-primary-500);
+  --action-primary-hover: var(--color-primary-600);
+  --action-primary-border: color-mix(in srgb, var(--color-primary-500) 80%, var(--color-primary-800));
+  --action-primary-soft: var(--color-primary-100);
+
+  /* Status: tint behind, a strong hue for dots, counts and lines only, ink for the label. */
+  --status-ok: var(--color-ns-green);
+  --status-ok-bg: var(--color-ns-green-light);
+  --status-ok-strong: #059669;
+  --status-warn: var(--color-ns-yellow);
+  --status-warn-bg: var(--color-ns-yellow-light);
+  --status-warn-strong: #f59e0b;
+  --status-alarm: var(--color-ns-red);
+  --status-alarm-bg: var(--color-ns-red-light);
+  --status-alarm-strong: #ef4444;
+  --status-info: var(--color-ns-cyan);
+  --status-info-bg: var(--color-ns-cyan-light);
+  --status-info-strong: #3b82f6;
+  --status-offline-bg: var(--paper-2);
+  --status-offline-strong: var(--ink-3);
+  --status-ink: var(--ink);
+
+  --chart-series-1: #296ff0;
+  --chart-series-2: #0d9488;
+  --chart-series-3: #164e63;
+  --chart-series-4: #fbbf24;
+  --chart-spark: var(--color-ns-green);
+  --chart-limit: var(--color-ns-red);
+  --chart-compare: rgba(41, 41, 41, 0.3);
+  --chart-grid: #e5e5e5;
+
+  /* Geist is the interface face; Geist Mono is for IDs, values, times and versions. Medium (500) is the heaviest weight. */
+  --font-geist-sans: 'Geist Variable', 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --text-heading-1: 4.25rem;
+  --text-heading-1-lh: 110%;
+  --text-heading-2: 3.25rem;
+  --text-heading-2-lh: 120%;
+  --text-heading-3: 2.5rem;
+  --text-heading-3-lh: 120%;
+  --text-heading-4: 2rem;
+  --text-heading-4-lh: 130%;
+  --text-heading-5: 1.5rem;
+  --text-heading-5-lh: 140%;
+  --text-heading-6: 1.25rem;
+  --text-heading-6-lh: 140%;
+  --text-tagline-1: 1rem;
+  --text-tagline-1-lh: 150%;
+  --text-tagline-2: 0.875rem;
+  --text-tagline-2-lh: 150%;
+  --text-tagline-3: 0.75rem;
+  --text-tagline-3-lh: 150%;
+
+  /* Sheets carry a hairline and a 1px lift; floating layers get the soft ladder. */
+  --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-1: 0 1px 2px 0 rgba(16, 24, 40, 0.05);
+  --shadow-2: 0 10px 20px -5px rgba(28, 34, 43, 0.05), 0 20px 65px -5px rgba(28, 34, 43, 0.05);
+  --shadow-3: 0 25px 80px -12px rgba(28, 34, 43, 0.1);
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-side-sheet: 0 25px 80px -12px rgba(28, 34, 43, 0.3);
+  --shadow-inner-top: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  --shadow-inner-bottom: inset 0 -1px 0 rgba(58, 52, 128, 0.3);
+  --backdrop: rgba(0, 0, 0, 0.28);
+
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-power2-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 500ms;
+  --reveal-blur: 8px;
+  --reveal-offset: 14px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-12: 48px;
+  --space-14: 56px;
+
+  /* The shell: rail, contextual panel, command bar, status strip, inspector, side sheet. */
+  --shell-rail-w: 60px;
+  --shell-panel-w: 236px;
+  --shell-bar-h: 52px;
+  --shell-gap: 10px;
+  --shell-inspector-w: 320px;
+  --shell-side-sheet-w: 450px;
+  --app-sidebar-w: var(--shell-panel-w);
+  --app-topbar-h: var(--shell-bar-h);
+  --app-gap: var(--shell-gap);
+  --app-content-pad: 12px;
+  --control-h-xs: 28px;
+  --control-h-sm: 32px;
+  --control-h-md: 36px;
+  --control-h-lg: 40px;
+  --table-head-h: 32px;
+  --table-row-h: 44px;
+  --table-row-h-dense: 36px;
+  --panel-pad: 18px;
+  --panel-radius: 16px;
+  --icon-chip: 34px;
+}
+
+
+.dark {
+  /* The logo's side faces flip for dark surfaces; the top face stays the health light. */
+  --logo-left: #ffffff;
+  --logo-right: #9a9aa2;
+  --ink: #ededed;
+  --ink-2: #969696;
+  --ink-3: #6d6d6d;
+  --ink-4: #4f4f4f;
+  --paper: #191919;
+  --paper-2: #1e1e1e;
+  --paper-3: #2e2e2e;
+  --color-primary-500: #296ff0;
+  --color-primary-600: #4a85f3;
+
+  /* Dark: the sheets sit a step darker than the stage around them, the rail between; popovers stay lighter. */
+  --surface-page: #0a0a0a;
+  --surface-rail: #070707;
+  --surface-rail-active: var(--paper-3);
+  --surface-section: #0a0a0a;
+  --surface-card: #040404;
+  --surface-popover: #222222;
+  --surface-card-muted: #0f0f0f;
+  --surface-input: #212121;
+  --surface-hover: #2a2a2a;
+  --surface-track: #2a2a2a;
+  --surface-checked: rgb(131 231 238 / 0.1);
+  --surface-inverse: #2e2e2e;
+  /* Solid, not translucent: on near-black surfaces a translucent hairline takes the colour of whatever is behind it,
+     so the rail, the panel and the sheets would each draw a different line. */
+  --border-default: #252525;
+  --border-subtle: #1a1a1a;
+  --border-divider: #141414;
+  --border-panel: #1a1a1a;
+  --border-strong: #353535;
+  --action-primary-soft: rgb(41 111 240 / 0.18);
+
+  /* On dark the tints become the label and the background is a faint wash of the tint. */
+  --status-ok-bg: rgb(198 245 111 / 0.14);
+  --status-warn-bg: rgb(249 235 87 / 0.14);
+  --status-alarm-bg: rgb(255 185 162 / 0.14);
+  --status-info-bg: rgb(131 231 238 / 0.14);
+  --status-offline-bg: rgb(237 237 237 / 0.08);
+  --status-ok-strong: #34d399;
+  --status-warn-strong: #fbbf24;
+  --status-alarm-strong: #f87171;
+  --status-info-strong: #60a5fa;
+  --status-ink: var(--ink);
+
+  --chart-compare: rgba(237, 237, 237, 0.3);
+  --chart-grid: #2e2e2e;
+
+  --shadow-sheet: none;
+  --shadow-pill: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-1: none;
+  --backdrop: rgba(0, 0, 0, 0.5);
+}

@@ -1,0 +1,51 @@
+/* App-level additions to the Novacore tokens. The scan shimmer is from the live-view discovery sheet. */
+@keyframes nc-scan {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(400%); }
+}
+.nc-scanbar { animation: nc-scan 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .nc-scanbar { animation: none; } }
+
+/* The app mark: the node eases between status colours, the arcs ripple outward while busy, the node pulses while
+   degraded, and everything dims when offline. Reduced motion keeps the colour and drops the movement. */
+.bx-node { transition: fill 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); transform-box: fill-box; transform-origin: center; }
+.bx-arc { transition: opacity 0.35s ease; }
+.bx-mark-offline .bx-arc { opacity: 0.35; }
+.bx-mark-busy .bx-arc-inner { animation: bx-wave 1.3s ease-in-out infinite; }
+.bx-mark-busy .bx-arc-outer { animation: bx-wave 1.3s ease-in-out 0.22s infinite; }
+.bx-mark-degraded .bx-node { animation: bx-pulse 1.4s ease-in-out infinite; }
+@keyframes bx-wave { 0%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+@keyframes bx-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.7); opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .bx-mark .bx-arc, .bx-mark .bx-node { animation: none; } }
+
+/* Table rows fade in with opacity only: a blur or transform would put each row on its own layer and the hairlines
+   between rows would land on different sub-pixels. */
+@keyframes bx-row-in { from { opacity: 0; } }
+.bx-row-in { animation: bx-row-in 0.3s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .bx-row-in { animation: none; } }
+
+/* No monospace anywhere, including the browser defaults for kbd and code. */
+kbd, code, pre, samp { font-family: inherit; }
+
+/* The rail. Dark: an ink tray that anchors the left edge, white icons, the mark's arcs in white. White: a sheet-coloured
+   tray on the grey stage. Both keep the active square and edge bar. */
+.bx-rail[data-tone='dark'] {
+  --rail-bg: #1c1c1f;
+  --rail-border: #1c1c1f;
+  --rail-icon: rgb(255 255 255 / 0.55);
+  --rail-icon-strong: #ffffff;
+  --rail-hover: rgb(255 255 255 / 0.07);
+  --rail-active: rgb(255 255 255 / 0.12);
+  --rail-bar: var(--ink); /* the edge bar sits outside the tray, on the light stage */
+}
+.bx-rail[data-tone='dark'] .bx-arc-inner { stroke: #ffffff; }
+.bx-rail[data-tone='dark'] .bx-arc-outer { stroke: rgb(255 255 255 / 0.45); }
+.bx-rail[data-tone='white'] {
+  --rail-bg: var(--surface-card);
+  --rail-border: var(--border-subtle);
+  --rail-icon: var(--text-muted);
+  --rail-icon-strong: var(--text-strong);
+  --rail-hover: color-mix(in srgb, var(--ink) 5%, transparent);
+  --rail-active: var(--paper-2);
+  --rail-bar: var(--ink);
+}

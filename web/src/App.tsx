@@ -1,0 +1,873 @@
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { api, type Device, type Job, type NetInterface, type ObjectRow, type Status, type TrendPoint, type TrendStatus, type UpdateStatus } from './api'
+import type { MarkStatus } from './components/AppMark'
+import { ConnectDialog, type NetworkSettings } from './components/ConnectDialog'
+import { UpdateDialog } from './components/UpdateDialog'
+import { Changes, compareRows, type Baseline } from './components/Changes'
+import { FilterField, type Severity } from './components/FilterBar'
+import { HealthCheck, runChecks, type SavedCheck } from './components/HealthCheck'
+import { evaluate, parse } from './query'
+import { NetworkTree, type Selection } from './components/NetworkTree'
+import { ObjectTable, type Sort } from './components/ObjectTable'
+import { PropertiesPanel } from './components/PropertiesPanel'
+import { NetworkView } from './components/NetworkView'
+import { LayoutProvider, Pane, PaneToggle } from './components/Layout'
+import { Rail, type Place } from './components/Rail'
+import { TrendsView } from './components/TrendsView'
+import { ToastProvider, useToast } from './components/Toasts'
+import { DEFAULT_COLUMNS, SYNTHETIC_COLUMNS, exportColumns, exportCsv, exportXlsx } from './exporters'
+import { Button } from './ui/components/button'
+import { Hugeicons } from './ui/components/hugeicons'
+import { Menu, MenuCheckboxItem, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from './ui/components/menu'
+import { ScrollArea } from './ui/components/scroll-area'
+import { Skeleton } from './ui/components/skeleton'
+import { Tabs, TabsList, TabsTab } from './ui/components/tabs'
+import { TooltipProvider } from './ui/components/tooltip'
+
+const { ArrowRight, ChevronDown, FileText, FileSpreadsheet, XIcon, CheckIcon } = Hugeicons
+
+function useStored<T>(key: string, initial: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(key)
+      return raw ? (JSON.parse(raw) as T) : initial
+    } catch {
+      return initial
+    }
+  })
+  useEffect(() => localStorage.setItem(key, JSON.stringify(value)), [key, value])
+  return [value, setValue] as const
+}
+
+function useClock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(t)
+  }, [])
+  return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+function Workspace() {
+  const toast = useToast()
+  const clock = useClock()
+
+  const [status, setStatus] = useState<Status>({ connected: false, settings: null, host: '' })
+  const [interfaces, setInterfaces] = useState<NetInterface[]>([])
+  const [net, setNet] = useStored<NetworkSettings>('bx.network.v2', { ip: '', port: 47808, bbmd: '', low: '', high: '', timeout: '3' })
+  const [connectOpen, setConnectOpen] = useState(false)
+  const [update, setUpdate] = useState<UpdateStatus | null>(null)
+  const [updateOpen, setUpdateOpen] = useState(false)
+  // one quiet check against GitHub per launch; the rail shows a dot when a newer release is out
+  useEffect(() => {
+    api.update(true).then(setUpdate).catch(() => {})
+  }, [])
+  const [connectBusy, setConnectBusy] = useState(false)
+  const [connectError, setConnectError] = useState('')
+  const [searching, setSearching] = useState(false)
+
+  const [devices, setDevices] = useState<Device[]>([])
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [rows, setRows] = useState<Record<number, ObjectRow[]>>({})
+  const [hidden, setHidden] = useState<Set<number>>(new Set())
+  const removalTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
+
+  const [selection, setSelection] = useState<Selection>({ kind: 'network' })
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(['net']))
+  const [columns, setColumns] = useStored<string[]>('bx.columns.v2', DEFAULT_COLUMNS)
+  const [presets, setPresets] = useStored<Record<string, string[]>>('bx.presets', {})
+  const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
+  const [savedChecks, setSavedChecks] = useStored<SavedCheck[]>('bx.checks', [])
+  const [sort, setSort] = useState<Sort>(null)
+  const [includeIdentity, setIncludeIdentity] = useStored('bx.includeIdentity', true)
+  const [sheetPerDevice, setSheetPerDevice] = useStored('bx.sheetPerDevice', false)
+  const [includeErrors, setIncludeErrors] = useStored('bx.includeErrors', true)
+  const [focusSignal, setFocusSignal] = useState(0)
+  const [view, setView] = useState<'objects' | 'health' | 'changes'>('objects')
+  const [baseline, setBaseline] = useState<Baseline | null>(null)
+  const [booted, setBooted] = useState(false)
+  const [place, setPlace] = useState<Place>('objects')
+  const [trends, setTrends] = useState<TrendStatus>({ running: false, startedAt: 0, stoppedAt: 0, interval: 10, mode: 'auto', points: [], samples: 0, file: '' })
+  const [netIssues, setNetIssues] = useState(0)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  const refreshInterfaces = useCallback(async () => {
+    const list = await api.interfaces()
+    setInterfaces(list)
+    setNet((n) => (list.some((i) => i.ip === n.ip) ? n : { ...n, ip: list.find((i) => i.up)?.ip ?? list[0]?.ip ?? '' }))
+  }, [setNet])
+
+  const refreshDevices = useCallback(async () => setDevices(await api.devices()), [])
+
+  useEffect(() => {
+    ;(async () => {
+      try {
+        await refreshInterfaces()
+        const s = await api.status()
+        setStatus(s)
+        const devs = await api.devices()
+        setDevices(devs)
+        const loaded: Record<number, ObjectRow[]> = {}
+        for (const d of devs) if (d.objectCount) loaded[d.instance] = await api.objects(d.instance)
+        setRows(loaded)
+        setJobs(await api.jobs())
+        if (!s.connected) setConnectOpen(true)
+      } catch (e) {
+        toast(message(e), { kind: 'error' })
+      } finally {
+        setBooted(true)
+      }
+    })()
+  }, [refreshInterfaces, toast])
+
+  // ---- polling while reads run ----
+  const runningKey = jobs.filter((j) => j.state === 'running').map((j) => j.id).join(',')
+  useEffect(() => {
+    if (!runningKey) return
+    let ticks = 0
+    const timer = setInterval(async () => {
+      try {
+        const latest = await api.jobs()
+        setJobs(latest)
+        ticks++
+        const ids = runningKey.split(',')
+        const finished = latest.filter((j) => ids.includes(j.id) && j.state !== 'running')
+        const stillRunning = latest.filter((j) => j.state === 'running')
+        const refresh = new Set([...finished.map((j) => j.device), ...(ticks % 3 === 0 ? stillRunning.map((j) => j.device) : [])])
+        for (const inst of refresh) {
+          const list = await api.objects(inst)
+          setRows((r) => ({ ...r, [inst]: list }))
+        }
+        if (finished.length || ticks % 3 === 0) await refreshDevices()
+        for (const j of finished) {
+          const d = devices.find((x) => x.instance === j.device)
+          const name = d?.name || `Device ${j.device}`
+          if (j.state === 'failed') toast(`${name}: the read stopped. ${j.error}`, { kind: 'error' })
+          if (j.state === 'done') toast(`${name} read: ${j.total} objects`)
+        }
+      } catch (e) {
+        toast(message(e), { kind: 'error' })
+      }
+    }, 700)
+    return () => clearInterval(timer)
+  }, [runningKey, toast, refreshDevices, devices])
+
+  // ---- trends and the network monitor, for the rail badges and the Trends page ----
+  useEffect(() => {
+    let stop = false
+    const load = async () => {
+      try {
+        const t = await api.trends()
+        if (!stop) setTrends(t)
+        if (status.connected) {
+          const n = await api.network(60)
+          if (!stop) setNetIssues(n.events.filter((e) => e.severity !== 'low').length)
+        }
+      } catch {
+        /* next tick */
+      }
+    }
+    load()
+    const t = setInterval(load, place === 'trends' || trends.running ? 2000 : 8000)
+    return () => {
+      stop = true
+      clearInterval(t)
+    }
+  }, [place, trends.running, status.connected])
+
+  const trendRows = async (list: ObjectRow[]) => {
+    try {
+      const points = list.filter((r) => r.values['present-value'] !== undefined)
+      if (!points.length) throw new Error('None of these objects has a present value to trend.')
+      const res = await api.trendAdd(points)
+      setTrends(res)
+      const added = res.added
+      toast(added.length ? `Added ${added.length} point${added.length === 1 ? '' : 's'} to Trends` : 'Those points are already in Trends', {
+        undo: added.length
+          ? async () => {
+              let t = res as TrendStatus
+              for (const id of added) t = await api.trendRemove(id)
+              setTrends(t)
+            }
+          : undefined,
+      })
+    } catch (e) {
+      toast(message(e), { kind: 'error' })
+    }
+  }
+
+  const showInObjects = (p: TrendPoint) => {
+    setPlace('objects')
+    select({ kind: 'object', device: p.device, key: `${p.device}:${p.typeId},${p.instance}` })
+  }
+
+  // ---- network ----
+  const searchDevices = useCallback(async () => {
+    setSearching(true)
+    setExpanded((e) => new Set([...e, 'net']))
+    try {
+      const found = await api.scan(net.low === '' ? undefined : Number(net.low), net.high === '' ? undefined : Number(net.high), Number(net.timeout) || 3)
+      await refreshDevices()
+      toast(
+        found.length ? `Found ${found.length} device${found.length === 1 ? '' : 's'}. Click one to read it.` : 'No devices answered. Try Add a device by IP from the network menu.',
+        { kind: found.length ? 'success' : 'error' },
+      )
+    } catch (e) {
+      toast(message(e), { kind: 'error' })
+    } finally {
+      setSearching(false)
+    }
+  }, [net.low, net.high, net.timeout, refreshDevices, toast])
+
+  const start = async () => {
+    const iface = interfaces.find((i) => i.ip === net.ip)
+    if (!iface) return
+    setConnectBusy(true)
+    setConnectError('')
+    try {
+      const same = status.connected && status.settings?.ip === net.ip && status.settings?.port === net.port && (status.settings?.bbmd || '') === net.bbmd.trim()
+      if (!same) setStatus(await api.connect(iface.ip, iface.prefix, net.port || 47808, net.bbmd.trim()))
+      setConnectOpen(false)
+      searchDevices()
+    } catch (e) {
+      setConnectError(message(e))
+    } finally {
+      setConnectBusy(false)
+    }
+  }
+
+  const disconnect = async () => {
+    try {
+      setStatus(await api.disconnect())
+      setConnectOpen(false)
+      toast('Disconnected. The UDP port is free for other tools.')
+    } catch (e) {
+      toast(message(e), { kind: 'error' })
+    }
+  }
+
+  const addByIp = async (ip: string) => {
+    try {
+      const d = await api.addDevice(ip)
+      await refreshDevices()
+      toast(`Found ${d.name || `device ${d.instance}`} at ${d.address}`)
+      return true
+    } catch (e) {
+      toast(message(e), { kind: 'error' })
+      return false
+    }
+  }
+
+  // ---- site files ----
+  const saveSite = async () => {
+    try {
+      const d = new Date()
+      const p = (n: number) => String(n).padStart(2, '0')
+      const name = `${status.host || 'site'} ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}${p(d.getMinutes())}`
+      const blob = await api.saveSite(name)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${name}.bxsite`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      toast(`Saved ${name}.bxsite. Open it any time, even without a network.`)
+    } catch (e) {
+      toast(message(e), { kind: 'error' })
+    }
+  }
+
+  const openSite = async (file: File) => {
+    try {
+      const res = await api.openSite(file)
+      await refreshDevices()
+      const loaded: Record<number, ObjectRow[]> = {}
+      for (const inst of res.loaded) loaded[inst] = await api.objects(inst)
+      setRows((r) => ({ ...r, ...loaded }))
+      setExpanded((e) => new Set([...e, 'net']))
+      setConnectOpen(false)
+      const when = res.savedAt ? new Date(res.savedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'earlier'
+      toast(`Opened ${res.loaded.length} device${res.loaded.length === 1 ? '' : 's'} saved ${when}${res.host ? ` on ${res.host}` : ''}`)
+    } catch (e) {
+      toast(message(e), { kind: 'error' })
+    }
+  }
+
+  // ---- reading ----
+  const startRead = useCallback(
+    async (instances: number[], retryFailed = false, objects?: [number, number][]) => {
+      try {
+        if (!instances.length) return
+        const started = await api.read(instances, retryFailed, objects)
+        if (!started.length && retryFailed) toast('Nothing left to retry.')
+        setJobs(await api.jobs())
+      } catch (e) {
+        toast(message(e), { kind: 'error' })
+      }
+    },
+    [toast],
+  )
+
+  const cancelJob = async (id: string) => {
+    try {
+      await api.cancelJob(id)
+      setJobs(await api.jobs())
+    } catch (e) {
+      toast(message(e), { kind: 'error' })
+    }
+  }
+
+  const removeDevice = (inst: number) => {
+    const d = devices.find((x) => x.instance === inst)
+    setHidden((h) => new Set([...h, inst]))
+    if (selection.kind !== 'network' && selection.device === inst) setSelection({ kind: 'network' })
+    const timer = setTimeout(async () => {
+      removalTimers.current.delete(inst)
+      try {
+        await api.removeDevice(inst)
+        setRows((r) => {
+          const next = { ...r }
+          delete next[inst]
+          return next
+        })
+        await refreshDevices()
+      } catch (e) {
+        toast(message(e), { kind: 'error' })
+      } finally {
+        setHidden((h) => new Set([...h].filter((x) => x !== inst)))
+      }
+    }, 5000)
+    removalTimers.current.set(inst, timer)
+    toast(`Removed ${d?.name || `device ${inst}`}`, {
+      undo: () => {
+        clearTimeout(removalTimers.current.get(inst))
+        removalTimers.current.delete(inst)
+        setHidden((h) => new Set([...h].filter((x) => x !== inst)))
+      },
+    })
+  }
+
+  // ---- selection: clicking a device reads it if it has not been read yet ----
+  const isReading = (inst: number) => jobs.some((j) => j.device === inst && j.state === 'running')
+  const select = (s: Selection) => {
+    setSelection(s)
+    if (s.kind === 'device') {
+      setExpanded((e) => new Set([...e, `dev:${s.device}`]))
+      if (!(rows[s.device] ?? []).length && !isReading(s.device) && status.connected) startRead([s.device])
+    }
+    if (s.kind === 'type') setExpanded((e) => new Set([...e, `dev:${s.device}`]))
+    if (s.kind === 'object') {
+      const row = (rows[s.device] ?? []).find((r) => r.key === s.key)
+      if (row) setExpanded((e) => new Set([...e, `dev:${s.device}`, `type:${s.device}:${row.values['Object type']}`]))
+      setTimeout(() => document.querySelector(`[data-row-key="${CSS.escape(s.key)}"]`)?.scrollIntoView({ block: 'nearest' }), 50)
+    }
+  }
+  const toggleExpanded = (id: string) =>
+    setExpanded((e) => {
+      const next = new Set(e)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  // ---- derived ----
+  const visibleDevices = useMemo(() => devices.filter((d) => !hidden.has(d.instance)), [devices, hidden])
+  const scopeDeviceId = selection.kind === 'network' ? null : selection.device
+  const scopeDevice = scopeDeviceId === null ? null : visibleDevices.find((d) => d.instance === scopeDeviceId) ?? null
+  const typeFilter = selection.kind === 'type' ? selection.type : null
+
+  const scopeRows = useMemo(() => {
+    const base = scopeDeviceId === null ? visibleDevices.flatMap((d) => rows[d.instance] ?? []) : rows[scopeDeviceId] ?? []
+    return typeFilter ? base.filter((r) => r.values['Object type'] === typeFilter) : base
+  }, [rows, scopeDeviceId, visibleDevices, typeFilter])
+
+  const available = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of scopeRows) {
+      for (const k of Object.keys(r.values)) counts.set(k, (counts.get(k) ?? 0) + 1)
+      for (const k of Object.keys(r.errors)) if (!counts.has(k)) counts.set(k, 0)
+    }
+    return [...counts].map(([name, count]) => ({ name, count }))
+  }, [scopeRows])
+  const filterable = useMemo(() => available.filter((p) => !SYNTHETIC_COLUMNS.includes(p.name)).sort((a, b) => a.name.localeCompare(b.name)), [available])
+  const healthIssues = useMemo(() => runChecks(scopeRows, savedChecks).filter((c) => c.hits.length).length, [scopeRows, savedChecks])
+  const queryNode = useMemo(() => {
+    try {
+      return parse(query, available.map((p) => p.name))
+    } catch {
+      return null // the filter bar shows the error; until it is fixed, nothing is filtered out
+    }
+  }, [query, available])
+  const changeCount = useMemo(() => {
+    if (!baseline) return 0
+    const then = baseline.rows.filter(
+      (r) => (scopeDeviceId === null || r.device === scopeDeviceId) && (!typeFilter || r.values['Object type'] === typeFilter),
+    )
+    return compareRows(scopeRows, then, false).length
+  }, [baseline, scopeRows, scopeDeviceId, typeFilter])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const searchCols = ['object-name', 'Object type', 'Instance', ...columns]
+    let list = scopeRows.filter((r) => {
+      if (queryNode && !evaluate(queryNode, r)) return false
+      if (q && !searchCols.some((c) => (r.values[c] ?? r.errors[c] ?? '').toLowerCase().includes(q))) return false
+      return true
+    })
+    if (sort) {
+      const { column, dir } = sort
+      list = [...list].sort((a, b) => {
+        const av = a.values[column] ?? ''
+        const bv = b.values[column] ?? ''
+        if (!av !== !bv) return av ? -1 : 1
+        return av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' }) * dir
+      })
+    }
+    return list
+  }, [scopeRows, queryNode, search, columns, sort])
+
+  const selectedKey = selection.kind === 'object' ? selection.key : null
+  const selectedRow = selectedKey ? scopeRows.find((r) => r.key === selectedKey) ?? null : null
+  // a device's own properties are its device object's properties
+  const subject =
+    selectedRow ?? (selection.kind === 'device' ? (rows[selection.device] ?? []).find((r) => r.typeId === 8 && r.instance === selection.device) ?? null : null)
+  const scopeJob = scopeDevice ? [...jobs].reverse().find((j) => j.device === scopeDevice.instance) : undefined
+  const running = jobs.filter((j) => j.state === 'running' && !hidden.has(j.device))
+  const loading = scopeDevice ? scopeJob?.state === 'running' : running.length > 0
+  const deviceLabel = (inst: number) => {
+    const d = devices.find((x) => x.instance === inst)
+    return d?.name ? `${d.name} (${inst})` : String(inst)
+  }
+
+  const anyProblems = visibleDevices.some((d) => d.failedCount > 0)
+  const mark: { status: MarkStatus; text: string } = !status.connected
+    ? { status: 'offline', text: 'Not connected to a network' }
+    : running.length || searching
+      ? { status: 'busy', text: searching ? 'Searching for devices' : `Reading ${running.length} device${running.length === 1 ? '' : 's'}` }
+      : anyProblems
+        ? { status: 'degraded', text: 'Some objects could not be read' }
+        : { status: 'healthy', text: `Connected on ${status.settings?.ip}:${status.settings?.port}` }
+
+  const doExport = async (kind: 'csv' | 'xlsx') => {
+    try {
+      const cols = exportColumns(columns, includeIdentity)
+      if (!filtered.length) throw new Error('No rows match the current filters, so there is nothing to export.')
+      if (!cols.length) throw new Error('Tick at least one property to export.')
+      const name = kind === 'csv' ? exportCsv(filtered, cols, includeErrors) : await exportXlsx(filtered, cols, includeErrors, sheetPerDevice, deviceLabel)
+      toast(`Exported ${filtered.length} rows to ${name}`)
+    } catch (e) {
+      toast(message(e), { kind: 'error' })
+    }
+  }
+
+  // ---- keyboard: / to search, arrows to move through rows, Esc to deselect ----
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      const typing = target.closest('input, textarea, [contenteditable=true], [role=dialog], [role=menu], [role=listbox], [role=tree]')
+      if (e.key === '/' && !typing) {
+        e.preventDefault()
+        searchRef.current?.focus()
+        return
+      }
+      if (typing) return
+      if (e.key === 'Escape' && selection.kind === 'object') setSelection({ kind: 'device', device: selection.device })
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && filtered.length) {
+        e.preventDefault()
+        const i = filtered.findIndex((r) => r.key === selectedKey)
+        const next = e.key === 'ArrowDown' ? Math.min(filtered.length - 1, i + 1) : Math.max(0, i === -1 ? 0 : i - 1)
+        select({ kind: 'object', device: filtered[next].device, key: filtered[next].key })
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const focusProperties = () => setFocusSignal((n) => n + 1)
+  const title = scopeDevice ? scopeDevice.name || `Device ${scopeDevice.instance}` : 'All devices'
+
+  // what the middle shows when there is no table yet: one sentence and the one thing to do
+  const emptyState = !booted ? null : !status.connected ? (
+    <Empty
+      title="Connect to your BACnet network"
+      text="Pick the network adapter your controllers are on. Devices then appear in the tree on the left."
+      action={
+        <Button size="sm" onClick={() => setConnectOpen(true)}>
+          Connect
+        </Button>
+      }
+    />
+  ) : searching && !visibleDevices.length ? (
+    <Empty title="Searching for devices…" text={`Sending a who-is on ${status.settings?.ip}. Devices appear in the tree as they answer.`} />
+  ) : !visibleDevices.length ? (
+    <Empty
+      title="No devices answered"
+      text="Search again, or add a device by its IP address from the network menu in the tree."
+      action={
+        <Button size="sm" onClick={searchDevices}>
+          Search again
+        </Button>
+      }
+    />
+  ) : scopeDevice && !loading ? (
+    <Empty
+      title="Not read yet"
+      text="Reading loads every object and every property on this device."
+      action={
+        <Button size="sm" onClick={() => startRead([scopeDevice.instance])}>
+          Read {scopeDevice.name || 'device'}
+        </Button>
+      }
+    />
+  ) : !scopeDevice && !loading ? (
+    <Empty title="Click a device in the tree to read it" text="Its objects fill this table. Tick properties on the right to add columns, then export." />
+  ) : null
+
+  const crumbs: { label: string; go?: () => void }[] = [{ label: 'Network', go: () => select({ kind: 'network' }) }]
+  if (scopeDevice) crumbs.push({ label: scopeDevice.name || `Device ${scopeDevice.instance}`, go: () => select({ kind: 'device', device: scopeDevice.instance }) })
+  if (typeFilter && scopeDevice) crumbs.push({ label: typeFilter })
+  if (selectedRow) crumbs.push({ label: selectedRow.values['object-name'] || selectedRow.key })
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-(--surface-page) text-(--text-strong)">
+      <Rail
+        status={booted ? mark.status : 'busy'}
+        statusText={booted ? mark.text : 'Starting…'}
+        place={place}
+        onPlace={setPlace}
+        recording={trends.running}
+        issues={netIssues}
+        onNetwork={() => setConnectOpen(true)}
+        updateAvailable={!!update?.available}
+        onUpdates={() => setUpdateOpen(true)}
+      />
+      {place === 'trends' ? (
+        <TrendsView
+          status={status}
+          trends={trends}
+          onTrends={setTrends}
+          onShowInObjects={showInObjects}
+          onGoToObjects={() => setPlace('objects')}
+          allRows={visibleDevices.flatMap((d) => rows[d.instance] ?? [])}
+          devices={visibleDevices}
+          onAddRows={trendRows}
+        />
+      ) : place === 'network' ? (
+        <NetworkView status={status} devices={visibleDevices} />
+      ) : (
+      <>
+      <Pane side="left">
+      <NetworkTree
+        status={status}
+        devices={visibleDevices}
+        jobs={jobs}
+        rows={rows}
+        selection={selection}
+        onSelect={select}
+        expanded={expanded}
+        onToggle={toggleExpanded}
+        searching={searching}
+        onConnect={() => setConnectOpen(true)}
+        onSearch={searchDevices}
+        onAddByIp={addByIp}
+        onRead={(inst, retry) => startRead([inst], retry)}
+        onReadAll={() => startRead(visibleDevices.map((d) => d.instance))}
+        onCancel={cancelJob}
+        onRemove={removeDevice}
+        onSaveSite={saveSite}
+        onOpenSite={openSite}
+        booting={!booted}
+      />
+      </Pane>
+
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-[52px] shrink-0 items-center gap-2 pr-2 pl-2">
+          <PaneToggle side="left" />
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px] whitespace-nowrap text-(--text-muted)">
+            {crumbs.map((c, i) => (
+              <span key={i} className="flex min-w-0 items-center gap-1.5">
+                {i > 0 ? <ArrowRight className="size-3 shrink-0 text-(--ink-4)" /> : null}
+                {i === crumbs.length - 1 || !c.go ? (
+                  <span className={i === crumbs.length - 1 ? 'truncate font-medium text-(--text-strong)' : 'truncate'}>{c.label}</span>
+                ) : (
+                  <button className="truncate hover:text-(--text-strong)" onClick={c.go}>
+                    {c.label}
+                  </button>
+                )}
+              </span>
+            ))}
+          </nav>
+          <div className="flex-1" />
+
+          {!booted ? (
+            <Skeleton className="h-[34px] w-[150px] rounded-full" />
+          ) : (
+          <span className="inline-flex h-[34px] items-center gap-2 rounded-full border border-(--border-default) bg-(--surface-card) px-3 text-[12px] whitespace-nowrap text-(--text-muted)">
+            <span className={status.connected ? 'size-[7px] rounded-full bg-(--status-ok-strong) shadow-[0_0_0_3px_rgba(5,150,105,.18)]' : 'size-[7px] rounded-full bg-(--ink-4)'} />
+            {status.connected ? (
+              <>
+                Live · <span className="tabular-nums">{clock}</span>
+              </>
+            ) : (
+              'Offline'
+            )}
+          </span>
+          )}
+          <PaneToggle side="right" />
+        </header>
+
+        <div className="flex min-h-0 flex-1 gap-[10px] px-3 pb-3">
+          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+            <div key={`${scopeDeviceId}`} className="nc-view-in flex min-h-0 flex-1 flex-col">
+              <div className="flex items-start gap-4 px-[18px] pt-[18px] pb-3">
+                <div className="min-w-0 flex-1">
+                  <h1 className="m-0 truncate text-[20px] font-medium tracking-[-0.02em]">{title}</h1>
+                  {scopeDevice ? (
+                    <div className="mt-1 flex min-w-0 items-center gap-2 text-[12px] text-(--text-muted)">
+                      <span className="truncate">
+                        #{scopeDevice.instance} · {scopeDevice.address}
+                        {scopeDevice.vendorName ? ` · ${scopeDevice.vendorName}` : ''}
+                        {scopeDevice.model ? ` · ${scopeDevice.model}` : ''}
+                      </span>
+                      {typeFilter ? (
+                        <span className="inline-flex h-[22px] shrink-0 items-center gap-1 rounded-full bg-(--surface-track) pr-0.5 pl-2.5 text-(--text-strong)">
+                          {typeFilter} only
+                          <button
+                            aria-label="Show every object type"
+                            onClick={() => select({ kind: 'device', device: scopeDevice.instance })}
+                            className="inline-flex size-[18px] items-center justify-center rounded-full text-(--text-muted) hover:bg-(--surface-card) hover:text-(--text-strong)"
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                <Menu>
+                  <MenuTrigger render={<Button size="sm" disabled={!scopeRows.length} />}>
+                    Export
+                    <ChevronDown />
+                  </MenuTrigger>
+                  <MenuPopup align="end" className="w-64">
+                    <MenuItem onClick={() => doExport('xlsx')}>
+                      <FileSpreadsheet />
+                      Excel workbook
+                    </MenuItem>
+                    <MenuItem onClick={() => doExport('csv')}>
+                      <FileText />
+                      CSV file
+                    </MenuItem>
+                    <MenuSeparator />
+                    <MenuGroup>
+                      <MenuGroupLabel>Exports the {filtered.length} rows shown</MenuGroupLabel>
+                      <MenuCheckboxItem variant="switch" checked={includeIdentity} onCheckedChange={setIncludeIdentity}>
+                        Add device and object id
+                      </MenuCheckboxItem>
+                      <MenuCheckboxItem variant="switch" checked={sheetPerDevice} onCheckedChange={setSheetPerDevice}>
+                        Excel: a sheet per device
+                      </MenuCheckboxItem>
+                      <MenuCheckboxItem variant="switch" checked={includeErrors} onCheckedChange={setIncludeErrors}>
+                        Write read errors in cells
+                      </MenuCheckboxItem>
+                    </MenuGroup>
+                  </MenuPopup>
+                </Menu>
+              </div>
+
+              {scopeRows.length > 0 ? (
+                <div className="border-b border-(--border-subtle) px-[18px]">
+                  <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
+                    <TabsList variant="underline" className="w-auto gap-6 border-b-0">
+                      <TabsTab value="objects">
+                        Objects
+                        <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{scopeRows.length}</span>
+                      </TabsTab>
+                      <TabsTab value="health">
+                        Health check
+                        {healthIssues ? (
+                          <span className="rounded-full bg-(--color-ns-yellow) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--ink)">{healthIssues}</span>
+                        ) : (
+                          <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-(--color-ns-green-light)">
+                            <CheckIcon className="size-3 text-(--ink)" />
+                          </span>
+                        )}
+                      </TabsTab>
+                      <TabsTab value="changes">
+                        Changes
+                        {baseline ? (
+                          <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{changeCount}</span>
+                        ) : null}
+                      </TabsTab>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              ) : null}
+
+              {view === 'objects' && scopeRows.length > 0 ? (
+                <div className="px-[18px] pt-3.5 pb-3">
+                  <FilterField
+                    ref={searchRef}
+                    rows={scopeRows}
+                    props={filterable}
+                    query={query}
+                    onQuery={setQuery}
+                    search={search}
+                    onSearch={setSearch}
+                    matchCount={filtered.length}
+                    totalCount={scopeRows.length}
+                    onTrend={() => trendRows(filtered)}
+                    onSaveCheck={(name: string, severity: Severity, q: string) => {
+                      setSavedChecks((c) => [...c, { id: `${Date.now()}`, name, severity, query: q }])
+                      toast(`Saved "${name}". It runs in Health check from now on.`)
+                    }}
+                  />
+                </div>
+              ) : scopeRows.length > 0 ? (
+                <div className="h-3.5 shrink-0" />
+              ) : null}
+
+              <ScrollArea scrollFade scrollFadeSides={{ left: false, top: false }} clampContentMinWidth={view !== 'objects'} className="min-h-0 flex-1">
+                {view === 'changes' && scopeRows.length > 0 ? (
+                  <Changes
+                    rows={scopeRows}
+                    deviceIds={scopeDeviceId === null ? null : [scopeDeviceId]}
+                    typeFilter={typeFilter}
+                    baseline={baseline}
+                    onBaseline={setBaseline}
+                    selectedKey={selectedKey}
+                    onSelect={(r) => setSelection({ kind: 'object', device: r.device, key: r.key })}
+                  />
+                ) : view === 'health' && scopeRows.length > 0 ? (
+                  <HealthCheck
+                    rows={scopeRows}
+                    selectedKey={selectedKey}
+                    onSelect={(r) => setSelection({ kind: 'object', device: r.device, key: r.key })}
+                    scopeLabel={scopeDevice ? scopeDevice.name || `device ${scopeDevice.instance}` : 'every device'}
+                    saved={savedChecks}
+                    onDeleteCheck={(id) => {
+                      const previous = savedChecks
+                      setSavedChecks((c) => c.filter((x) => x.id !== id))
+                      toast('Deleted the check', { undo: () => setSavedChecks(previous) })
+                    }}
+                  />
+                ) : scopeRows.length > 0 || (loading && scopeDevice) ? (
+                  filtered.length === 0 && !loading ? (
+                    <Empty title="No objects match" text="Try a shorter search, or switch the filter to All." />
+                  ) : (
+                    <ObjectTable
+                      rows={filtered}
+                      columns={columns}
+                      sort={sort}
+                      onSort={(c) => setSort((s) => (s?.column !== c ? { column: c, dir: 1 } : s.dir === 1 ? { column: c, dir: -1 } : null))}
+                      selectedKey={selectedKey}
+                      onSelect={(k) => {
+                        const r = scopeRows.find((x) => x.key === k)
+                        if (!r) return
+                        if (k === selectedKey) setSelection(scopeDevice ? { kind: 'device', device: scopeDevice.instance } : { kind: 'network' })
+                        else select({ kind: 'object', device: r.device, key: k })
+                      }}
+                      showDevice={!scopeDevice && visibleDevices.length > 1}
+                      loading={!!loading}
+                      onAddColumn={focusProperties}
+                      onRemoveColumn={(c) => setColumns(columns.filter((x) => x !== c))}
+                    />
+                  )
+                ) : (
+                  emptyState
+                )}
+              </ScrollArea>
+            </div>
+          </section>
+
+          <Pane side="right" gap={10}>
+          <PropertiesPanel
+            subject={subject}
+            subjectLabel={scopeDevice ? `${typeFilter ?? 'every object'} · ${scopeRows.length}` : `every device · ${scopeRows.length} objects`}
+            available={available}
+            totalRows={scopeRows.length}
+            columns={columns}
+            onColumns={setColumns}
+            presets={presets}
+            onPresets={setPresets}
+            onClearSubject={() =>
+              setSelection(scopeDevice ? (typeFilter ? { kind: 'type', device: scopeDevice.instance, type: typeFilter } : { kind: 'network' }) : { kind: 'network' })
+            }
+            canRead={status.connected}
+            onReread={() => subject && startRead([subject.device], false, [[subject.typeId, subject.instance]])}
+            onTrend={subject && subject.values['present-value'] !== undefined && subject.typeId !== 8 ? () => trendRows([subject]) : undefined}
+            trended={!!subject && trends.points.some((p) => p.device === subject.device && p.typeId === subject.typeId && p.instance === subject.instance)}
+            focusSignal={focusSignal}
+          />
+          </Pane>
+        </div>
+      </main>
+      </>
+      )}
+
+      <UpdateDialog open={updateOpen} onOpenChange={setUpdateOpen} update={update} onUpdate={setUpdate} />
+      <ConnectDialog
+        open={connectOpen}
+        onOpenChange={setConnectOpen}
+        status={status}
+        interfaces={interfaces}
+        onRefreshInterfaces={() => refreshInterfaces().catch((e) => toast(message(e), { kind: 'error' }))}
+        settings={net}
+        onSettings={setNet}
+        onStart={start}
+        onDisconnect={disconnect}
+        busy={connectBusy}
+        error={connectError}
+      />
+    </div>
+  )
+}
+
+function Empty({ title, text, action }: { title: string; text: string; action?: React.ReactNode }) {
+  return (
+    <div className="nc-view-in mx-auto flex max-w-[380px] flex-col items-center px-5 py-16 text-center">
+      <div className="text-[15px] font-medium">{title}</div>
+      <div className="mt-1 text-[13px] leading-normal text-(--text-muted)">{text}</div>
+      {action ? <div className="mt-4">{action}</div> : null}
+    </div>
+  )
+}
+
+class Boundary extends Component<{ children: React.ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null }
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+  render() {
+    if (!this.state.error) return this.props.children
+    return (
+      <div className="flex h-screen items-center justify-center bg-(--surface-page) p-6">
+        <div className="max-w-[420px] rounded-2xl border border-(--border-subtle) bg-(--surface-card) p-6 text-center shadow-(--shadow-sheet)">
+          <div className="text-[15px] font-medium">Something broke on this screen</div>
+          <div className="mt-1 text-[13px] text-(--text-muted)">Data already read is kept by the backend. Reload to carry on.</div>
+          <div className="mt-3 rounded-[12px] bg-(--surface-card-muted) px-3 py-2 text-left text-[11.5px] break-words text-(--text-muted)">{this.state.error.message}</div>
+          <Button size="sm" className="mt-4" onClick={() => location.reload()}>
+            Reload
+          </Button>
+        </div>
+      </div>
+    )
+  }
+}
+
+export default function App() {
+  return (
+    <Boundary>
+      <TooltipProvider delay={300}>
+        <ToastProvider>
+          <LayoutProvider>
+            <Workspace />
+          </LayoutProvider>
+        </ToastProvider>
+      </TooltipProvider>
+    </Boundary>
+  )
+}
