@@ -8,8 +8,9 @@ import { ScrollArea } from '../ui/components/scroll-area'
 import { Skeleton } from '../ui/components/skeleton'
 import { Tooltip, TooltipPopup, TooltipTrigger } from '../ui/components/tooltip'
 import { cn } from '../ui/utils'
+import { SPIN } from './spin'
 
-const { ChevronRight, Network, Cpu, Download, FolderOpen, MoreHorizontal, RefreshCw, Plus, Trash2, CircleStop, Activity, ToggleLeft, List, Box, Calendar, Bell, File, LineChart, Layers, Settings2, Workflow, Type, Hash } = Hugeicons
+const { ChevronRight, Network, Cpu, Download, FolderOpen, MoreHorizontal, ReloadIcon, Plus, Trash2, CircleStop, Activity, ToggleLeft, List, Box, Calendar, Bell, File, LineChart, Layers, Settings2, Workflow, Type, Hash } = Hugeicons
 
 export type Selection =
   | { kind: 'network' }
@@ -283,11 +284,20 @@ export function NetworkTree({
                 onSelect({ kind: 'network' })
                 if (!netOpen) onToggle(netId)
               }}
-              trailing={searching ? <span className="text-[12px] text-(--text-muted)">searching…</span> : devices.length ? <Count>{devices.length}</Count> : null}
+              trailing={
+                searching ? (
+                  <span className="flex items-center gap-1.5 text-[12px] text-(--text-muted)">
+                    <ReloadIcon className={`size-3 ${SPIN}`} />
+                    searching…
+                  </span>
+                ) : devices.length ? (
+                  <Count>{devices.length}</Count>
+                ) : null
+              }
               menu={
                 <RowMenu label="Network actions">
                   <MenuItem onClick={onSearch} disabled={searching || !status.connected}>
-                    <RefreshCw />
+                    <ReloadIcon />
                     Search for devices again
                   </MenuItem>
                   <MenuItem onClick={() => setAdding(true)} disabled={!status.connected}>
@@ -336,7 +346,10 @@ export function NetworkTree({
                       onClick={() => onSelect({ kind: 'device', device: d.instance })}
                       trailing={
                         reading ? (
-                          <span className="text-[12px] tabular-nums text-(--text-strong)">{job.total ? `${Math.round((100 * job.done) / job.total)}%` : '…'}</span>
+                          <span className="flex items-center gap-1.5 text-[12px] tabular-nums text-(--text-strong)">
+                            <ReloadIcon className={`size-3 text-(--text-muted) ${SPIN}`} />
+                            {job.total ? `${Math.round((100 * job.done) / job.total)}%` : '…'}
+                          </span>
                         ) : (
                           <>
                             {problems > 0 ? <span className="size-1.5 rounded-full bg-(--status-alarm-strong)" aria-label={`${problems} objects with problems`} /> : null}
@@ -354,12 +367,12 @@ export function NetworkTree({
                           ) : (
                             <>
                               <MenuItem onClick={() => onRead(d.instance)}>
-                                <RefreshCw />
+                                <ReloadIcon />
                                 {d.objectCount ? 'Read again' : 'Read all objects'}
                               </MenuItem>
                               {problems > 0 ? (
                                 <MenuItem onClick={() => onRead(d.instance, true)}>
-                                  <RefreshCw />
+                                  <ReloadIcon />
                                   Retry {problems} with problems
                                 </MenuItem>
                               ) : null}

@@ -7,6 +7,7 @@ import ipaddress
 import os
 import re
 import socket
+import subprocess
 import sys
 import uuid
 import webbrowser
@@ -17,7 +18,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .client import BACnetError, BacnetClient, ConnectError, Device, check_port_free, error_text
+from .client import BACnetError, BacnetClient, ConnectError, Device, error_text, probe_port
 from .netmon import install_tap, monitor
 from .trends import TrendSession
 from . import updater
@@ -60,14 +61,15 @@ def interfaces():
     return out
 
 
-def _udp_holders(ip: str, port: int) -> list[dict]:
-    """Other programs with a UDP socket on this port, on this address or on all addresses."""
+def _udp_holders(ip: str, port: int) -> list[dict] | None:
+    """Other programs with a UDP socket on this port, on this address or on all addresses.
+    None when Windows will not show the socket table, so the UI never claims "nobody else" without knowing."""
     me = os.getpid()
     out, seen = [], set()
     try:
         conns = psutil.net_connections(kind="udp4")
     except (psutil.AccessDenied, OSError):
-        return out
+        return None
     for c in conns:
         if not c.laddr or c.laddr.port != port or c.laddr.ip not in (ip, "0.0.0.0") or c.pid in (None, me, 0):
             continue
@@ -82,23 +84,50 @@ def _udp_holders(ip: str, port: int) -> list[dict]:
     return out
 
 
+def _reserved_range(port: int) -> list[int] | None:
+    """The Windows excluded-port range (Hyper-V, WSL, Docker reserve these) that holds this UDP port, if any."""
+    if sys.platform != "win32":
+        return None
+    try:
+        out = subprocess.run(
+            ["netsh", "int", "ipv4", "show", "excludedportrange", "protocol=udp"],
+            capture_output=True, text=True, timeout=3, creationflags=subprocess.CREATE_NO_WINDOW,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for lo, hi in re.findall(r"^\s*(\d+)\s+(\d+)", out, re.M):
+        if int(lo) <= port <= int(hi):
+            return [int(lo), int(hi)]
+    return None
+
+
 @app.get("/api/port-check")
 async def port_check(ip: str, port: int = 47808):
-    """Lightweight: a test bind plus a look at who else holds the port. Nothing is sent on the network."""
+    """Lightweight: a test bind like the real one, plus a look at who else holds the port. Nothing is sent.
+
+    holders: other programs on ip:port or 0.0.0.0:port (null when Windows will not say). When BACon is bound
+    to ip:port, Windows hands it everything sent to ip:port; a holder on 0.0.0.0 then only gets broadcasts.
+    """
     if not 1 <= port <= 65535:
         return {"state": "invalid", "holders": []}
+    holders = _udp_holders(ip, port)
     if client.settings and client.settings["ip"] == ip and client.settings["port"] == port:
-        return {"state": "ours", "holders": []}
+        return {"state": "ours", "holders": holders}
     stats = psutil.net_if_stats()
     for name, addrs in psutil.net_if_addrs().items():
         if any(a.address == ip for a in addrs) and stats.get(name) and not stats[name].isup:
-            return {"state": "down", "holders": []}  # Windows keeps the address on an unplugged adapter
-    holders = _udp_holders(ip, port)
-    try:
-        check_port_free(ip, port)
-    except ConnectError as e:
-        missing = "not an address on this PC" in str(e)
-        return {"state": "no-address" if missing else "busy", "holders": holders}
+            return {"state": "down", "holders": []}  # Windows keeps a fixed address on an unplugged adapter
+    result = probe_port(ip, port)
+    if result == "no-address":
+        return {"state": "no-address", "holders": []}
+    if result == "in-use":  # only a socket on exactly ip:port blocks the bind; name that one, not the sharers on 0.0.0.0
+        return {"state": "busy", "holders": [h for h in holders if h["address"] == ip] or holders if holders else holders}
+    if result == "denied":
+        # a program holding the port exclusively gives the same error as a reserved range; the socket table tells them apart
+        if holders:
+            return {"state": "busy", "holders": holders}
+        reserved = _reserved_range(port)
+        return {"state": "reserved", "range": reserved, "holders": []} if reserved else {"state": "blocked", "holders": holders}
     return {"state": "shared" if holders else "free", "holders": holders}
 
 

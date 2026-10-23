@@ -16,6 +16,7 @@ import { Rail, type Place } from './components/Rail'
 import { TrendsView } from './components/TrendsView'
 import { ToastProvider, useToast } from './components/Toasts'
 import { DEFAULT_COLUMNS, SYNTHETIC_COLUMNS, exportColumns, exportCsv, exportXlsx } from './exporters'
+import { Badge } from './ui/components/badge'
 import { Button } from './ui/components/button'
 import { Hugeicons } from './ui/components/hugeicons'
 import { Menu, MenuCheckboxItem, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from './ui/components/menu'
@@ -45,7 +46,7 @@ function useClock() {
     const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
-  return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return now.toTimeString().slice(0, 8) // 24-hour HH:MM:SS, as in Novacore's Live pill
 }
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -610,15 +611,15 @@ function Workspace() {
           {!booted ? (
             <Skeleton className="h-[34px] w-[150px] rounded-full" />
           ) : (
-          <span className="inline-flex h-[34px] items-center gap-2 rounded-full border border-(--border-default) bg-(--surface-card) px-3 text-[12px] whitespace-nowrap text-(--text-muted)">
-            <span className={status.connected ? 'size-[7px] rounded-full bg-(--status-ok-strong) shadow-[0_0_0_3px_rgba(5,150,105,.18)]' : 'size-[7px] rounded-full bg-(--ink-4)'} />
-            {status.connected ? (
-              <>
-                Live · <span className="tabular-nums">{clock}</span>
-              </>
-            ) : (
-              'Offline'
-            )}
+          // Novacore's Live pill: hours and minutes in ink, seconds quieter, then the connection as a tinted badge
+          <span className="inline-flex h-[34px] shrink-0 items-center gap-2.5 rounded-full border border-(--border-subtle) bg-(--surface-card) pr-[5px] pl-3.5 text-[13px] tracking-[-0.005em] whitespace-nowrap shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+            <span className="tabular-nums">
+              <span className="font-medium text-(--text-strong)">{clock.slice(0, 5)}</span>
+              <span className="text-(--text-faint)">{clock.slice(5)}</span>
+            </span>
+            <Badge className={`h-6 px-2.5 text-[11.5px] lowercase text-(--ink) ${status.connected ? 'bg-(--status-ok)' : 'bg-(--status-alarm)'}`} tone={status.connected ? 'success' : 'danger'}>
+              {status.connected ? 'live' : 'offline'}
+            </Badge>
           </span>
           )}
           <PaneToggle side="right" />

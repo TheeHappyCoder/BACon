@@ -13,6 +13,7 @@ rather than reported as errors.
 """
 
 import asyncio
+import errno
 import socket
 import time
 from dataclasses import dataclass, field
@@ -151,23 +152,39 @@ class Device:
         )
 
 
-def check_port_free(ip: str, port: int):
+def probe_port(ip: str, port: int) -> str:
+    """Try the bind BACon makes when it connects (one UDP socket on ip:port) and close it again.
+    'ok', 'no-address' (ip is not on this PC), 'in-use' (another socket has ip:port, or holds the port
+    exclusively), or 'denied' (Windows refused it: a reserved range, or a firewall/security product)."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.bind((ip, port))
+        return "ok"
     except OSError as e:
-        if getattr(e, "winerror", None) == 10049 or e.errno == 99:  # address not available
-            raise ConnectError(
-                f"{ip} is not an address on this PC any more - the cable may be unplugged "
-                f"or the adapter changed address. Refresh the adapter list and pick again."
-            )
-        raise ConnectError(
-            f"UDP port {port} on {ip} is already in use - another BACnet tool (YABE, "
-            f"Desigo, a simulator) is probably running. Close it, or connect on a "
-            f"different port (e.g. 47809; scanning then only finds devices that reply directly)."
-        )
+        code = getattr(e, "winerror", None) or e.errno
+        if code in (10049, errno.EADDRNOTAVAIL):
+            return "no-address"
+        if code in (10048, errno.EADDRINUSE):
+            return "in-use"
+        return "denied"  # 10013 / EACCES: exclusive use by another program, a reserved range, or policy
     finally:
         sock.close()
+
+
+def check_port_free(ip: str, port: int):
+    result = probe_port(ip, port)
+    if result == "no-address":
+        raise ConnectError(
+            f"{ip} is not an address on this PC any more - the cable may be unplugged "
+            f"or the adapter changed address. Refresh the adapter list and pick again."
+        )
+    if result == "in-use":
+        raise ConnectError(
+            f"UDP port {port} on {ip} is already in use by another program. Close it, or connect on a "
+            f"different port (e.g. 47809; scanning then only finds devices that reply directly)."
+        )
+    if result == "denied":
+        raise ConnectError(f"Windows refused UDP port {port} on {ip}. Pick another port, or check the firewall.")
 
 
 class BacnetClient:

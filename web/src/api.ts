@@ -7,8 +7,11 @@ export type Status = {
 }
 
 export type PortCheck = {
-  state: 'free' | 'shared' | 'busy' | 'ours' | 'no-address' | 'down' | 'invalid'
-  holders: { name: string; pid: number; address: string }[]
+  state: 'free' | 'shared' | 'busy' | 'ours' | 'no-address' | 'down' | 'reserved' | 'blocked' | 'invalid'
+  /** other programs on this port (this address or all addresses); null when Windows will not say */
+  holders: { name: string; pid: number; address: string }[] | null
+  /** for 'reserved': the Windows excluded-port range the port falls in */
+  range?: [number, number] | null
 }
 
 export type Device = {

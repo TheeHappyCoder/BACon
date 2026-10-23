@@ -24,6 +24,11 @@
 .bx-row-in { animation: bx-row-in 0.3s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .bx-row-in { animation: none; } }
 
+/* Refresh icons turn while their action runs; components/spin.ts keeps the turn length in step (700ms). They spin
+   under reduced motion too: it is the only sign the click went through. */
+@keyframes bx-spin { to { transform: rotate(360deg); } }
+.bx-spin { animation: bx-spin 0.7s linear infinite; }
+
 /* No monospace anywhere, including the browser defaults for kbd and code. */
 kbd, code, pre, samp { font-family: inherit; }
 
