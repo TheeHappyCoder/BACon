@@ -487,13 +487,26 @@ async def capture_stop():
     return monitor.status(60)
 
 
-@app.get("/api/network/capture")
-async def capture_download():
-    if monitor.capture:
+@app.get("/api/network/captures")
+async def captures():
+    return monitor.captures()
+
+
+@app.get("/api/network/captures/{name}")
+async def capture_download(name: str):
+    path = monitor.capture_path(name)
+    if not path:
+        raise HTTPException(404, "That capture is gone. Captures older than 30 days, or past the newest 10, are removed.")
+    if monitor.capture and monitor.capture.path == path:
         monitor.capture.f.flush()
-    if not monitor.last_capture or not os.path.exists(monitor.last_capture):
-        raise HTTPException(404, "Nothing has been captured yet.")
-    return FileResponse(monitor.last_capture, media_type="application/vnd.tcpdump.pcap", filename=os.path.basename(monitor.last_capture))
+    return FileResponse(path, media_type="application/vnd.tcpdump.pcap", filename=name)
+
+
+@app.delete("/api/network/captures/{name}")
+async def capture_delete(name: str):
+    if not monitor.delete_capture(name):
+        raise HTTPException(400, "Stop the capture before deleting it.")
+    return monitor.captures()
 
 
 # ---- export ------------------------------------------------------------------

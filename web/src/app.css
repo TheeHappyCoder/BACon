@@ -36,7 +36,7 @@ kbd, code, pre, samp { font-family: inherit; }
   --rail-icon-strong: #ffffff;
   --rail-hover: rgb(255 255 255 / 0.07);
   --rail-active: rgb(255 255 255 / 0.12);
-  --rail-bar: var(--ink); /* the edge bar sits outside the tray, on the light stage */
+  --rail-bar: #ffffff; /* the edge bar sits just inside the tray's left edge */
 }
 .bx-rail[data-tone='dark'] .bx-arc-inner { stroke: #ffffff; }
 .bx-rail[data-tone='dark'] .bx-arc-outer { stroke: rgb(255 255 255 / 0.45); }

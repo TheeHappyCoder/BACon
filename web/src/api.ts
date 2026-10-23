@@ -70,6 +70,8 @@ export type TrendStatus = {
   startedAt: number
   stoppedAt: number
   interval: number
+  /** when the next timed read is due (epoch seconds), 0 when nothing is polled */
+  nextRead: number
   mode: 'auto' | 'poll'
   points: TrendPoint[]
   samples: number
@@ -101,8 +103,10 @@ export type NetStatus = {
   events: NetEvent[]
   capturing: boolean
   captured: number
-  lastCapture: string
+  captureStartedAt: number
 }
+export type CaptureFile = { name: string; startedAt: number; endedAt: number; packets: number; bytes: number; live: boolean }
+
 export type PacketInfo = {
   t: number
   dir: 'in' | 'out'
@@ -190,6 +194,8 @@ export const api = {
   packets: (limit = 300, address = '') => call<PacketInfo[]>('GET', `/api/network/packets?limit=${limit}&address=${encodeURIComponent(address)}`),
   captureStart: () => call<NetStatus>('POST', '/api/network/capture/start'),
   captureStop: () => call<NetStatus>('POST', '/api/network/capture/stop'),
+  captures: () => call<CaptureFile[]>('GET', '/api/network/captures'),
+  deleteCapture: (name: string) => call<CaptureFile[]>('DELETE', `/api/network/captures/${encodeURIComponent(name)}`),
   update: (check = false, force = false) => call<UpdateStatus>('GET', `/api/update?check=${check}&force=${force}`),
   updateDownload: () => call<UpdateStatus>('POST', '/api/update/download'),
   updateApply: () => call<{ ok: boolean }>('POST', '/api/update/apply'),

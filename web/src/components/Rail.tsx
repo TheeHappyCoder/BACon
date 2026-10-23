@@ -25,7 +25,7 @@ function RailButton({ label, active, onClick, children, badge }: { label: string
       >
         {/* the active square and the edge bar spring between places */}
         {active ? <motion.span layoutId="rail-active" transition={LAYOUT} className="absolute inset-0 rounded-[12px] bg-(--rail-active)" /> : null}
-        {active ? <motion.span layoutId="rail-bar" transition={LAYOUT} aria-hidden className="absolute top-1/2 -left-[9px] h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-(--rail-bar)" /> : null}
+        {active ? <motion.span layoutId="rail-bar" transition={LAYOUT} aria-hidden className="absolute top-1/2 -left-[6px] h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-(--rail-bar)" /> : null}
         <span className="relative">{children}</span>
         {badge}
       </TooltipTrigger>
@@ -42,6 +42,7 @@ export function Rail({
   onPlace,
   recording,
   issues,
+  capturing,
   onNetwork,
   updateAvailable,
   onUpdates,
@@ -54,6 +55,7 @@ export function Rail({
   onPlace: (p: Place) => void
   recording: boolean
   issues: number
+  capturing: boolean
   onNetwork: () => void
   updateAvailable: boolean
   onUpdates: () => void
@@ -79,15 +81,24 @@ export function Rail({
           <LineChart className="size-[19px]" />
         </RailButton>
         <RailButton
-          label={issues ? `Network · ${issues} issues` : 'Network'}
+          label={['Network', capturing ? 'capturing' : '', issues ? `${issues} issues` : ''].filter(Boolean).join(' · ')}
           active={place === 'network'}
           onClick={() => onPlace('network')}
           badge={
-            issues ? (
-              <span className="absolute top-[3px] right-[3px] inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-(--rail-bg) bg-(--status-alarm-strong) px-1 text-[10px] font-medium text-white">
-                {issues}
-              </span>
-            ) : null
+            <>
+              {/* capturing: a pulsing red dot, like the recording dot on Trends; it moves down when the issue count is shown */}
+              {capturing ? (
+                <span className={`absolute right-[7px] size-2 ${issues ? 'bottom-[7px]' : 'top-[7px]'}`}>
+                  <span className="nc-ping absolute inset-0 rounded-full bg-(--status-alarm-strong)" />
+                  <span className="absolute -inset-[2px] rounded-full border-2 border-(--rail-bg) bg-(--status-alarm-strong)" />
+                </span>
+              ) : null}
+              {issues ? (
+                <span className="absolute top-[3px] right-[3px] inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-(--rail-bg) bg-(--status-alarm-strong) px-1 text-[10px] font-medium text-white">
+                  {issues}
+                </span>
+              ) : null}
+            </>
           }
         >
           <Radar className="size-[19px]" />

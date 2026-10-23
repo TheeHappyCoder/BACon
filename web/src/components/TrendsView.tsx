@@ -1,28 +1,42 @@
+import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { api, type Bucket, type Device, type ObjectRow, type Status, type TrendPoint, type TrendStatus } from '../api'
 import { AddPointsSheet } from './AddPointsSheet'
 import { Button } from '../ui/components/button'
+import { Input } from '../ui/components/input'
 import { Hugeicons } from '../ui/components/hugeicons'
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '../ui/components/menu'
+import { Popover, PopoverPopup, PopoverTrigger } from '../ui/components/popover'
 import { ScrollArea } from '../ui/components/scroll-area'
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '../ui/components/select'
 import { Tabs, TabsList, TabsTab } from '../ui/components/tabs'
+import { LAYOUT } from '../ui/motion'
 import { cn } from '../ui/utils'
 import { SERIES, TrendChart, type ChartSeries } from './TrendChart'
 import { Pane, PaneToggle } from './Layout'
 import { useToast } from './Toasts'
 
-const { MoreHorizontal, FileSpreadsheet, FileText, Trash2, XIcon, ArrowRight, ChevronDown, Plus } = Hugeicons
+const { MoreHorizontal, FileSpreadsheet, FileText, Trash2, XIcon, ArrowRight, ChevronDown, Plus, Play, Timer } = Hugeicons
 
-const RANGES = { '5m': 300, '15m': 900, '1h': 3600, all: 0 } as const
+const RANGES = { '15m': 900, '1h': 3600, '6h': 21600, '24h': 86400, all: 0 } as const
 type Range = keyof typeof RANGES
-const INTERVALS = [
-  { value: '2', label: '2 s' },
-  { value: '5', label: '5 s' },
-  { value: '10', label: '10 s' },
-  { value: '30', label: '30 s' },
-  { value: '60', label: '1 min' },
+const RANGE_LABEL: Record<Range, string> = { '15m': '15 min', '1h': '1 hour', '6h': '6 hours', '24h': '24 hours', all: 'All' }
+const PRESETS = [5, 10, 30, 60, 300, 900, 1800, 3600]
+const UNITS = [
+  { value: '1', label: 'seconds' },
+  { value: '60', label: 'minutes' },
+  { value: '3600', label: 'hours' },
 ]
+const MAX_INTERVAL = 24 * 3600
+
+/** 30 → "30 s", 1800 → "30 min", 5400 → "1 h 30 min" */
+function fmtInterval(sec: number) {
+  if (sec < 60) return `${sec} s`
+  if (sec < 3600) return Number.isInteger(sec / 60) ? `${sec / 60} min` : `${Math.floor(sec / 60)} min ${sec % 60} s`
+  const h = Math.floor(sec / 3600)
+  const m = Math.round((sec % 3600) / 60)
+  return m ? `${h} h ${m} min` : `${h} h`
+}
 
 /** Points share a chart only when they share a unit, so a chart never needs a second axis. */
 function groupOf(p: TrendPoint): { key: string; label: string; step: boolean } {
@@ -72,6 +86,28 @@ function MethodPill({ p, dark }: { p: TrendPoint; dark?: boolean }) {
   )
 }
 
+/** The empty points list: faded stand-ins for the rows to come. The main panel carries the Add points button. */
+function EmptyPoints() {
+  return (
+    <div className="nc-view-in mt-1 flex flex-col">
+      <div className="overflow-hidden rounded-[12px] border border-(--border-subtle) bg-(--surface-card)" aria-hidden="true">
+        {[1, 0.6, 0.3].map((o, i) => (
+          <div key={i} className="flex h-11 items-center gap-2.5 border-t border-(--border-divider) px-2.5 first:border-t-0">
+            <span className="h-6 w-[3px] shrink-0 rounded-full" style={{ background: SERIES[i], opacity: o }} />
+            <span className="flex min-w-0 flex-1 flex-col gap-1.5" style={{ opacity: o }}>
+              <span className="h-2 rounded-full bg-(--surface-track)" style={{ width: `${[68, 52, 60][i]}%` }} />
+              <span className="h-1.5 rounded-full bg-(--surface-track)" style={{ width: `${[40, 46, 34][i]}%` }} />
+            </span>
+            <span className="h-2 w-8 shrink-0 rounded-full bg-(--surface-track)" style={{ opacity: o }} />
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 px-1 text-[13px] font-medium">No points yet</div>
+      <div className="mt-0.5 px-1 text-[12px] leading-snug text-(--text-muted)">Points you add show up here with their live values.</div>
+    </div>
+  )
+}
+
 function Sparkline({ points }: { points: [number, number | null, string][] }) {
   const vals = points.filter((p) => p[1] !== null) as [number, number, string][]
   if (vals.length < 2) return <div className="h-12" />
@@ -88,6 +124,220 @@ function Sparkline({ points }: { points: [number, number | null, string][] }) {
     <svg viewBox={`0 0 ${W} ${H}`} className="block h-12 w-full" preserveAspectRatio="none">
       <path d={d} fill="none" stroke="#c6f56f" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
+  )
+}
+
+/**
+ * The recorder: one control that holds how it records and the start/stop action. Idle it is a light pill (settings |
+ * Start); recording it becomes the ink capsule with the live clock, and the settings segment shows the next read.
+ */
+function Recorder({
+  running,
+  clock,
+  samples,
+  resumable,
+  connected,
+  label,
+  next,
+  busy,
+  onStart,
+  onStop,
+  settings,
+}: {
+  running: boolean
+  clock: string
+  samples: number
+  resumable: boolean
+  connected: boolean
+  label: string
+  next: string
+  busy: boolean
+  onStart: () => void
+  onStop: () => void
+  settings: React.ReactNode
+}) {
+  const seg = running ? 'outline-none focus-visible:ring-2 focus-visible:ring-white/35 text-white/70 hover:bg-white/10 hover:text-white data-popup-open:bg-white/10' : 'text-(--text-strong) hover:bg-(--surface-hover) data-popup-open:bg-(--surface-hover)'
+  return (
+    <motion.div
+      layout
+      transition={LAYOUT}
+      className={cn(
+        'flex h-9 shrink-0 items-center gap-0.5 rounded-full p-[3px] text-[13px] transition-colors duration-300',
+        running ? 'bg-[#1c1c1f] text-white shadow-(--shadow-sheet)' : 'border border-(--border-default) bg-(--surface-card)',
+      )}
+    >
+      {running ? (
+        <motion.span layout="position" className="flex items-center gap-2 pr-2 pl-3 tabular-nums">
+          <span className="relative inline-flex size-2">
+            <span className="nc-ping absolute inset-0 rounded-full bg-[#c6f56f]" />
+            <span className="relative inline-flex size-2 rounded-full bg-[#c6f56f]" />
+          </span>
+          <span className="font-medium">{clock}</span>
+          <span className="text-white/50">{samples.toLocaleString()} samples</span>
+        </motion.span>
+      ) : null}
+      <Popover>
+        <PopoverTrigger
+          render={
+            <motion.button
+              layout="position"
+              title={running ? 'How it records (stop to change)' : 'How it records'}
+              className={cn('inline-flex h-full min-w-[164px] items-center gap-1.5 rounded-full px-3 transition-colors', seg)}
+            />
+          }
+        >
+          <Timer className="size-3.5 opacity-70" />
+          {/* the label keeps one shape in both modes, so switching mode in the popover doesn't move it */}
+          <span className="flex-1 text-left tabular-nums">{label}</span>
+          {next ? <span className={running ? 'text-white/45' : 'text-(--text-muted)'}>· {next}</span> : null}
+          <ChevronDown className="size-3 opacity-60" />
+        </PopoverTrigger>
+        <PopoverPopup align="end" className="w-[320px]">
+          {settings}
+        </PopoverPopup>
+      </Popover>
+      {running ? (
+        <motion.button
+          layout="position"
+          onClick={onStop}
+          disabled={busy}
+          className="inline-flex h-full items-center gap-1.5 rounded-full bg-white/10 px-3 font-medium text-white transition-colors hover:bg-white/20 outline-none focus-visible:ring-2 focus-visible:ring-white/35"
+        >
+          <span className="size-2.5 rounded-[3px] bg-white" />
+          Stop
+        </motion.button>
+      ) : (
+        <motion.span layout="position" className="h-full">
+          <Button size="sm" className="h-full" loading={busy} disabled={!connected} title={connected ? undefined : 'Connect to a network first'} onClick={onStart}>
+            <Play />
+            {resumable ? 'Resume' : 'Start recording'}
+          </Button>
+        </motion.span>
+      )}
+    </motion.div>
+  )
+}
+
+/** How a session records: on change (COV, timer as fallback) or on a timer, and how often, from 1 s to 24 h. */
+function RecordSettings({
+  mode,
+  interval,
+  locked,
+  onMode,
+  onInterval,
+}: {
+  mode: string
+  interval: number
+  locked: boolean
+  onMode: (m: string) => void
+  onInterval: (sec: number) => void
+}) {
+  const preset = PRESETS.includes(interval)
+  const unit = interval % 3600 === 0 ? 3600 : interval % 60 === 0 ? 60 : 1
+  const [custom, setCustom] = useState(!preset)
+  const [amount, setAmount] = useState(String(interval / unit))
+  const [unitS, setUnit] = useState(String(unit))
+  const applyCustom = (a: string, u: string) => {
+    const sec = Math.round(Number(a) * Number(u))
+    if (sec >= 1) onInterval(Math.min(sec, MAX_INTERVAL))
+  }
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <div className="text-[13px] font-medium">How it records</div>
+      <Tabs value={mode} onValueChange={(v) => !locked && onMode(v as string)}>
+        <TabsList className="w-full">
+          <TabsTab value="auto" className="flex-1" disabled={locked && mode !== 'auto'}>
+            On change
+          </TabsTab>
+          <TabsTab value="poll" className="flex-1" disabled={locked && mode !== 'poll'}>
+            On a timer
+          </TabsTab>
+        </TabsList>
+      </Tabs>
+      <div className="flex flex-col gap-1.5">
+        {/* the timer only applies to what is polled */}
+        <span className="text-[12px] text-(--text-muted)">{mode === 'auto' ? 'Read points without COV every' : 'Read every point every'}</span>
+        <div className="grid grid-cols-4 gap-1">
+          {PRESETS.map((sec) => (
+            <button
+              key={sec}
+              disabled={locked}
+              onClick={() => {
+                const u = sec % 3600 === 0 ? 3600 : sec % 60 === 0 ? 60 : 1
+                setCustom(false)
+                setAmount(String(sec / u))
+                setUnit(String(u))
+                onInterval(sec)
+              }}
+              className={cn(
+                'h-7 rounded-full text-[12px] tabular-nums transition-colors disabled:opacity-50',
+                !custom && interval === sec ? 'bg-(--ink) text-white' : 'bg-(--surface-track) text-(--text-muted) hover:text-(--text-strong)',
+              )}
+            >
+              {fmtInterval(sec)}
+            </button>
+          ))}
+        </div>
+        <div className="mt-1 flex items-center gap-1.5">
+          <button
+            disabled={locked}
+            onClick={() => {
+              setCustom(true)
+              applyCustom(amount, unitS)
+            }}
+            className={cn(
+              'h-7 shrink-0 rounded-full px-3 text-[12px] transition-colors disabled:opacity-50',
+              custom ? 'bg-(--ink) text-white' : 'bg-(--surface-track) text-(--text-muted) hover:text-(--text-strong)',
+            )}
+          >
+            Custom
+          </button>
+          <Input
+            size="sm"
+            type="number"
+            min={1}
+            disabled={locked}
+            aria-label="Interval"
+            className="w-[64px] min-w-0 text-[12.5px] tabular-nums"
+            value={amount}
+            onFocus={() => setCustom(true)}
+            onChange={(e) => {
+              setAmount(e.target.value)
+              setCustom(true)
+              applyCustom(e.target.value, unitS)
+            }}
+          />
+          <Select
+            value={unitS}
+            items={UNITS}
+            disabled={locked}
+            onValueChange={(v) => {
+              setUnit(v as string)
+              setCustom(true)
+              applyCustom(amount, v as string)
+            }}
+          >
+            <SelectTrigger size="sm" className="min-w-0 flex-1 text-[12.5px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectPopup>
+              {UNITS.map((u) => (
+                <SelectItem key={u.value} value={u.value}>
+                  {u.label}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        </div>
+      </div>
+      <p className="m-0 text-[11.5px] leading-snug text-(--text-muted)">
+        {locked
+          ? 'Stop recording to change these.'
+          : mode === 'auto'
+            ? `Each change is recorded the moment the controller sends it. Points whose controller refuses COV are read every ${fmtInterval(interval)}.`
+            : `Every point is read every ${fmtInterval(interval)}, batched per controller. Up to 24 hours.`}
+      </p>
+    </div>
   )
 }
 
@@ -111,7 +361,7 @@ export function TrendsView({
   onGoToObjects: () => void
 }) {
   const toast = useToast()
-  const [range, setRange] = useState<Range>('15m')
+  const [range, setRange] = useState<Range>('all')
   const [draftInterval, setIntervalS] = useState(String(trends.interval || 10))
   const [draftMode, setMode] = useState<string>(trends.mode || 'auto')
   // while recording the card shows what the backend is actually doing; edits apply to the next start
@@ -203,9 +453,10 @@ export function TrendsView({
     a.click()
   }
 
-  const statusDot = trends.running ? 'bg-(--status-ok-strong)' : trends.samples ? 'bg-(--ink-4)' : 'bg-(--ink-4)'
-  const statusText = trends.running ? 'Recording' : trends.samples ? 'Stopped' : 'Ready'
-  const clock = trends.startedAt ? elapsed(trends.startedAt, trends.running ? now : trends.stoppedAt || now) : '0:00'
+  const clock = trends.startedAt ? elapsed(trends.startedAt, trends.running ? now : trends.stoppedAt || now) : ''
+  const count = trends.points.length
+  const every = fmtInterval(Number(interval))
+  const nextIn = trends.running && trends.nextRead ? Math.max(0, trends.nextRead - now) : 0
 
   return (
     <>
@@ -216,64 +467,12 @@ export function TrendsView({
           <div className="text-[16px] font-medium tracking-[-0.01em]">Trends</div>
         </div>
 
-        <div className="mx-3 mb-3 flex flex-col gap-2.5 rounded-[14px] border border-(--border-subtle) bg-(--surface-card) p-3 shadow-(--shadow-sheet)">
-          <div className="flex items-center gap-2">
-            <span className="relative inline-flex size-2">
-              {trends.running ? <span className="nc-ping absolute inset-0 rounded-full bg-(--status-ok-strong)" /> : null}
-              <span className={cn('relative inline-flex size-2 rounded-full', statusDot)} />
-            </span>
-            <span className="text-[13px] font-medium">{statusText}</span>
-            <span className="ml-auto text-[13px] tabular-nums text-(--text-muted)">{clock}</span>
-          </div>
-          {/* how it records, then how often: a timer only applies to what is polled */}
-          <Tabs value={mode} onValueChange={(v) => !trends.running && setMode(v as string)}>
-            <TabsList className="w-full">
-              <TabsTab value="auto" className="flex-1" disabled={trends.running && mode !== 'auto'}>
-                On change
-              </TabsTab>
-              <TabsTab value="poll" className="flex-1" disabled={trends.running && mode !== 'poll'}>
-                On a timer
-              </TabsTab>
-            </TabsList>
-          </Tabs>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[12.5px] text-(--text-muted)">{mode === 'auto' ? 'Points without COV, every' : 'Read every point every'}</span>
-            <Select value={interval} onValueChange={(v) => setIntervalS(v as string)} items={INTERVALS} disabled={trends.running}>
-              <SelectTrigger size="sm" className="w-[92px] min-w-0 text-[12.5px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectPopup>
-                {INTERVALS.map((i) => (
-                  <SelectItem key={i.value} value={i.value}>
-                    {i.label}
-                  </SelectItem>
-                ))}
-              </SelectPopup>
-            </Select>
-          </div>
-          {trends.running ? (
-            <Button size="sm" variant="ink" loading={busy} onClick={() => run(api.trendStop)}>
-              Stop recording
-            </Button>
-          ) : (
-            <Button size="sm" loading={busy} disabled={!trends.points.length || !status.connected} onClick={() => run(() => api.trendStart(Number(interval), mode))}>
-              {trends.samples ? 'Resume recording' : 'Start recording'}
-            </Button>
-          )}
-          <span className="text-[11.5px] leading-snug text-(--text-muted)">
-            {!status.connected
-              ? 'Connect to a network to record.'
-              : mode === 'auto'
-                ? 'Each change is recorded the moment the controller sends it. Read-only.'
-                : 'Every point is read on the timer, batched per controller. Read-only.'}
+        <div className="flex h-8 items-center gap-0.5 pr-2 pl-4 text-[12px] text-(--text-muted)">
+          <span className="flex-1">
+            Points{count ? <span className="ml-1.5 tabular-nums text-(--text-faint)">{count}</span> : null}
           </span>
-        </div>
-
-        <div className="flex items-center gap-1 px-4 pb-1.5 text-[12px] text-(--text-muted)">
-          <span className="flex-1">Points</span>
-          <Button size="xs" variant="white" onClick={() => setAdding(true)}>
+          <Button aria-label="Add points" title="Add points" variant="ghost" size="icon-xs" onClick={() => setAdding(true)}>
             <Plus />
-            Add points
           </Button>
           <Menu>
             <MenuTrigger render={<Button aria-label="Trend options" variant="ghost" size="icon-xs" />}>
@@ -287,7 +486,7 @@ export function TrendsView({
               <MenuSeparator />
               <MenuItem
                 variant="destructive"
-                disabled={!trends.points.length}
+                disabled={!count}
                 onClick={() => {
                   if (trends.running) toast('Stop recording first.', { kind: 'error' })
                   else run(api.trendClear)
@@ -323,15 +522,7 @@ export function TrendsView({
                 </span>
               </button>
             ))}
-            {!trends.points.length ? (
-              <div className="mx-1 mt-1 rounded-[12px] border border-dashed border-(--border-default) px-3 py-4 text-center">
-                <div className="text-[13px] font-medium">No points yet</div>
-                <div className="mt-1 text-[12px] leading-snug text-(--text-muted)">Pick them by device, object type, or a query.</div>
-                <Button size="xs" className="mt-3" onClick={() => setAdding(true)}>
-                  Add points
-                </Button>
-              </div>
-            ) : null}
+            {!count ? <EmptyPoints /> : null}
           </div>
         </ScrollArea>
       </aside>
@@ -341,7 +532,7 @@ export function TrendsView({
         <header className="flex h-[52px] shrink-0 items-center gap-1.5 pr-3 pl-2 text-[13px] text-(--text-muted)">
           <PaneToggle side="left" />
           <span>Trends</span>
-          {trends.file ? (
+          {trends.points.length ? (
             <>
               <ArrowRight className="size-3 text-(--ink-4)" />
               <span className="font-medium text-(--text-strong)">{trends.running ? 'Recording' : trends.samples ? 'Recorded session' : 'New session'}</span>
@@ -352,40 +543,56 @@ export function TrendsView({
         </header>
         <div className="flex min-h-0 flex-1 gap-[10px] px-3 pb-3">
           <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
-            <div className="flex items-start gap-4 px-[18px] pt-[18px] pb-3">
+            <div className="flex items-center gap-3 px-[18px] pt-[18px] pb-3">
               <div className="min-w-0 flex-1">
                 <h1 className="m-0 text-[20px] font-medium tracking-[-0.02em]">Trends</h1>
-                <div className="mt-1 text-[12px] text-(--text-muted)">
-                  {trends.startedAt
-                    ? `${trends.running ? 'Recording' : 'Recorded'} from ${new Date(trends.startedAt * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${trends.samples.toLocaleString()} samples`
-                    : 'Add points, then start recording.'}
-                </div>
+                {!count ? <div className="mt-1 text-[12px] text-(--text-muted)">Add points, then start recording.</div> : null}
               </div>
-              <Menu>
-                <MenuTrigger render={<Button size="sm" disabled={!trends.samples} />}>
-                  Export
-                  <ChevronDown />
-                </MenuTrigger>
-                <MenuPopup align="end" className="w-56">
-                  <MenuItem onClick={() => download('xlsx')}>
-                    <FileSpreadsheet />
-                    Excel workbook
-                  </MenuItem>
-                  <MenuItem onClick={() => download('csv')}>
-                    <FileText />
-                    CSV file
-                  </MenuItem>
-                </MenuPopup>
-              </Menu>
+              {trends.samples ? (
+                <Menu>
+                  <MenuTrigger render={<Button size="sm" variant="white" />}>
+                    Export
+                    <ChevronDown />
+                  </MenuTrigger>
+                  <MenuPopup align="end" className="w-56">
+                    <MenuItem onClick={() => download('xlsx')}>
+                      <FileSpreadsheet />
+                      Excel workbook
+                    </MenuItem>
+                    <MenuItem onClick={() => download('csv')}>
+                      <FileText />
+                      CSV file
+                    </MenuItem>
+                  </MenuPopup>
+                </Menu>
+              ) : null}
+              {count ? (
+                <Recorder
+                  running={trends.running}
+                  clock={clock || '0:00'}
+                  samples={trends.samples}
+                  resumable={!!trends.samples}
+                  connected={status.connected}
+                  label={`${mode === 'auto' ? 'On change' : 'On a timer'} · ${every}`}
+                  next={nextIn ? `next ${elapsed(0, nextIn)}` : ''}
+                  busy={busy}
+                  onStart={() => run(() => api.trendStart(Number(interval), mode))}
+                  onStop={() => run(api.trendStop)}
+                  settings={
+                    <RecordSettings mode={mode} interval={Number(interval)} locked={trends.running} onMode={setMode} onInterval={(sec) => setIntervalS(String(sec))} />
+                  }
+                />
+              ) : null}
             </div>
-            {trends.points.length ? (
+            {count ? (
               <div className="flex items-center border-b border-(--border-subtle) px-[18px] pb-3">
                 <Tabs value={range} onValueChange={(v) => setRange(v as Range)}>
                   <TabsList>
-                    <TabsTab value="5m">5 min</TabsTab>
-                    <TabsTab value="15m">15 min</TabsTab>
-                    <TabsTab value="1h">1 hour</TabsTab>
-                    <TabsTab value="all">All</TabsTab>
+                    {(Object.keys(RANGES) as Range[]).map((k) => (
+                      <TabsTab key={k} value={k}>
+                        {RANGE_LABEL[k]}
+                      </TabsTab>
+                    ))}
                   </TabsList>
                 </Tabs>
               </div>

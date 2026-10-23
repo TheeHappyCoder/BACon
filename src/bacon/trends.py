@@ -25,6 +25,7 @@ from .decode import decode_value, fmt
 PV = 85  # present-value
 POLL_BATCH = 16  # objects per ReadPropertyMultiple
 COV_LIFETIME = 300
+MAX_INTERVAL = 24 * 3600  # seconds; slow sites log every 30 min or hour
 
 
 def _number(text: str):
@@ -73,6 +74,7 @@ class TrendSession:
         self.started_at = 0.0
         self.stopped_at = 0.0
         self.interval = 10.0
+        self.next_read = 0.0  # when the next timed read is due (wall clock), so the UI can count down
         self.mode = "auto"
         self.tasks: list[asyncio.Task] = []
         self.queue: list[tuple] = []
@@ -143,7 +145,7 @@ class TrendSession:
     async def start(self, interval: float, mode: str):
         if self.client.app is None:
             raise RuntimeError("Connect to a network first.")
-        self.interval = max(1.0, min(interval, 3600.0))
+        self.interval = max(1.0, min(interval, MAX_INTERVAL))
         self.mode = mode if mode in ("auto", "poll") else "auto"
         self.running = True
         self.started_at = self.started_at or time.time()
@@ -152,6 +154,7 @@ class TrendSession:
 
     async def stop(self):
         self.running = False
+        self.next_read = 0.0
         self.stopped_at = time.time()
         for t in self.tasks:
             t.cancel()
@@ -200,7 +203,10 @@ class TrendSession:
                 started = time.monotonic()
                 for i in range(0, len(polled), POLL_BATCH):
                     await self._poll(polled[i : i + POLL_BATCH])
-                await asyncio.sleep(max(0.2, self.interval - (time.monotonic() - started)))
+                delay = max(0.2, self.interval - (time.monotonic() - started))
+                if polled:
+                    self.next_read = time.time() + delay
+                await asyncio.sleep(delay)
         finally:
             for t in cov_tasks:
                 t.cancel()
@@ -272,6 +278,7 @@ class TrendSession:
             "startedAt": self.started_at,
             "stoppedAt": self.stopped_at,
             "interval": self.interval,
+            "nextRead": self.next_read if self.running else 0.0,
             "mode": self.mode,
             "points": [p.to_json() for p in self.points.values()],
             "samples": sum(p.samples for p in self.points.values()),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, type Device, type NetStatus, type PacketInfo, type Status, type Talker } from '../api'
+import { api, type CaptureFile, type Device, type NetStatus, type PacketInfo, type Status, type Talker } from '../api'
 import { Button } from '../ui/components/button'
 import { Hugeicons } from '../ui/components/hugeicons'
 import { ScrollArea } from '../ui/components/scroll-area'
@@ -10,7 +10,28 @@ import { SERIES, TrendChart } from './TrendChart'
 import { Pane, PaneToggle } from './Layout'
 import { useToast } from './Toasts'
 
-const { Download, XIcon, Check, ArrowDown, ArrowUp } = Hugeicons
+const { Download, XIcon, Check, ArrowDown, ArrowUp, Trash2 } = Hugeicons
+
+const KEEP_CAPTURES = 10
+
+/** 75 → "1:15", 4000 → "1:06:40" */
+function duration(sec: number) {
+  const s = Math.max(0, Math.round(sec))
+  const p = (n: number) => String(n).padStart(2, '0')
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}` : `${Math.floor(s / 60)}:${p(s % 60)}`
+}
+
+function size(bytes: number) {
+  return bytes < 1024 ? `${bytes} B` : bytes < 1048576 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`
+}
+
+/** "Today 18:24", "Yesterday 09:02", "21 Oct 14:10" */
+function when(t: number) {
+  const d = new Date(t * 1000)
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const days = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(d).setHours(0, 0, 0, 0)) / 86400000)
+  return `${days === 0 ? 'Today' : days === 1 ? 'Yesterday' : d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${time}`
+}
 
 const SEV: Record<string, string> = { critical: 'bg-(--color-ns-red)', high: 'bg-(--color-ns-yellow)', low: 'bg-(--color-ns-cyan-light)' }
 
@@ -39,16 +60,20 @@ function Tile({ label, value, note }: { label: string; value: string; note?: str
 
 const EMPTY: NetStatus = {
   startedAt: 0, local: '', total: 0, bytes: 0, perMinute: { broadcast: 0, unicast: 0, sent: 0 }, series: [], talkers: [], events: [],
-  capturing: false, captured: 0, lastCapture: '',
+  capturing: false, captured: 0, captureStartedAt: 0,
 }
 
 export function NetworkView({ status, devices }: { status: Status; devices: Device[] }) {
   const toast = useToast()
   const [net, setNet] = useState<NetStatus>(EMPTY)
   const [packets, setPackets] = useState<PacketInfo[]>([])
-  const [selected, setSelected] = useState<string | null>(null)
+  // devices the packet log is filtered to: click picks one, Ctrl-click adds or removes, Shift-click picks a range
+  const [selected, setSelected] = useState<string[]>([])
+  const [anchor, setAnchor] = useState<string | null>(null)
   const [show, setShow] = useState<'all' | 'broadcast' | 'problems'>('all')
   const [paused, setPaused] = useState(false)
+  const [captures, setCaptures] = useState<CaptureFile[]>([])
+  const loadCaptures = () => api.captures().then(setCaptures).catch(() => {})
 
   useEffect(() => {
     if (!status.connected) return
@@ -69,12 +94,21 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
     }
   }, [status.connected])
 
+  const selectedKey = selected.join(',')
+
+  useEffect(() => {
+    loadCaptures()
+    if (!net.capturing) return
+    const t = setInterval(loadCaptures, 2000)
+    return () => clearInterval(t)
+  }, [net.capturing])
+
   useEffect(() => {
     if (!status.connected || paused) return
     let stop = false
     const load = async () => {
       try {
-        const p = await api.packets(400, selected ?? '')
+        const p = await api.packets(400, selectedKey)
         if (!stop) setPackets(p)
       } catch {
         /* next tick */
@@ -86,11 +120,31 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
       stop = true
       clearInterval(t)
     }
-  }, [status.connected, paused, selected])
+  }, [status.connected, paused, selectedKey])
 
   const nameOf = useMemo(() => new Map(devices.map((d) => [d.instance, d.name])), [devices])
   const talkerName = (t: Talker) => (t.device !== null ? nameOf.get(t.device) || `Device ${t.device}` : 'Unknown device')
-  const sel = net.talkers.find((t) => t.address === selected) ?? null
+  // the details panel is for one device; a multi-selection only filters the log
+  const sel = selected.length === 1 ? (net.talkers.find((t) => t.address === selected[0]) ?? null) : null
+  const clearSelection = () => {
+    setSelected([])
+    setAnchor(null)
+  }
+  const pick = (e: React.MouseEvent, address: string) => {
+    const order = net.talkers.map((t) => t.address)
+    if (e.shiftKey && anchor && order.includes(anchor)) {
+      const [a, b] = [order.indexOf(anchor), order.indexOf(address)].sort((x, y) => x - y)
+      const range = order.slice(a, b + 1)
+      setSelected((cur) => (e.ctrlKey || e.metaKey ? [...new Set([...cur, ...range])] : range))
+      return
+    }
+    if (e.ctrlKey || e.metaKey) {
+      setSelected((cur) => (cur.includes(address) ? cur.filter((x) => x !== address) : [...cur, address]))
+    } else {
+      setSelected((cur) => (cur.length === 1 && cur[0] === address ? [] : [address]))
+    }
+    setAnchor(address)
+  }
   const shown = packets.filter((p) => (show === 'broadcast' ? p.broadcast : show === 'problems' ? ['error', 'reject', 'abort'].includes(p.kind) : true))
   const issues = net.events.filter((e) => e.severity !== 'low').length
   const now = Date.now() / 1000
@@ -98,7 +152,16 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
   const capture = async () => {
     try {
       setNet(net.capturing ? await api.captureStop() : await api.captureStart())
-      if (net.capturing) toast('Capture stopped. Download it from the panel to open in Wireshark.')
+      if (net.capturing) toast('Capture saved. Click it under Captures to download it for Wireshark.')
+      loadCaptures()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), { kind: 'error' })
+    }
+  }
+
+  const removeCapture = async (name: string) => {
+    try {
+      setCaptures(await api.deleteCapture(name))
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), { kind: 'error' })
     }
@@ -140,28 +203,16 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
           <div className="text-[11px] text-(--text-faint)">BACon</div>
           <div className="text-[16px] font-medium tracking-[-0.01em]">Network</div>
         </div>
-        <div className="mx-3 mb-3 flex flex-col gap-2.5 rounded-[14px] border border-(--border-subtle) bg-(--surface-card) p-3 shadow-(--shadow-sheet)">
-          <div className="flex items-center gap-2">
-            <span className="relative inline-flex size-2">
-              {net.capturing ? <span className="nc-ping absolute inset-0 rounded-full bg-(--status-alarm-strong)" /> : null}
-              <span className={cn('relative inline-flex size-2 rounded-full', net.capturing ? 'bg-(--status-alarm-strong)' : 'bg-(--ink-4)')} />
-            </span>
-            <span className="text-[13px] font-medium">{net.capturing ? 'Capturing' : 'Not capturing'}</span>
-            {net.capturing ? <span className="ml-auto text-[13px] tabular-nums text-(--text-muted)">{net.captured.toLocaleString()} packets</span> : null}
-          </div>
-          <Button size="sm" variant={net.capturing ? 'ink' : 'default'} onClick={capture}>
-            {net.capturing ? 'Stop capture' : 'Start capture'}
-          </Button>
-          {net.lastCapture ? (
-            <a href="/api/network/capture" className="inline-flex items-center gap-1.5 text-[12.5px] text-(--action-primary) hover:underline">
-              <Download className="size-3.5" />
-              Download {net.lastCapture}
-            </a>
+        <div className="flex h-6 items-center gap-2 px-4 pb-1.5 text-[12px] text-(--text-muted)">
+          <span className="flex-1">Heard on the network</span>
+          {selected.length > 1 ? (
+            <button onClick={clearSelection} className="text-(--text-muted) hover:text-(--text-strong)">
+              {selected.length} selected · Clear
+            </button>
+          ) : selected.length === 1 ? (
+            <span className="text-(--text-faint)">Ctrl-click to add more</span>
           ) : null}
-          <span className="text-[11.5px] leading-snug text-(--text-muted)">Saves every packet as a .pcap that opens in Wireshark with full BACnet decoding.</span>
         </div>
-
-        <div className="px-4 pb-1.5 text-[12px] text-(--text-muted)">Heard on the network</div>
         <ScrollArea scrollFade className="min-h-0 flex-1">
           <div className="flex flex-col gap-px px-2 pb-3">
             {net.talkers.map((t) => {
@@ -169,8 +220,10 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
               return (
                 <button
                   key={t.address}
-                  onClick={() => setSelected((s) => (s === t.address ? null : t.address))}
-                  data-active={selected === t.address ? 'true' : undefined}
+                  onClick={(e) => pick(e, t.address)}
+                  onMouseDown={(e) => e.shiftKey && e.preventDefault()}
+                  aria-pressed={selected.includes(t.address)}
+                  data-active={selected.includes(t.address) ? 'true' : undefined}
                   className="flex h-[52px] items-center gap-2.5 rounded-[10px] px-2 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)] data-[active=true]:bg-(--paper-3)"
                 >
                   <span className="min-w-0 flex-1">
@@ -194,6 +247,70 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
             ) : null}
           </div>
         </ScrollArea>
+
+        {/* captures: the newest ten .pcap files, newest first; the running one sits on top with its live count */}
+        <div className="flex max-h-[45%] shrink-0 flex-col border-t border-(--border-subtle) pt-2.5">
+          <div className="flex h-6 items-center gap-2 px-4 pb-1.5 text-[12px] text-(--text-muted)">
+            <span className="flex-1">Captures</span>
+            {captures.length ? <span className="text-(--text-faint)">keeps the newest {KEEP_CAPTURES}</span> : null}
+          </div>
+          <ScrollArea scrollFade className="min-h-0">
+            <div className="flex flex-col gap-px px-2 pb-3">
+              {captures.map((c) =>
+                c.live ? (
+                  <div key={c.name} className="flex h-[52px] items-center gap-2.5 rounded-[10px] bg-(--status-alarm-bg)/40 px-2">
+                    <span className="relative inline-flex size-2 shrink-0">
+                      <span className="nc-ping absolute inset-0 rounded-full bg-(--status-alarm-strong)" />
+                      <span className="relative inline-flex size-2 rounded-full bg-(--status-alarm-strong)" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13.5px] font-medium">Capturing…</span>
+                      <span className="block truncate text-[11.5px] text-(--text-muted)">started {when(c.startedAt)}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[13px] font-medium tabular-nums">{c.packets.toLocaleString()}</span>
+                      <span className="block text-[11px] tabular-nums text-(--text-muted)">{duration(c.endedAt - c.startedAt)}</span>
+                    </span>
+                  </div>
+                ) : (
+                  <div key={c.name} className="group/cap relative">
+                    <a
+                      href={`/api/network/captures/${encodeURIComponent(c.name)}`}
+                      download
+                      title={`Download ${c.name} for Wireshark`}
+                      className="flex h-[52px] items-center gap-2.5 rounded-[10px] px-2 transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)]"
+                    >
+                      <Download className="size-4 shrink-0 text-(--text-faint) group-hover/cap:text-(--text-strong)" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13.5px] font-medium">{when(c.startedAt)}</span>
+                        <span className="block truncate text-[11.5px] text-(--text-muted)">
+                          {duration(c.endedAt - c.startedAt)} · {size(c.bytes)}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-right transition-opacity group-hover/cap:opacity-0">
+                        <span className="block text-[13px] font-medium tabular-nums">{c.packets.toLocaleString()}</span>
+                        <span className="block text-[11px] text-(--text-muted)">packets</span>
+                      </span>
+                    </a>
+                    <Button
+                      aria-label={`Delete ${c.name}`}
+                      title="Delete"
+                      variant="ghost"
+                      size="icon-xs"
+                      className="absolute top-1/2 right-2 -translate-y-1/2 opacity-0 group-hover/cap:opacity-100 focus-visible:opacity-100"
+                      onClick={() => removeCapture(c.name)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                ),
+              )}
+              {!captures.length ? (
+                <div className="px-2 py-1.5 text-[12.5px] leading-snug text-(--text-faint)">Captures save every packet as a .pcap that opens in Wireshark.</div>
+              ) : null}
+            </div>
+          </ScrollArea>
+        </div>
       </aside>
       </Pane>
 
@@ -215,9 +332,36 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
                   Every broadcast on UDP {status.settings?.port} and this PC's own requests. Traffic between other devices needs a mirror port on the switch.
                 </div>
               </div>
-              <Button size="sm" variant="white" onClick={exportLog} disabled={!packets.length}>
-                Export log
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button size="sm" variant="white" onClick={exportLog} disabled={!packets.length}>
+                  Export log
+                </Button>
+                {/* idle: one button; capturing: the ink capsule Trends uses while recording */}
+                {net.capturing ? (
+                  <div className="flex h-9 items-center gap-0.5 rounded-full bg-[#1c1c1f] p-[3px] text-[13px] text-white shadow-(--shadow-sheet)">
+                    <span className="flex items-center gap-2 pr-2 pl-3 tabular-nums">
+                      <span className="relative inline-flex size-2">
+                        <span className="nc-ping absolute inset-0 rounded-full bg-(--status-alarm-strong)" />
+                        <span className="relative inline-flex size-2 rounded-full bg-(--status-alarm-strong)" />
+                      </span>
+                      <span className="font-medium">{duration(Date.now() / 1000 - net.captureStartedAt)}</span>
+                      <span className="text-white/50">{net.captured.toLocaleString()} packets</span>
+                    </span>
+                    <button
+                      onClick={capture}
+                      className="inline-flex h-full items-center gap-1.5 rounded-full bg-white/10 px-3 font-medium text-white outline-none transition-colors hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/35"
+                    >
+                      <span className="size-2.5 rounded-[3px] bg-white" />
+                      Stop
+                    </button>
+                  </div>
+                ) : (
+                  <Button size="sm" onClick={capture} title="Save every packet to a .pcap for Wireshark">
+                    <span className="size-3 shrink-0 rounded-full border-2 border-white/80 bg-(--status-alarm-strong)" />
+                    Start capture
+                  </Button>
+                )}
+              </div>
             </div>
             <ScrollArea scrollFade className="min-h-0 flex-1">
               <div className="flex flex-col gap-3 px-[18px] pb-5">
@@ -273,10 +417,10 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
                         <TabsTab value="problems">Errors</TabsTab>
                       </TabsList>
                     </Tabs>
-                    {sel ? (
+                    {selected.length ? (
                       <span className="inline-flex h-7 items-center gap-1 rounded-[8px] bg-(--surface-track) pr-0.5 pl-2.5 text-[12.5px]">
-                        {talkerName(sel)}
-                        <button aria-label="Show every device" onClick={() => setSelected(null)} className="inline-flex size-6 items-center justify-center rounded-[6px] text-(--text-muted) hover:bg-(--surface-card)">
+                        {sel ? talkerName(sel) : `${selected.length} devices`}
+                        <button aria-label="Show every device" onClick={clearSelection} className="inline-flex size-6 items-center justify-center rounded-[6px] text-(--text-muted) hover:bg-(--surface-card)">
                           <XIcon className="size-3" />
                         </button>
                       </span>
@@ -331,7 +475,7 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
                   <div className="truncate text-[11.5px] text-(--text-faint)">{sel.address}</div>
                   <div className="mt-0.5 truncate text-[17px] font-medium tracking-[-0.01em]">{talkerName(sel)}</div>
                 </div>
-                <Button aria-label="Close" variant="secondary" size="icon-xs" onClick={() => setSelected(null)}>
+                <Button aria-label="Close" variant="secondary" size="icon-xs" onClick={clearSelection}>
                   <XIcon />
                 </Button>
               </div>

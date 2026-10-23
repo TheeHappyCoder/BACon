@@ -195,8 +195,10 @@ export const FilterField = forwardRef<
     totalCount: number
     onSaveCheck: (name: string, severity: Severity, query: string) => void
     onTrend: () => void
+    /** sits as the header row of a table: no border of its own */
+    embedded?: boolean
   }
->(function FilterField({ rows, props, query, onQuery, search, onSearch, matchCount, totalCount, onSaveCheck, onTrend }, ref) {
+>(function FilterField({ rows, props, query, onQuery, search, onSearch, matchCount, totalCount, onSaveCheck, onTrend, embedded }, ref) {
   const names = useMemo(() => props.map((p) => p.name), [props])
   const node = useMemo(() => {
     try {
@@ -265,8 +267,15 @@ export const FilterField = forwardRef<
   )
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex min-h-10 items-start gap-2 rounded-[12px] border border-(--border-default) bg-(--surface-input) py-1 pr-1 pl-3 shadow-[0_1px_2px_rgba(0,0,0,.05)] transition-colors focus-within:border-(--ring) hover:border-(--border-strong)">
+    <div className={cn('flex flex-col', embedded ? 'shrink-0' : 'gap-1.5')}>
+      <div
+        className={cn(
+          'flex min-h-10 items-start gap-2 py-1 transition-colors',
+          embedded
+            ? 'pr-2 pl-4'
+            : 'rounded-[12px] border border-(--border-default) bg-(--surface-input) pr-1 pl-3 shadow-[0_1px_2px_rgba(0,0,0,.05)] focus-within:border-(--ring) hover:border-(--border-strong)',
+        )}
+      >
         <span className="flex h-8 shrink-0 items-center">
           {conds.length || query ? <Filter className="size-4 text-(--text-faint)" /> : <Search className="size-4 text-(--text-faint)" />}
         </span>
@@ -384,7 +393,7 @@ export const FilterField = forwardRef<
           </Menu>
         </span>
       </div>
-      {hint ? <span className={cn('px-1 text-[12px]', hint.kind === 'error' ? 'text-(--text-strong)' : 'text-(--text-muted)')}>{hint.text}</span> : null}
+      {hint ? <span className={cn('text-[12px]', embedded ? 'px-4 pb-2' : 'px-1', hint.kind === 'error' ? 'text-(--text-strong)' : 'text-(--text-muted)')}>{hint.text}</span> : null}
       <SaveCheckDialog
         open={saving}
         onOpenChange={setSaving}

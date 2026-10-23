@@ -90,8 +90,9 @@ function Workspace() {
   const [baseline, setBaseline] = useState<Baseline | null>(null)
   const [booted, setBooted] = useState(false)
   const [place, setPlace] = useState<Place>('objects')
-  const [trends, setTrends] = useState<TrendStatus>({ running: false, startedAt: 0, stoppedAt: 0, interval: 10, mode: 'auto', points: [], samples: 0, file: '' })
+  const [trends, setTrends] = useState<TrendStatus>({ running: false, startedAt: 0, stoppedAt: 0, interval: 10, nextRead: 0, mode: 'auto', points: [], samples: 0, file: '' })
   const [netIssues, setNetIssues] = useState(0)
+  const [capturing, setCapturing] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
   const refreshInterfaces = useCallback(async () => {
@@ -164,14 +165,17 @@ function Workspace() {
         if (!stop) setTrends(t)
         if (status.connected) {
           const n = await api.network(60)
-          if (!stop) setNetIssues(n.events.filter((e) => e.severity !== 'low').length)
+          if (!stop) {
+            setNetIssues(n.events.filter((e) => e.severity !== 'low').length)
+            setCapturing(n.capturing)
+          }
         }
       } catch {
         /* next tick */
       }
     }
     load()
-    const t = setInterval(load, place === 'trends' || trends.running ? 2000 : 8000)
+    const t = setInterval(load, place !== 'objects' || trends.running || capturing ? 2000 : 8000)
     return () => {
       stop = true
       clearInterval(t)
@@ -540,6 +544,7 @@ function Workspace() {
         onPlace={setPlace}
         recording={trends.running}
         issues={netIssues}
+        capturing={capturing}
         onNetwork={() => setConnectOpen(true)}
         updateAvailable={!!update?.available}
         onUpdates={() => setUpdateOpen(true)}
@@ -707,9 +712,11 @@ function Workspace() {
                 </div>
               ) : null}
 
+              {/* objects: the search field is the header row of the table, boxed like the packet log */}
+              <div className={view === 'objects' && scopeRows.length > 0 ? 'mx-[18px] mt-3.5 mb-[18px] flex min-h-0 flex-1 flex-col overflow-hidden rounded-[14px] border border-(--border-subtle)' : 'contents'}>
               {view === 'objects' && scopeRows.length > 0 ? (
-                <div className="px-[18px] pt-3.5 pb-3">
                   <FilterField
+                    embedded
                     ref={searchRef}
                     rows={scopeRows}
                     props={filterable}
@@ -725,7 +732,6 @@ function Workspace() {
                       toast(`Saved "${name}". It runs in Health check from now on.`)
                     }}
                   />
-                </div>
               ) : scopeRows.length > 0 ? (
                 <div className="h-3.5 shrink-0" />
               ) : null}
@@ -780,6 +786,7 @@ function Workspace() {
                   emptyState
                 )}
               </ScrollArea>
+              </div>
             </div>
           </section>
 

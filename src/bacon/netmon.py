@@ -9,6 +9,7 @@ Packets can be recorded to a .pcap that Wireshark opens with full BACnet decodin
 
 import collections
 import os
+import re
 import struct
 import time
 from dataclasses import dataclass, field
@@ -146,10 +147,29 @@ def _frame(src: str, dst: str, payload: bytes) -> bytes:
     return header + udp
 
 
+KEEP_CAPTURES = 10  # newest captures kept; older ones are removed when a new capture starts
+CAPTURE_NAME = re.compile(r"^capture-(\d{8}-\d{6})\.pcap$")
+
+
+def _pcap_count(path: str) -> int:
+    """Packets in a pcap: walk the 16-byte record headers without reading the frames."""
+    count = 0
+    try:
+        with open(path, "rb") as f:
+            f.seek(24)
+            while len(head := f.read(16)) == 16:
+                f.seek(struct.unpack("<IIII", head)[2], 1)
+                count += 1
+    except OSError:
+        pass
+    return count
+
+
 class PcapWriter:
     def __init__(self, path: str):
         self.path = path
         self.count = 0
+        self.started = time.time()
         self.f = open(path, "wb")
         self.f.write(struct.pack("<IHHiIII", 0xA1B2C3D4, 2, 4, 0, 0, 65535, 101))
 
@@ -205,6 +225,7 @@ class NetworkMonitor:
         self._whois_times: dict[str, collections.deque] = collections.defaultdict(lambda: collections.deque(maxlen=500))
         self.capture: PcapWriter | None = None
         self.last_capture: str = ""
+        self._counts: dict[tuple[str, int], int] = {}
 
     # -- recording --------------------------------------------------------------
 
@@ -212,6 +233,8 @@ class NetworkMonitor:
         self.stop_capture()
         folder = data_dir("captures")
         clean_old(folder)
+        for old in self.captures()[KEEP_CAPTURES - 1 :]:  # make room: the new one is the tenth
+            self.delete_capture(old["name"])
         path = os.path.join(folder, time.strftime("capture-%Y%m%d-%H%M%S.pcap"))
         self.capture = PcapWriter(path)
         self.last_capture = path
@@ -220,6 +243,51 @@ class NetworkMonitor:
         if self.capture:
             self.capture.close()
             self.capture = None
+
+    def captures(self) -> list[dict]:
+        """Saved captures, newest first. Packet counts are cached by size, so listing stays cheap."""
+        folder = data_dir("captures")
+        out = []
+        for name in os.listdir(folder):
+            m = CAPTURE_NAME.match(name)
+            if not m:
+                continue
+            path = os.path.join(folder, name)
+            live = self.capture is not None and os.path.normcase(self.capture.path) == os.path.normcase(path)
+            try:
+                st = os.stat(path)
+            except OSError:
+                continue
+            started = time.mktime(time.strptime(m.group(1), "%Y%m%d-%H%M%S"))
+            if live:
+                packets = self.capture.count
+            else:
+                key = (name, st.st_size)
+                if key not in self._counts:
+                    self._counts[key] = _pcap_count(path)
+                packets = self._counts[key]
+            out.append({
+                "name": name, "startedAt": started, "endedAt": time.time() if live else st.st_mtime,
+                "packets": packets, "bytes": st.st_size, "live": live,
+            })
+        out.sort(key=lambda c: c["name"], reverse=True)
+        return out
+
+    def capture_path(self, name: str) -> str | None:
+        if not CAPTURE_NAME.match(name):
+            return None
+        path = os.path.join(data_dir("captures"), name)
+        return path if os.path.exists(path) else None
+
+    def delete_capture(self, name: str) -> bool:
+        path = self.capture_path(name)
+        if not path or (self.capture and os.path.normcase(self.capture.path) == os.path.normcase(path)):
+            return False
+        try:
+            os.remove(path)
+            return True
+        except OSError:
+            return False
 
     # -- the tap ----------------------------------------------------------------
 
@@ -311,13 +379,15 @@ class NetworkMonitor:
             "events": list(self.events),
             "capturing": self.capture is not None,
             "captured": self.capture.count if self.capture else 0,
-            "lastCapture": os.path.basename(self.last_capture) if self.last_capture else "",
+            "captureStartedAt": self.capture.started if self.capture else 0.0,
         }
 
     def recent(self, limit: int = 500, address: str = ""):
+        """Newest packets first. `address` is one address or several, comma-separated."""
+        wanted = {a for a in address.split(",") if a}
         out = []
         for p in reversed(self.packets):
-            if address and address not in (p.src, p.dst):
+            if wanted and p.src not in wanted and p.dst not in wanted:
                 continue
             out.append(p.to_json())
             if len(out) >= limit:
