@@ -182,16 +182,24 @@
   .copy:hover { background: #fff; color: var(--ink); }
   .copy.done { background: var(--lime); color: var(--ink); }
 
-  /* ---- read-only: what it uses, what it never does ---- */
-  .svcs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .svc-col { border-radius: 24px; padding: 26px; background: var(--card); border: 1px solid var(--line); }
-  .svc-col h3 { display: flex; align-items: center; gap: 10px; font-size: 18px; letter-spacing: -0.02em; margin-bottom: 14px; }
-  .svc-col.never { background: transparent; border-style: dashed; border-color: rgba(41, 41, 41, 0.18); }
-  .svc-col.never h3 .badge { background: var(--paper-2); color: var(--ink-2); }
-  .svc { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 48px; border-top: 1px solid var(--line); font: 400 14px/1 var(--mono); }
-  .svc small { font: 400 13px/1 var(--sans); color: var(--ink-3); }
-  .never .svc { color: var(--ink-3); }
-  .never .svc span { text-decoration: line-through; text-decoration-color: var(--ink-4); }
+  /* ---- read-only: one card, what it sends on the light half, what it never sends on the dark half ---- */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--line); box-shadow: 0 30px 60px -40px rgba(28, 34, 43, 0.35); }
+  .half { border-radius: 20px; padding: clamp(24px, 3vw, 36px); }
+  .half.yes { background: var(--paper); }
+  .half.no { position: relative; overflow: hidden; background: #262628; color: #fff; }
+  .half.no::before { content: ''; position: absolute; top: -140px; right: -120px; width: 380px; height: 380px; border-radius: 50%; background: radial-gradient(circle, rgba(255, 185, 162, 0.16), transparent 65%); pointer-events: none; }
+  .half h3 { display: flex; align-items: center; justify-content: space-between; font-size: 20px; letter-spacing: -0.03em; margin-bottom: 18px; }
+  .half.no h3 .badge { background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.8); }
+  .op { position: relative; display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .half.no .op { border-top-color: rgba(255, 255, 255, 0.08); }
+  .op .ic { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; }
+  .half.yes .op .ic { background: var(--lime); color: var(--ink); }
+  .half.no .op .ic { background: rgba(255, 185, 162, 0.14); color: #ffb9a2; }
+  .op .ic svg { width: 16px; height: 16px; }
+  .op .txt { flex: 1; min-width: 0; }
+  .op b { display: block; font-size: 15.5px; font-weight: 500; letter-spacing: -0.015em; }
+  .op span { display: block; margin-top: 2px; font: 400 12px/1.3 var(--mono); color: var(--ink-3); }
+  .half.no .op span { color: rgba(255, 255, 255, 0.45); }
 
   /* ---- faq ---- */
   .faq { max-width: 860px; margin: 0 auto; overflow: hidden; border-radius: 24px; background: var(--card); border: 1px solid var(--line); }
@@ -239,7 +247,7 @@
     .fact { padding: 14px 0; }
     .qrow { grid-template-columns: 1fr auto; height: auto; padding: 14px 14px 14px 22px; row-gap: 6px; }
     .qrow code { grid-column: 1 / -1; grid-row: 2; }
-    .svcs { grid-template-columns: 1fr; }
+    .split { grid-template-columns: 1fr; }
   }
   @media (max-width: 600px) {
       .hero { height: 760px; }
@@ -370,18 +378,18 @@
         <h2>It looks. <em>It never touches.</em></h2>
         <p>Plug into a live building without a second thought. COV subscriptions even expire on their own if your laptop disappears.</p>
       </div>
-      <div class="svcs">
-        <div class="svc-col reveal">
-          <h3><span class="badge">Uses</span>Reads</h3>
-          <div class="svc"><span>ReadPropertyMultiple</span><small>every property</small></div>
-          <div class="svc"><span>ReadRange</span><small>trend log history</small></div>
-          <div class="svc"><span>GetEventInformation</span><small>live alarms</small></div>
+      <div class="split reveal">
+        <div class="half yes">
+          <h3>What it sends <span class="badge">Reads</span></h3>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Reads every property</b><span>ReadPropertyMultiple</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Pulls trend log history</b><span>ReadRange</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Asks for active alarms</b><span>GetEventInformation</span></div></div>
         </div>
-        <div class="svc-col never reveal">
-          <h3><span class="badge">Never</span>Writes</h3>
-          <div class="svc"><span>WriteProperty</span><small>no values changed</small></div>
-          <div class="svc"><span>AcknowledgeAlarm</span><small>no alarms touched</small></div>
-          <div class="svc"><span>ReinitializeDevice</span><small>no restarts</small></div>
+        <div class="half no">
+          <h3>What it never sends <span class="badge">Never</span></h3>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></span><div class="txt"><b>Changes a value</b><span>WriteProperty</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></span><div class="txt"><b>Acknowledges an alarm</b><span>AcknowledgeAlarm</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></span><div class="txt"><b>Restarts a device</b><span>ReinitializeDevice</span></div></div>
         </div>
       </div>
     </div>
