@@ -127,6 +127,9 @@ No site to hand? `python scripts/simdevice.py <your-ip>` runs a simulated contro
 points, alarms in every state, schedules, a calendar and trend logs with three days of history. Connect
 as usual, then add the device by IP as `<your-ip>:47809`.
 
+For a device with a face, use [Rasher](rasher/README.md): a simulated room controller you can see and
+press, with writable points, COV, alarms and faults on demand, that can take its own address on 47808.
+
 `npm run build` writes the UI into `src/bacon/web`, and `bacon` then serves it in its own window.
 Use `bacon --browser` to open it in your browser instead.
 

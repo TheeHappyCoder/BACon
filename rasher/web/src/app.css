@@ -1,0 +1,98 @@
+/* BACon's design system (tokens, Tailwind theme, components), then Rasher's own sources and additions. */
+@import "../../../web/src/ui/styles.css";
+@source "./";
+
+kbd, code, pre, samp { font-family: inherit; }
+
+@keyframes bx-spin { to { transform: rotate(360deg); } }
+.bx-spin { animation: bx-spin 0.7s linear infinite; }
+
+@keyframes rs-row-in { from { opacity: 0; background-color: var(--color-primary-50); } }
+.rs-row-in { animation: rs-row-in 0.6s ease-out both; }
+
+/* ---- the wall unit -------------------------------------------------------------------------------------------- */
+
+/* A matte white plastic body with a soft bevel, standing slightly off the wall. */
+.rs-unit {
+  position: relative;
+  border-radius: 34px;
+  background: linear-gradient(160deg, #ffffff 0%, #f7f7f6 55%, #efefed 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 -2px 0 rgba(0, 0, 0, 0.035) inset,
+    0 2px 3px rgba(0, 0, 0, 0.06),
+    0 18px 40px -14px rgba(20, 20, 30, 0.28),
+    0 40px 70px -40px rgba(20, 20, 30, 0.35);
+}
+/* the gap between unit and wall */
+.rs-unit::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+
+/* A recessed black glass display. */
+.rs-glass {
+  position: relative;
+  border-radius: 22px;
+  background: radial-gradient(120% 90% at 30% 0%, #26272b 0%, #141417 55%, #0d0d0f 100%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 1px 0 1px rgba(255, 255, 255, 0.7),
+    0 2px 6px rgba(0, 0, 0, 0.25) inset;
+  overflow: hidden;
+  color: #f4f4f2;
+  transition: filter 400ms ease;
+}
+/* a faint reflection across the glass */
+.rs-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 38%, transparent 38.5%);
+  pointer-events: none;
+}
+.rs-glass[data-dim="true"] { filter: brightness(0.35) saturate(0.4); }
+
+.rs-glass-faint { color: rgb(244 244 242 / 0.48); }
+.rs-glass-mute { color: rgb(244 244 242 / 0.28); }
+
+/* Touch keys printed on the bezel: no travel, a soft glow while pressed. */
+.rs-key {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #3a3a3e;
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+}
+.rs-key:hover { background-color: rgba(0, 0, 0, 0.04); color: #111; }
+.rs-key:active { transform: scale(0.94); background-color: rgba(0, 0, 0, 0.07); }
+.rs-key:focus-visible { outline: 2px solid var(--action-primary); outline-offset: 2px; }
+
+/* The status LED under the display: it flickers with each request the device answers. */
+.rs-led {
+  border-radius: 999px;
+  background: #cfd0cd;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08) inset;
+  transition: background-color 90ms ease, box-shadow 90ms ease;
+}
+.rs-led[data-on="true"] { background: #6ed36b; box-shadow: 0 0 6px 1px rgba(110, 211, 107, 0.75); }
+.rs-led[data-tone="alarm"] { background: #ff5a4f; box-shadow: 0 0 6px 1px rgba(255, 90, 79, 0.7); }
+.rs-led[data-tone="amber"] { background: #ffb02e; box-shadow: 0 0 6px 1px rgba(255, 176, 46, 0.7); }
+
+@keyframes rs-blink { 50% { opacity: 0.25; } }
+.rs-blink { animation: rs-blink 1s steps(1) infinite; }
+
+/* Fan blades turn with the fan speed. */
+@keyframes rs-turn { to { transform: rotate(360deg); } }
+.rs-fan { transform-origin: center; animation: rs-turn var(--rs-fan, 0s) linear infinite; }
+.rs-fan[data-speed="0"] { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rs-fan, .rs-blink { animation: none; }
+}
