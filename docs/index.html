@@ -85,26 +85,33 @@
   .head p { font-size: clamp(16px, 1.3vw, 18px); color: var(--ink-2); max-width: 48ch; }
 
   /* ---- the page nav: a floating pill, shown once the hero is out of view ---- */
-  .nav { position: fixed; z-index: 50; top: 12px; left: 50%; transform: translate(-50%, -140%); opacity: 0; transition: transform 0.4s var(--ease), opacity 0.3s; display: grid; grid-template-columns: auto auto auto; align-items: center; gap: 22px; height: 52px; padding: 0 8px 0 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.78); border: 1px solid var(--line); box-shadow: 0 12px 30px -16px rgba(28, 34, 43, 0.3); backdrop-filter: saturate(160%) blur(16px); -webkit-backdrop-filter: saturate(160%) blur(16px); }
-  .nav.show { transform: translate(-50%, 0); opacity: 1; }
-  .nav .links { display: flex; gap: 4px; }
-  .nav .links a { height: 34px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 999px; font-size: 13.5px; color: var(--ink-2); text-decoration: none; }
-  .nav .links a:hover { background: var(--paper-2); color: var(--ink); }
+  /* the nav: logo and version on the left, the menu on the right. Plain on the sky; a frosted bar past the hero */
+  .nav { position: fixed; z-index: 50; top: 10px; left: 10px; right: 10px; display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; padding: 0 22px 0 30px; border-radius: var(--radius) var(--radius) 0 0; color: #fff; transition: background-color 0.35s, color 0.35s, box-shadow 0.35s, top 0.35s, left 0.35s, right 0.35s, border-radius 0.35s, height 0.35s, transform 0.4s var(--ease), opacity 0.3s; }
+  .nav .side { display: flex; align-items: center; gap: 12px; }
+  .nav .brand { gap: 8px; }
+  .nav .links { display: flex; gap: 4px; margin-right: 8px; }
+  .nav .links a { height: 36px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 999px; font-size: 14px; color: inherit; opacity: 0.92; text-decoration: none; transition: background-color 0.2s, opacity 0.2s; }
+  .nav .links a:hover { opacity: 1; background: rgba(255, 255, 255, 0.16); }
+  .nav .arc-out { stroke: rgba(255, 255, 255, 0.55); }
+  .nav .arc-in { stroke: #fff; }
+  .nav .node { fill: var(--lime); }
+  .nav .dl { background: #fff; color: var(--ink); box-shadow: 0 8px 24px -10px rgba(10, 30, 60, 0.45); }
+  .nav.solid { top: 0; left: 10px; right: 10px; height: 62px; border-radius: 0 0 22px 22px; color: var(--ink); background: rgba(255, 255, 255, 0.88); box-shadow: 0 1px 0 var(--line), 0 14px 30px -20px rgba(28, 34, 43, 0.35); backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%); }
+  .nav.solid .links a { color: var(--ink-2); opacity: 1; }
+  .nav.solid .links a:hover { background: var(--paper-2); color: var(--ink); }
+  .nav.solid .arc-out { stroke: #969696; }
+  .nav.solid .arc-in { stroke: var(--ink); }
+  .nav.solid .node { fill: var(--blue); }
+  .nav.solid .dl { background: var(--ink); color: #fff; box-shadow: none; }
+  .nav.away { transform: translateY(-120%); opacity: 0; }
 
   /* ---- hero: a rounded panel full of sky, the app rising out of the clouds ---- */
   .hero-wrap { padding: 10px; }
   .hero { position: relative; overflow: hidden; isolation: isolate; height: clamp(700px, calc(100svh - 20px), 1000px); border-radius: var(--radius); background: var(--sky); background-size: cover; background-position: center 78%; color: #fff; }
   .hero::before { content: ''; position: absolute; inset: 0; z-index: 0; background: linear-gradient(180deg, rgba(18, 52, 98, 0.32) 0%, rgba(18, 52, 98, 0.08) 34%, transparent 55%); pointer-events: none; }
   /* three columns, the links in the middle one: they sit on the page's centre line whatever the sides hold */
-  .hero-nav { position: absolute; z-index: 3; top: 18px; left: 22px; right: 18px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
-  .hero-nav .brand { color: #fff; justify-self: start; }
-  .hero-nav .links { display: flex; gap: 2px; padding: 4px; border-radius: 999px; }
-  .hero-nav .links a { height: 32px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 999px; font-size: 13.5px; color: rgba(255, 255, 255, 0.92); text-decoration: none; transition: background-color 0.2s; }
-  .hero-nav .links a:hover { background: rgba(255, 255, 255, 0.16); }
-  .hero-nav .end { justify-self: end; display: flex; align-items: center; gap: 8px; }
-  .hero-copy { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; text-align: center; padding: clamp(96px, 15vh, 150px) 20px 0; }
-  .kicker { display: inline-flex; align-items: center; gap: 9px; height: 32px; padding: 0 13px 0 4px; border-radius: 999px; font-size: 13px; text-decoration: none; }
-  .hero h1 { margin-top: 22px; font-size: clamp(48px, min(7vw, 10.5vh), 104px); line-height: 0.95; letter-spacing: -0.05em; text-shadow: 0 2px 30px rgba(10, 40, 90, 0.18); }
+  .hero-copy { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; text-align: center; padding: clamp(118px, 17vh, 170px) 20px 0; }
+  .hero h1 { margin-top: 0; font-size: clamp(48px, min(7vw, 10.5vh), 104px); line-height: 0.95; letter-spacing: -0.05em; text-shadow: 0 2px 30px rgba(10, 40, 90, 0.18); }
   .hero .lead { margin-top: 18px; font-size: clamp(16px, 1.35vw, 19px); line-height: 1.45; color: rgba(255, 255, 255, 0.92); max-width: 40ch; text-shadow: 0 1px 14px rgba(10, 40, 90, 0.25); }
   .hero .ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 28px; }
   .hero-shot { position: absolute; z-index: 1; left: 50%; bottom: 0; transform: translateX(-50%); width: min(1080px, calc(100% - 64px)); top: clamp(400px, 57%, 600px); }
@@ -221,10 +228,8 @@
 
   @media (max-width: 960px) {
     .nav .links { display: none; }
-    .nav { grid-template-columns: auto auto; }
-    .hero-nav { grid-template-columns: 1fr auto; }
-    .hero-nav .links { display: none; }
-    .hero-shot { width: calc(100% - 28px); top: auto; height: 44%; }
+    .nav { padding: 0 16px 0 20px; }
+        .hero-shot { width: calc(100% - 28px); top: auto; height: 44%; }
     .showcase { grid-template-columns: 1fr; }
     .tabs { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
     .tab { flex: none; padding: 10px 14px; }
@@ -237,58 +242,41 @@
     .svcs { grid-template-columns: 1fr; }
   }
   @media (max-width: 600px) {
-    .hero-nav .glass { display: none; }
-    .hero { height: 760px; }
-    .hero-copy { padding-top: 92px; }
+      .hero { height: 760px; }
+    .hero-copy { padding-top: 104px; }
   }
 </style>
 </head>
 <body>
 
 <header class="nav" id="nav">
-  <a class="brand" href="#top" aria-label="BACon home">
-    <svg class="mark" width="24" height="24" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-width="2.6" aria-hidden="true">
-      <path class="arc-out" d="M25.2 6.8a13 13 0 0 1 0 18.4M6.8 25.2a13 13 0 0 1 0-18.4" stroke="#969696"/>
-      <path class="arc-in" d="M21.7 10.3a8 8 0 0 1 0 11.4M10.3 21.7a8 8 0 0 1 0-11.4" stroke="#292929"/>
-      <circle cx="16" cy="16" r="3.6" fill="#305dde"/>
-    </svg>
-    BACon
-  </a>
-  <nav class="links" aria-label="Sections">
-    <a href="#features">Features</a>
-    <a href="#queries">Queries</a>
-    <a href="#read-only">Read-only</a>
-    <a href="#faq">FAQ</a>
-  </nav>
-  <a class="btn btn-sm btn-ink" href="https://github.com/TheeHappyCoder/BACon/releases/latest/download/BACon.exe">Download</a>
+  <div class="side">
+    <a class="brand" href="#top" aria-label="BACon home">
+      <svg class="mark" width="24" height="24" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-width="2.6" aria-hidden="true">
+        <path class="arc-out" d="M25.2 6.8a13 13 0 0 1 0 18.4M6.8 25.2a13 13 0 0 1 0-18.4"/>
+        <path class="arc-in" d="M21.7 10.3a8 8 0 0 1 0 11.4M10.3 21.7a8 8 0 0 1 0-11.4"/>
+        <circle class="node" cx="16" cy="16" r="3.6"/>
+      </svg>
+      BACon
+    </a>
+    <a class="badge" href="https://github.com/TheeHappyCoder/BACon/releases/latest" title="Schedules and alarms are in" data-version style="text-decoration:none">v0.1.0</a>
+  </div>
+  <div class="side">
+    <nav class="links" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#queries">Queries</a>
+      <a href="#read-only">Read-only</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="btn btn-sm dl" href="https://github.com/TheeHappyCoder/BACon/releases/latest/download/BACon.exe">Download</a>
+  </div>
 </header>
 
 <main id="top">
   <!-- hero -->
   <section class="hero-wrap">
     <div class="hero">
-      <div class="hero-nav">
-        <a class="brand" href="#top" aria-label="BACon home">
-          <svg width="26" height="26" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-width="2.6" aria-hidden="true">
-            <path d="M25.2 6.8a13 13 0 0 1 0 18.4M6.8 25.2a13 13 0 0 1 0-18.4" stroke="#fff" stroke-opacity="0.55"/>
-            <path d="M21.7 10.3a8 8 0 0 1 0 11.4M10.3 21.7a8 8 0 0 1 0-11.4" stroke="#fff"/>
-            <circle cx="16" cy="16" r="3.6" fill="#c6f56f"/>
-          </svg>
-          BACon
-        </a>
-        <nav class="links glass" aria-label="Sections">
-          <a href="#features">Features</a>
-          <a href="#queries">Queries</a>
-          <a href="#read-only">Read-only</a>
-          <a href="#faq">FAQ</a>
-        </nav>
-        <div class="end">
-          <a class="btn btn-sm glass" href="https://github.com/TheeHappyCoder/BACon">GitHub</a>
-          <a class="btn btn-sm btn-light" href="https://github.com/TheeHappyCoder/BACon/releases/latest/download/BACon.exe">Download</a>
-        </div>
-      </div>
       <div class="hero-copy">
-        <a class="kicker glass" href="https://github.com/TheeHappyCoder/BACon/releases/latest"><span class="badge" data-version>v0.1.0</span>Schedules and alarms are in</a>
         <h1>BACnet, <em>on site.</em></h1>
         <p class="lead">Read every property of every object, find faults in one line, and export it all to Excel.</p>
         <div class="ctas">
@@ -571,10 +559,12 @@
   const heroPanel = document.querySelector('.hero')
   const closingPanel = document.querySelector('.closing .sky-panel')
   // shown between the hero and the closing panel; it never sits over the closing sky
-  addEventListener('scroll', () => {
-    const closingTop = closingPanel.getBoundingClientRect().top
-    nav.classList.toggle('show', scrollY > heroPanel.offsetHeight - 40 && closingTop > 90)
-  }, { passive: true })
+  const onScroll = () => {
+    nav.classList.toggle('solid', scrollY > 8) // a bar as soon as scrolling starts, so the links never sit over the app
+    nav.classList.toggle('away', closingPanel.getBoundingClientRect().top < 90)
+  }
+  addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
 
   // ---- the count-up on the story number ----
   const big = document.querySelector('[data-count]')
