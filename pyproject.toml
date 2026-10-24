@@ -3,6 +3,8 @@ name = "bacon-bacnet"
 dynamic = ["version"]
 description = "BACon: BACnet, on site. Scan a BACnet/IP network, read every property, trend points and export to Excel."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "bacpypes3>=0.0.110",
@@ -23,7 +25,7 @@ bacon = "bacon.server:main"
 Homepage = "https://github.com/TheeHappyCoder/BACon"
 
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.dynamic]

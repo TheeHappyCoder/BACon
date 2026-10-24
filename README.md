@@ -153,3 +153,7 @@ The app updates from the newest GitHub release that has `BACon.exe` and `BACon.e
 - [bacpypes3](https://github.com/JoelBender/BACpypes3) (MIT) does the BACnet work.
 - Vendor property names come from [YABE](https://sourceforge.net/projects/yetanotherbacnetexplorer/)'s
   `VendorPropertyMapping.csv` (MIT, © 2014 Yabe project). See `src/bacon/data/LICENSE-yabe.txt`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
