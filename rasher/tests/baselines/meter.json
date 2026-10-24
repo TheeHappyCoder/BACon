@@ -1,0 +1,752 @@
+{
+ "_protocol-object-types-supported": [
+  1,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "_protocol-services-supported": [
+  1,
+  1,
+  0,
+  1,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  1,
+  1,
+  0,
+  0,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "analog-input,1": {
+  "cov-increment": 0.5,
+  "description": "Total, all three phases",
+  "object-identifier": [
+   0,
+   1
+  ],
+  "object-name": "Active power",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 48
+ },
+ "analog-input,10": {
+  "cov-increment": 0.02,
+  "description": "Total, all three phases",
+  "object-identifier": [
+   0,
+   10
+  ],
+  "object-name": "Power factor",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 15
+ },
+ "analog-input,11": {
+  "cov-increment": 0.05,
+  "description": "",
+  "object-identifier": [
+   0,
+   11
+  ],
+  "object-name": "Frequency",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 27
+ },
+ "analog-input,2": {
+  "cov-increment": 1.0,
+  "description": "Imported since the meter was fitted",
+  "object-identifier": [
+   0,
+   2
+  ],
+  "object-name": "Active energy",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 19
+ },
+ "analog-input,3": {
+  "acked-transitions": "(live)",
+  "cov-increment": 0.5,
+  "deadband": 3.0,
+  "description": "Active power averaged over 15 minutes",
+  "event-detection-enable": 1,
+  "event-enable": [
+   1,
+   0,
+   1
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "high-limit": 55.0,
+  "limit-enable": [
+   0,
+   1
+  ],
+  "low-limit": 0.0,
+  "notification-class": 1,
+  "notify-type": 0,
+  "object-identifier": [
+   0,
+   3
+  ],
+  "object-name": "Demand",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "time-delay": 60,
+  "units": 48
+ },
+ "analog-input,4": {
+  "cov-increment": 2.0,
+  "description": "L1 to neutral",
+  "object-identifier": [
+   0,
+   4
+  ],
+  "object-name": "Voltage L1",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 5
+ },
+ "analog-input,5": {
+  "cov-increment": 2.0,
+  "description": "L2 to neutral",
+  "object-identifier": [
+   0,
+   5
+  ],
+  "object-name": "Voltage L2",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 5
+ },
+ "analog-input,6": {
+  "cov-increment": 2.0,
+  "description": "L3 to neutral",
+  "object-identifier": [
+   0,
+   6
+  ],
+  "object-name": "Voltage L3",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 5
+ },
+ "analog-input,7": {
+  "cov-increment": 1.0,
+  "description": "",
+  "object-identifier": [
+   0,
+   7
+  ],
+  "object-name": "Current L1",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 3
+ },
+ "analog-input,8": {
+  "cov-increment": 1.0,
+  "description": "",
+  "object-identifier": [
+   0,
+   8
+  ],
+  "object-name": "Current L2",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 3
+ },
+ "analog-input,9": {
+  "cov-increment": 1.0,
+  "description": "",
+  "object-identifier": [
+   0,
+   9
+  ],
+  "object-name": "Current L3",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 3
+ },
+ "binary-input,1": {
+  "acked-transitions": "(live)",
+  "active-text": "Failed",
+  "alarm-value": 1,
+  "description": "Any phase below 80 % of nominal",
+  "event-detection-enable": 1,
+  "event-enable": [
+   1,
+   0,
+   1
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "inactive-text": "Normal",
+  "notification-class": 1,
+  "notify-type": 0,
+  "object-identifier": [
+   3,
+   1
+  ],
+  "object-name": "Phase failure",
+  "object-type": 3,
+  "out-of-service": 0,
+  "polarity": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "time-delay": 5
+ },
+ "device": {
+  "active-cov-subscriptions": "(live)",
+  "apdu-segment-timeout": 1000,
+  "apdu-timeout": 3000,
+  "application-software-version": "Rasher 0.1",
+  "database-revision": 1,
+  "description": "Simulated three-phase energy meter on the level 2 distribution board",
+  "device-address-binding": "(live)",
+  "firmware-revision": "1.0",
+  "local-date": "(live)",
+  "local-time": "(live)",
+  "location": "Level 2, Riser cupboard 2.R1",
+  "max-apdu-length-accepted": 1024,
+  "max-segments-accepted": 16,
+  "model-name": "EM-3 Three-phase energy meter",
+  "number-of-apdu-retries": 3,
+  "object-identifier": [
+   8,
+   0
+  ],
+  "object-list": [
+   [
+    8,
+    0
+   ],
+   [
+    56,
+    1
+   ],
+   [
+    0,
+    1
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    0,
+    3
+   ],
+   [
+    0,
+    4
+   ],
+   [
+    0,
+    5
+   ],
+   [
+    0,
+    6
+   ],
+   [
+    0,
+    7
+   ],
+   [
+    0,
+    8
+   ],
+   [
+    0,
+    9
+   ],
+   [
+    0,
+    10
+   ],
+   [
+    0,
+    11
+   ],
+   [
+    3,
+    1
+   ],
+   [
+    15,
+    1
+   ],
+   [
+    20,
+    1
+   ],
+   [
+    20,
+    2
+   ],
+   [
+    20,
+    3
+   ],
+   [
+    27,
+    1
+   ]
+  ],
+  "object-name": "(prefix-instance)",
+  "object-type": 8,
+  "protocol-object-types-supported": [
+   1,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "protocol-revision": 22,
+  "protocol-services-supported": [
+   1,
+   1,
+   0,
+   1,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   1,
+   1,
+   1,
+   1,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   1,
+   1,
+   0,
+   0,
+   0,
+   1,
+   1,
+   1,
+   1,
+   1,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "protocol-version": 1,
+  "segmentation-supported": 0,
+  "status-flags": "(live)",
+  "system-status": 0,
+  "vendor-identifier": 999,
+  "vendor-name": "Rasher"
+ },
+ "network-port,1": {
+  "bacnet-ip-mode": "(this PC)",
+  "bacnet-ip-udp-port": "(this PC)",
+  "changes-pending": "(this PC)",
+  "ip-address": "(this PC)",
+  "ip-subnet-mask": "(this PC)",
+  "link-speed": "(this PC)",
+  "mac-address": "(this PC)",
+  "network-number": "(this PC)",
+  "network-number-quality": "(this PC)",
+  "network-type": "(this PC)",
+  "object-identifier": "(this PC)",
+  "object-name": "(this PC)",
+  "object-type": "(this PC)",
+  "out-of-service": "(this PC)",
+  "protocol-level": "(this PC)",
+  "reliability": "(this PC)",
+  "status-flags": "(this PC)"
+ },
+ "notification-class,1": {
+  "ack-required": [
+   1,
+   1,
+   0
+  ],
+  "notification-class": 1,
+  "object-identifier": [
+   15,
+   1
+  ],
+  "object-name": "Meter alarms",
+  "object-type": 15,
+  "priority": [
+   64,
+   64,
+   200
+  ],
+  "recipient-list": [],
+  "status-flags": "(live)"
+ },
+ "trend-log,1": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-input,1",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 1,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   1
+  ],
+  "object-name": "Active power log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log,2": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-input,3",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 1,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   2
+  ],
+  "object-name": "Demand log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log,3": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-input,2",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 1,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   3
+  ],
+  "object-name": "Active energy log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log-multiple,1": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": [
+   {
+    "objectIdentifier": "analog-input,1",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-input,3",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-input,10",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-input,2",
+    "propertyIdentifier": 85
+   }
+  ],
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 1,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   27,
+   1
+  ],
+  "object-name": "Meter log",
+  "object-type": 27,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)"
+ }
+}

@@ -1,0 +1,1394 @@
+{
+ "_protocol-object-types-supported": [
+  1,
+  1,
+  1,
+  1,
+  0,
+  1,
+  1,
+  0,
+  1,
+  0,
+  0,
+  0,
+  1,
+  0,
+  1,
+  1,
+  0,
+  1,
+  0,
+  1,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "_protocol-services-supported": [
+  1,
+  1,
+  0,
+  1,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  1,
+  1,
+  0,
+  0,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "analog-input,1": {
+  "acked-transitions": "(live)",
+  "cov-increment": 0.1,
+  "deadband": 0.5,
+  "description": "Wall unit sensor",
+  "event-detection-enable": 1,
+  "event-enable": [
+   1,
+   1,
+   1
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "high-limit": 26.0,
+  "limit-enable": [
+   1,
+   1
+  ],
+  "low-limit": 16.0,
+  "notification-class": 1,
+  "notify-type": 0,
+  "object-identifier": [
+   0,
+   1
+  ],
+  "object-name": "Room temperature",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "time-delay": 30,
+  "units": 62
+ },
+ "analog-input,2": {
+  "cov-increment": 0.5,
+  "description": "Shared from the roof weather station",
+  "object-identifier": [
+   0,
+   2
+  ],
+  "object-name": "Outside air temperature",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 62
+ },
+ "analog-input,3": {
+  "cov-increment": 1.0,
+  "object-identifier": [
+   0,
+   3
+  ],
+  "object-name": "Room humidity",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 29
+ },
+ "analog-input,4": {
+  "acked-transitions": "(live)",
+  "cov-increment": 25.0,
+  "deadband": 100.0,
+  "event-detection-enable": 1,
+  "event-enable": [
+   1,
+   0,
+   1
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "high-limit": 1200.0,
+  "limit-enable": [
+   0,
+   1
+  ],
+  "low-limit": 0.0,
+  "notification-class": 2,
+  "notify-type": 0,
+  "object-identifier": [
+   0,
+   4
+  ],
+  "object-name": "Room CO2",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "time-delay": 60,
+  "units": 96
+ },
+ "analog-output,1": {
+  "cov-increment": 1.0,
+  "current-command-priority": "(live)",
+  "description": "Fan coil heating valve, 0-10 V",
+  "object-identifier": [
+   1,
+   1
+  ],
+  "object-name": "Heating valve",
+  "object-type": 1,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "set"
+  ],
+  "reliability": "(live)",
+  "relinquish-default": 0.0,
+  "status-flags": "(live)",
+  "units": 98
+ },
+ "analog-output,2": {
+  "cov-increment": 1.0,
+  "current-command-priority": "(live)",
+  "description": "Fan coil chilled water valve, 0-10 V",
+  "object-identifier": [
+   1,
+   2
+  ],
+  "object-name": "Cooling valve",
+  "object-type": 1,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "set"
+  ],
+  "reliability": "(live)",
+  "relinquish-default": 0.0,
+  "status-flags": "(live)",
+  "units": 98
+ },
+ "analog-value,1": {
+  "cov-increment": 0.1,
+  "current-command-priority": "(live)",
+  "description": "Base setpoint; the room unit dial adds the offset",
+  "max-pres-value": 30.0,
+  "min-pres-value": 12.0,
+  "object-identifier": [
+   2,
+   1
+  ],
+  "object-name": "Comfort setpoint",
+  "object-type": 2,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 21.0,
+  "status-flags": "(live)",
+  "units": 62
+ },
+ "analog-value,2": {
+  "cov-increment": 0.1,
+  "current-command-priority": "(live)",
+  "description": "Set from the room unit's + and -",
+  "max-pres-value": 3.0,
+  "min-pres-value": -3.0,
+  "object-identifier": [
+   2,
+   2
+  ],
+  "object-name": "Setpoint offset",
+  "object-type": 2,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 0.0,
+  "status-flags": "(live)",
+  "units": 121
+ },
+ "analog-value,3": {
+  "cov-increment": 0.1,
+  "object-identifier": [
+   2,
+   3
+  ],
+  "object-name": "Effective setpoint",
+  "object-type": 2,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "status-flags": "(live)",
+  "units": 62
+ },
+ "binary-input,1": {
+  "acked-transitions": "(live)",
+  "active-text": "Open",
+  "alarm-value": 1,
+  "event-detection-enable": 1,
+  "event-enable": [
+   1,
+   0,
+   1
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "inactive-text": "Closed",
+  "notification-class": 2,
+  "notify-type": 0,
+  "object-identifier": [
+   3,
+   1
+  ],
+  "object-name": "Window contact",
+  "object-type": 3,
+  "out-of-service": 0,
+  "polarity": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "time-delay": 5
+ },
+ "binary-input,2": {
+  "active-text": "Present",
+  "inactive-text": "Empty",
+  "object-identifier": [
+   3,
+   2
+  ],
+  "object-name": "Presence detector",
+  "object-type": 3,
+  "out-of-service": 0,
+  "polarity": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)"
+ },
+ "binary-value,1": {
+  "active-text": "Occupied",
+  "current-command-priority": "(live)",
+  "description": "Written by the occupancy schedule at priority 12",
+  "inactive-text": "Unoccupied",
+  "object-identifier": [
+   5,
+   1
+  ],
+  "object-name": "Occupancy",
+  "object-type": 5,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "set",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 0,
+  "status-flags": "(live)"
+ },
+ "calendar,1": {
+  "date-list": [
+   {
+    "date": [
+     255,
+     1,
+     1,
+     255
+    ]
+   },
+   {
+    "date": [
+     255,
+     12,
+     25,
+     255
+    ]
+   },
+   {
+    "date": [
+     255,
+     12,
+     26,
+     255
+    ]
+   },
+   {
+    "dateRange": {
+     "endDate": [
+      126,
+      12,
+      31,
+      255
+     ],
+     "startDate": [
+      126,
+      12,
+      27,
+      255
+     ]
+    }
+   }
+  ],
+  "object-identifier": [
+   6,
+   1
+  ],
+  "object-name": "Public holidays",
+  "object-type": 6,
+  "present-value": "(live)"
+ },
+ "device": {
+  "active-cov-subscriptions": "(live)",
+  "apdu-segment-timeout": 1000,
+  "apdu-timeout": 3000,
+  "application-software-version": "Rasher 0.1",
+  "database-revision": 1,
+  "description": "Simulated room controller: heating, cooling, fan coil, CO2",
+  "device-address-binding": "(live)",
+  "firmware-revision": "1.0",
+  "local-date": "(live)",
+  "local-time": "(live)",
+  "location": "Level 2, Meeting room 2.04",
+  "max-apdu-length-accepted": 1024,
+  "max-segments-accepted": 16,
+  "model-name": "RC-1 Room controller",
+  "number-of-apdu-retries": 3,
+  "object-identifier": [
+   8,
+   0
+  ],
+  "object-list": [
+   [
+    8,
+    0
+   ],
+   [
+    56,
+    1
+   ],
+   [
+    0,
+    1
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    0,
+    3
+   ],
+   [
+    0,
+    4
+   ],
+   [
+    2,
+    1
+   ],
+   [
+    2,
+    2
+   ],
+   [
+    2,
+    3
+   ],
+   [
+    1,
+    1
+   ],
+   [
+    1,
+    2
+   ],
+   [
+    14,
+    1
+   ],
+   [
+    3,
+    1
+   ],
+   [
+    3,
+    2
+   ],
+   [
+    5,
+    1
+   ],
+   [
+    19,
+    1
+   ],
+   [
+    12,
+    1
+   ],
+   [
+    15,
+    1
+   ],
+   [
+    15,
+    2
+   ],
+   [
+    6,
+    1
+   ],
+   [
+    17,
+    1
+   ],
+   [
+    20,
+    1
+   ],
+   [
+    20,
+    2
+   ],
+   [
+    20,
+    3
+   ],
+   [
+    20,
+    4
+   ],
+   [
+    27,
+    1
+   ]
+  ],
+  "object-name": "(prefix-instance)",
+  "object-type": 8,
+  "protocol-object-types-supported": [
+   1,
+   1,
+   1,
+   1,
+   0,
+   1,
+   1,
+   0,
+   1,
+   0,
+   0,
+   0,
+   1,
+   0,
+   1,
+   1,
+   0,
+   1,
+   0,
+   1,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "protocol-revision": 22,
+  "protocol-services-supported": [
+   1,
+   1,
+   0,
+   1,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   1,
+   1,
+   1,
+   1,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   1,
+   1,
+   0,
+   0,
+   0,
+   1,
+   1,
+   1,
+   1,
+   1,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "protocol-version": 1,
+  "segmentation-supported": 0,
+  "status-flags": "(live)",
+  "system-status": 0,
+  "vendor-identifier": 999,
+  "vendor-name": "Rasher"
+ },
+ "loop,1": {
+  "action": 1,
+  "controlled-variable-reference": {
+   "objectIdentifier": "analog-input,1",
+   "propertyIdentifier": 85
+  },
+  "controlled-variable-units": 62,
+  "controlled-variable-value": "(live)",
+  "event-state": "(live)",
+  "integral-constant": 900.0,
+  "integral-constant-units": 73,
+  "manipulated-variable-reference": {
+   "objectIdentifier": "analog-output,1",
+   "propertyIdentifier": 85
+  },
+  "maximum-output": 100.0,
+  "minimum-output": 0.0,
+  "object-identifier": [
+   12,
+   1
+  ],
+  "object-name": "Room temperature loop",
+  "object-type": 12,
+  "out-of-service": 0,
+  "output-units": 98,
+  "present-value": "(live)",
+  "priority-for-writing": 16,
+  "proportional-constant": 40.0,
+  "proportional-constant-units": 98,
+  "setpoint": "(live)",
+  "setpoint-reference": {
+   "setpointReference": {
+    "objectIdentifier": "analog-value,3",
+    "propertyIdentifier": 85
+   }
+  },
+  "status-flags": "(live)"
+ },
+ "multi-state-output,1": {
+  "current-command-priority": "(live)",
+  "number-of-states": 4,
+  "object-identifier": [
+   14,
+   1
+  ],
+  "object-name": "Fan speed",
+  "object-type": 14,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "set"
+  ],
+  "reliability": "(live)",
+  "relinquish-default": 1,
+  "state-text": [
+   "Off",
+   "Low",
+   "Medium",
+   "High"
+  ],
+  "status-flags": "(live)"
+ },
+ "multi-state-value,1": {
+  "current-command-priority": "(live)",
+  "description": "The controller sets this at priority 16 from occupancy and presence",
+  "number-of-states": 4,
+  "object-identifier": [
+   19,
+   1
+  ],
+  "object-name": "Operating mode",
+  "object-type": 19,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "set"
+  ],
+  "relinquish-default": 1,
+  "state-text": [
+   "Comfort",
+   "Standby",
+   "Economy",
+   "Frost protection"
+  ],
+  "status-flags": "(live)"
+ },
+ "network-port,1": {
+  "bacnet-ip-mode": "(this PC)",
+  "bacnet-ip-udp-port": "(this PC)",
+  "changes-pending": "(this PC)",
+  "ip-address": "(this PC)",
+  "ip-subnet-mask": "(this PC)",
+  "link-speed": "(this PC)",
+  "mac-address": "(this PC)",
+  "network-number": "(this PC)",
+  "network-number-quality": "(this PC)",
+  "network-type": "(this PC)",
+  "object-identifier": "(this PC)",
+  "object-name": "(this PC)",
+  "object-type": "(this PC)",
+  "out-of-service": "(this PC)",
+  "protocol-level": "(this PC)",
+  "reliability": "(this PC)",
+  "status-flags": "(this PC)"
+ },
+ "notification-class,1": {
+  "ack-required": [
+   1,
+   1,
+   0
+  ],
+  "notification-class": 1,
+  "object-identifier": [
+   15,
+   1
+  ],
+  "object-name": "Comfort alarms",
+  "object-type": 15,
+  "priority": [
+   64,
+   64,
+   200
+  ],
+  "recipient-list": [],
+  "status-flags": "(live)"
+ },
+ "notification-class,2": {
+  "ack-required": [
+   0,
+   0,
+   0
+  ],
+  "notification-class": 2,
+  "object-identifier": [
+   15,
+   2
+  ],
+  "object-name": "Maintenance",
+  "object-type": 15,
+  "priority": [
+   120,
+   120,
+   200
+  ],
+  "recipient-list": [],
+  "status-flags": "(live)"
+ },
+ "schedule,1": {
+  "description": "Office hours, Saturday morning",
+  "effective-period": {
+   "endDate": [
+    255,
+    255,
+    255,
+    255
+   ],
+   "startDate": [
+    255,
+    255,
+    255,
+    255
+   ]
+  },
+  "exception-schedule": [
+   {
+    "eventPriority": 1,
+    "listOfTimeValues": [
+     {
+      "time": [
+       0,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ],
+    "period": {
+     "calendarReference": "calendar,1"
+    }
+   }
+  ],
+  "list-of-object-property-references": [
+   {
+    "objectIdentifier": "binary-value,1",
+    "propertyIdentifier": 85
+   }
+  ],
+  "object-identifier": [
+   17,
+   1
+  ],
+  "object-name": "Occupancy schedule",
+  "object-type": 17,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-for-writing": 12,
+  "reliability": "(live)",
+  "schedule-default": {
+   "any": [
+    {
+     "enumerated": 0
+    }
+   ]
+  },
+  "status-flags": "(live)",
+  "weekly-schedule": [
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       8,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       12,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": []
+   }
+  ]
+ },
+ "trend-log,1": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-input,1",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   1
+  ],
+  "object-name": "Room temperature log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log,2": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-value,3",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   2
+  ],
+  "object-name": "Effective setpoint log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log,3": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-output,1",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   3
+  ],
+  "object-name": "Heating valve log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log,4": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-input,4",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   4
+  ],
+  "object-name": "Room CO2 log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log-multiple,1": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": [
+   {
+    "objectIdentifier": "analog-input,1",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-value,3",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-output,1",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-output,2",
+    "propertyIdentifier": 85
+   }
+  ],
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   27,
+   1
+  ],
+  "object-name": "Room log",
+  "object-type": 27,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)"
+ }
+}

@@ -1,0 +1,1491 @@
+{
+ "_protocol-object-types-supported": [
+  1,
+  1,
+  1,
+  1,
+  0,
+  1,
+  1,
+  0,
+  1,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  1,
+  0,
+  1,
+  0,
+  1,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "_protocol-services-supported": [
+  1,
+  1,
+  0,
+  1,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  1,
+  1,
+  0,
+  0,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0
+ ],
+ "analog-input,1": {
+  "acked-transitions": "(live)",
+  "cov-increment": 0.1,
+  "deadband": 0.5,
+  "description": "Zone sensor on the column",
+  "event-detection-enable": 1,
+  "event-enable": [
+   1,
+   1,
+   1
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "high-limit": 26.0,
+  "limit-enable": [
+   1,
+   1
+  ],
+  "low-limit": 16.0,
+  "notification-class": 1,
+  "notify-type": 0,
+  "object-identifier": [
+   0,
+   1
+  ],
+  "object-name": "Zone temperature",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "time-delay": 30,
+  "units": 62
+ },
+ "analog-input,2": {
+  "cov-increment": 0.5,
+  "description": "After the reheat coil",
+  "object-identifier": [
+   0,
+   2
+  ],
+  "object-name": "Discharge air temperature",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 62
+ },
+ "analog-input,3": {
+  "cov-increment": 5.0,
+  "description": "From the flow cross at the box inlet",
+  "object-identifier": [
+   0,
+   3
+  ],
+  "object-name": "Airflow",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 87
+ },
+ "analog-input,4": {
+  "cov-increment": 10.0,
+  "description": "Upstream of the box, from the AHU",
+  "object-identifier": [
+   0,
+   4
+  ],
+  "object-name": "Duct static pressure",
+  "object-type": 0,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)",
+  "units": 53
+ },
+ "analog-output,1": {
+  "cov-increment": 1.0,
+  "current-command-priority": "(live)",
+  "description": "Damper actuator, 90 s end to end",
+  "object-identifier": [
+   1,
+   1
+  ],
+  "object-name": "Damper",
+  "object-type": 1,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "set"
+  ],
+  "reliability": "(live)",
+  "relinquish-default": 0.0,
+  "status-flags": "(live)",
+  "units": 98
+ },
+ "analog-output,2": {
+  "cov-increment": 1.0,
+  "current-command-priority": "(live)",
+  "description": "Hot water reheat coil, 0-10 V",
+  "object-identifier": [
+   1,
+   2
+  ],
+  "object-name": "Reheat valve",
+  "object-type": 1,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "set"
+  ],
+  "reliability": "(live)",
+  "relinquish-default": 0.0,
+  "status-flags": "(live)",
+  "units": 98
+ },
+ "analog-value,1": {
+  "cov-increment": 0.1,
+  "current-command-priority": "(live)",
+  "description": "Base setpoint; the zone sensor adds the offset",
+  "max-pres-value": 28.0,
+  "min-pres-value": 15.0,
+  "object-identifier": [
+   2,
+   1
+  ],
+  "object-name": "Occupied setpoint",
+  "object-type": 2,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 21.0,
+  "status-flags": "(live)",
+  "units": 62
+ },
+ "analog-value,2": {
+  "cov-increment": 0.1,
+  "current-command-priority": "(live)",
+  "description": "Set from the zone sensor's + and -",
+  "max-pres-value": 3.0,
+  "min-pres-value": -3.0,
+  "object-identifier": [
+   2,
+   2
+  ],
+  "object-name": "Setpoint offset",
+  "object-type": 2,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 0.0,
+  "status-flags": "(live)",
+  "units": 121
+ },
+ "analog-value,3": {
+  "cov-increment": 0.1,
+  "object-identifier": [
+   2,
+   3
+  ],
+  "object-name": "Effective setpoint",
+  "object-type": 2,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "status-flags": "(live)",
+  "units": 62
+ },
+ "analog-value,4": {
+  "cov-increment": 5.0,
+  "current-command-priority": "(live)",
+  "description": "Fresh air while occupied, and for the reheat coil",
+  "max-pres-value": 450.0,
+  "min-pres-value": 0.0,
+  "object-identifier": [
+   2,
+   4
+  ],
+  "object-name": "Minimum airflow",
+  "object-type": 2,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 90.0,
+  "status-flags": "(live)",
+  "units": 87
+ },
+ "analog-value,5": {
+  "cov-increment": 5.0,
+  "current-command-priority": "(live)",
+  "description": "Full cooling",
+  "max-pres-value": 450.0,
+  "min-pres-value": 0.0,
+  "object-identifier": [
+   2,
+   5
+  ],
+  "object-name": "Maximum airflow",
+  "object-type": 2,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 350.0,
+  "status-flags": "(live)",
+  "units": 87
+ },
+ "analog-value,6": {
+  "cov-increment": 5.0,
+  "description": "From the cooling loop, between the minimum and maximum airflow",
+  "object-identifier": [
+   2,
+   6
+  ],
+  "object-name": "Airflow setpoint",
+  "object-type": 2,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "status-flags": "(live)",
+  "units": 87
+ },
+ "binary-input,1": {
+  "active-text": "Present",
+  "inactive-text": "Empty",
+  "object-identifier": [
+   3,
+   1
+  ],
+  "object-name": "Presence detector",
+  "object-type": 3,
+  "out-of-service": 0,
+  "polarity": 0,
+  "present-value": "(live)",
+  "reliability": "(live)",
+  "status-flags": "(live)"
+ },
+ "binary-value,1": {
+  "active-text": "Occupied",
+  "current-command-priority": "(live)",
+  "description": "Written by the occupancy schedule at priority 12",
+  "inactive-text": "Unoccupied",
+  "object-identifier": [
+   5,
+   1
+  ],
+  "object-name": "Occupancy",
+  "object-type": 5,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "set",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 0,
+  "status-flags": "(live)"
+ },
+ "calendar,1": {
+  "date-list": [
+   {
+    "date": [
+     255,
+     1,
+     1,
+     255
+    ]
+   },
+   {
+    "date": [
+     255,
+     12,
+     25,
+     255
+    ]
+   },
+   {
+    "date": [
+     255,
+     12,
+     26,
+     255
+    ]
+   },
+   {
+    "dateRange": {
+     "endDate": [
+      126,
+      12,
+      31,
+      255
+     ],
+     "startDate": [
+      126,
+      12,
+      27,
+      255
+     ]
+    }
+   }
+  ],
+  "object-identifier": [
+   6,
+   1
+  ],
+  "object-name": "Public holidays",
+  "object-type": 6,
+  "present-value": "(live)"
+ },
+ "device": {
+  "active-cov-subscriptions": "(live)",
+  "apdu-segment-timeout": 1000,
+  "apdu-timeout": 3000,
+  "application-software-version": "Rasher 0.1",
+  "database-revision": 1,
+  "description": "Simulated pressure-independent VAV box with hot water reheat",
+  "device-address-binding": "(live)",
+  "firmware-revision": "1.0",
+  "local-date": "(live)",
+  "local-time": "(live)",
+  "location": "Level 2, Open office zone 2.11",
+  "max-apdu-length-accepted": 1024,
+  "max-segments-accepted": 16,
+  "model-name": "VC-1 VAV controller",
+  "number-of-apdu-retries": 3,
+  "object-identifier": [
+   8,
+   0
+  ],
+  "object-list": [
+   [
+    8,
+    0
+   ],
+   [
+    56,
+    1
+   ],
+   [
+    0,
+    1
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    0,
+    3
+   ],
+   [
+    0,
+    4
+   ],
+   [
+    2,
+    1
+   ],
+   [
+    2,
+    2
+   ],
+   [
+    2,
+    3
+   ],
+   [
+    2,
+    4
+   ],
+   [
+    2,
+    5
+   ],
+   [
+    2,
+    6
+   ],
+   [
+    1,
+    1
+   ],
+   [
+    1,
+    2
+   ],
+   [
+    3,
+    1
+   ],
+   [
+    5,
+    1
+   ],
+   [
+    19,
+    1
+   ],
+   [
+    12,
+    1
+   ],
+   [
+    12,
+    2
+   ],
+   [
+    12,
+    3
+   ],
+   [
+    15,
+    1
+   ],
+   [
+    15,
+    2
+   ],
+   [
+    6,
+    1
+   ],
+   [
+    17,
+    1
+   ],
+   [
+    20,
+    1
+   ],
+   [
+    20,
+    2
+   ],
+   [
+    20,
+    3
+   ],
+   [
+    20,
+    4
+   ],
+   [
+    27,
+    1
+   ]
+  ],
+  "object-name": "(prefix-instance)",
+  "object-type": 8,
+  "protocol-object-types-supported": [
+   1,
+   1,
+   1,
+   1,
+   0,
+   1,
+   1,
+   0,
+   1,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   1,
+   0,
+   1,
+   0,
+   1,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "protocol-revision": 22,
+  "protocol-services-supported": [
+   1,
+   1,
+   0,
+   1,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   1,
+   1,
+   1,
+   1,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   1,
+   1,
+   0,
+   0,
+   0,
+   1,
+   1,
+   1,
+   1,
+   1,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "protocol-version": 1,
+  "segmentation-supported": 0,
+  "status-flags": "(live)",
+  "system-status": 0,
+  "vendor-identifier": 999,
+  "vendor-name": "Rasher"
+ },
+ "loop,1": {
+  "action": 0,
+  "controlled-variable-reference": {
+   "objectIdentifier": "analog-input,1",
+   "propertyIdentifier": 85
+  },
+  "controlled-variable-units": 62,
+  "controlled-variable-value": "(live)",
+  "event-state": "(live)",
+  "integral-constant": 900.0,
+  "integral-constant-units": 73,
+  "manipulated-variable-reference": {
+   "objectIdentifier": "analog-value,6",
+   "propertyIdentifier": 85
+  },
+  "maximum-output": 100.0,
+  "minimum-output": 0.0,
+  "object-identifier": [
+   12,
+   1
+  ],
+  "object-name": "Cooling loop",
+  "object-type": 12,
+  "out-of-service": 0,
+  "output-units": 98,
+  "present-value": "(live)",
+  "priority-for-writing": 16,
+  "proportional-constant": 40.0,
+  "proportional-constant-units": 98,
+  "setpoint": "(live)",
+  "setpoint-reference": {
+   "setpointReference": {
+    "objectIdentifier": "analog-value,3",
+    "propertyIdentifier": 85
+   }
+  },
+  "status-flags": "(live)"
+ },
+ "loop,2": {
+  "action": 1,
+  "controlled-variable-reference": {
+   "objectIdentifier": "analog-input,1",
+   "propertyIdentifier": 85
+  },
+  "controlled-variable-units": 62,
+  "controlled-variable-value": "(live)",
+  "event-state": "(live)",
+  "integral-constant": 900.0,
+  "integral-constant-units": 73,
+  "manipulated-variable-reference": {
+   "objectIdentifier": "analog-output,2",
+   "propertyIdentifier": 85
+  },
+  "maximum-output": 100.0,
+  "minimum-output": 0.0,
+  "object-identifier": [
+   12,
+   2
+  ],
+  "object-name": "Heating loop",
+  "object-type": 12,
+  "out-of-service": 0,
+  "output-units": 98,
+  "present-value": "(live)",
+  "priority-for-writing": 16,
+  "proportional-constant": 40.0,
+  "proportional-constant-units": 98,
+  "setpoint": "(live)",
+  "setpoint-reference": {
+   "setpointReference": {
+    "objectIdentifier": "analog-value,3",
+    "propertyIdentifier": 85
+   }
+  },
+  "status-flags": "(live)"
+ },
+ "loop,3": {
+  "action": 1,
+  "controlled-variable-reference": {
+   "objectIdentifier": "analog-input,3",
+   "propertyIdentifier": 85
+  },
+  "controlled-variable-units": 87,
+  "controlled-variable-value": "(live)",
+  "event-state": "(live)",
+  "integral-constant": 900.0,
+  "integral-constant-units": 73,
+  "manipulated-variable-reference": {
+   "objectIdentifier": "analog-output,1",
+   "propertyIdentifier": 85
+  },
+  "maximum-output": 100.0,
+  "minimum-output": 0.0,
+  "object-identifier": [
+   12,
+   3
+  ],
+  "object-name": "Airflow loop",
+  "object-type": 12,
+  "out-of-service": 0,
+  "output-units": 98,
+  "present-value": "(live)",
+  "priority-for-writing": 16,
+  "proportional-constant": 40.0,
+  "proportional-constant-units": 98,
+  "setpoint": "(live)",
+  "setpoint-reference": {
+   "setpointReference": {
+    "objectIdentifier": "analog-value,6",
+    "propertyIdentifier": 85
+   }
+  },
+  "status-flags": "(live)"
+ },
+ "multi-state-value,1": {
+  "current-command-priority": "(live)",
+  "description": "The controller sets this at priority 16 from occupancy and presence",
+  "number-of-states": 3,
+  "object-identifier": [
+   19,
+   1
+  ],
+  "object-name": "Operating mode",
+  "object-type": 19,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "set"
+  ],
+  "relinquish-default": 1,
+  "state-text": [
+   "Occupied",
+   "Standby",
+   "Unoccupied"
+  ],
+  "status-flags": "(live)"
+ },
+ "network-port,1": {
+  "bacnet-ip-mode": "(this PC)",
+  "bacnet-ip-udp-port": "(this PC)",
+  "changes-pending": "(this PC)",
+  "ip-address": "(this PC)",
+  "ip-subnet-mask": "(this PC)",
+  "link-speed": "(this PC)",
+  "mac-address": "(this PC)",
+  "network-number": "(this PC)",
+  "network-number-quality": "(this PC)",
+  "network-type": "(this PC)",
+  "object-identifier": "(this PC)",
+  "object-name": "(this PC)",
+  "object-type": "(this PC)",
+  "out-of-service": "(this PC)",
+  "protocol-level": "(this PC)",
+  "reliability": "(this PC)",
+  "status-flags": "(this PC)"
+ },
+ "notification-class,1": {
+  "ack-required": [
+   1,
+   1,
+   0
+  ],
+  "notification-class": 1,
+  "object-identifier": [
+   15,
+   1
+  ],
+  "object-name": "Comfort alarms",
+  "object-type": 15,
+  "priority": [
+   64,
+   64,
+   200
+  ],
+  "recipient-list": [],
+  "status-flags": "(live)"
+ },
+ "notification-class,2": {
+  "ack-required": [
+   0,
+   0,
+   0
+  ],
+  "notification-class": 2,
+  "object-identifier": [
+   15,
+   2
+  ],
+  "object-name": "Maintenance",
+  "object-type": 15,
+  "priority": [
+   120,
+   120,
+   200
+  ],
+  "recipient-list": [],
+  "status-flags": "(live)"
+ },
+ "schedule,1": {
+  "description": "Office hours, Saturday morning",
+  "effective-period": {
+   "endDate": [
+    255,
+    255,
+    255,
+    255
+   ],
+   "startDate": [
+    255,
+    255,
+    255,
+    255
+   ]
+  },
+  "exception-schedule": [
+   {
+    "eventPriority": 1,
+    "listOfTimeValues": [
+     {
+      "time": [
+       0,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ],
+    "period": {
+     "calendarReference": "calendar,1"
+    }
+   }
+  ],
+  "list-of-object-property-references": [
+   {
+    "objectIdentifier": "binary-value,1",
+    "propertyIdentifier": 85
+   }
+  ],
+  "object-identifier": [
+   17,
+   1
+  ],
+  "object-name": "Occupancy schedule",
+  "object-type": 17,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-for-writing": 12,
+  "reliability": "(live)",
+  "schedule-default": {
+   "any": [
+    {
+     "enumerated": 0
+    }
+   ]
+  },
+  "status-flags": "(live)",
+  "weekly-schedule": [
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       7,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       18,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": [
+     {
+      "time": [
+       8,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 1
+        }
+       ]
+      }
+     },
+     {
+      "time": [
+       12,
+       0,
+       0,
+       0
+      ],
+      "value": {
+       "any": [
+        {
+         "enumerated": 0
+        }
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "daySchedule": []
+   }
+  ]
+ },
+ "trend-log,1": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-input,1",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   1
+  ],
+  "object-name": "Zone temperature log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log,2": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-input,3",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   2
+  ],
+  "object-name": "Airflow log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log,3": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-output,1",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   3
+  ],
+  "object-name": "Damper log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log,4": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": {
+   "objectIdentifier": "analog-output,2",
+   "propertyIdentifier": 85
+  },
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   20,
+   4
+  ],
+  "object-name": "Reheat valve log",
+  "object-type": 20,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)",
+  "trigger": 0
+ },
+ "trend-log-multiple,1": {
+  "acked-transitions": "(live)",
+  "align-intervals": 1,
+  "buffer-size": 5000,
+  "enable": 1,
+  "event-enable": [
+   0,
+   0,
+   0
+  ],
+  "event-state": "(live)",
+  "event-time-stamps": "(live)",
+  "interval-offset": 0,
+  "last-notify-record": 0,
+  "log-device-object-property": [
+   {
+    "objectIdentifier": "analog-input,1",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-value,3",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-input,3",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-value,6",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-output,1",
+    "propertyIdentifier": 85
+   },
+   {
+    "objectIdentifier": "analog-output,2",
+    "propertyIdentifier": 85
+   }
+  ],
+  "log-interval": 6000,
+  "logging-type": 0,
+  "notification-class": 2,
+  "notification-threshold": 1000,
+  "notify-type": 1,
+  "object-identifier": [
+   27,
+   1
+  ],
+  "object-name": "Zone log",
+  "object-type": 27,
+  "record-count": "(live)",
+  "records-since-notification": 0,
+  "status-flags": "(live)",
+  "stop-when-full": 0,
+  "total-record-count": "(live)"
+ }
+}

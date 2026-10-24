@@ -123,6 +123,12 @@ Adding addresses to the network adapter needs administrator rights. From source,
 added (once for a whole batch) and when they're removed; the built exe asks once at launch. The address is added with SkipAsSource (this PC
 never uses it for its own traffic) and only until the next restart, so a crash never leaves it behind for good.
 
+## Tests
+
+`python rasher/tests/bacnet.py` checks every profile over BACnet/IP against its baseline, and
+`python rasher/tests/faces.py` checks every face pixel for pixel. See [tests/README.md](tests/README.md); run both
+before committing, and give a new profile its baselines.
+
 ## Build
 
 ```sh
@@ -135,6 +141,7 @@ rasher/src/rasher/   Python backend: the BACnet device, trend logs, network addr
   profiles/          the equipment profiles: fcu.py (RC-1), meter.py (EM-3), vav.py (VC-1), and common.py
 rasher/web/          React + Vite UI (imports ../../web/src/ui from BACon)
   src/profiles/      each profile's face
+rasher/tests/        BACnet and face regression checks, with their baselines
 rasher/packaging/    PyInstaller spec, icon
 ```
 
