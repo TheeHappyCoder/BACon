@@ -20,17 +20,29 @@ from dataclasses import dataclass, field
 
 from bacpypes3.apdu import (
     ErrorRejectAbortNack,
+    GetAlarmSummaryRequest,
+    GetEventInformationRequest,
     ReadPropertyMultipleRequest,
     ReadPropertyRequest,
+    ReadRangeRequest,
 )
 from bacpypes3.argparse import SimpleArgumentParser
 from bacpypes3.app import Application
-from bacpypes3.basetypes import PropertyReference, ReadAccessSpecification
+from bacpypes3.basetypes import (
+    DateTime,
+    PropertyReference,
+    Range,
+    RangeByPosition,
+    RangeBySequenceNumber,
+    RangeByTime,
+    ReadAccessSpecification,
+)
+from bacpypes3.primitivedata import Date, Time
 from bacpypes3.pdu import Address
 from bacpypes3.primitivedata import ObjectIdentifier, PropertyIdentifier, TagClass
 from bacpypes3.vendor import get_vendor_info
 
-from .decode import decode_value, object_ids_from_any, object_type_name
+from .decode import decode_value, object_ids_from_any, object_type_name, stamp_json, structured
 from .names import property_label
 
 PROP_ALL = 8
@@ -286,6 +298,65 @@ class BacnetClient:
         except BACnetError as e:
             return ("err", error_text(e))
 
+    async def read_range(self, address: str, oid: ObjectIdentifier, by: str, ref, count: int, pid: int = 131):
+        """ReadRange on a list property (log-buffer by default). by: 'position' | 'sequence' | 'time' (ref = epoch).
+        Returns the ReadRangeACK: itemData (Any), itemCount, firstSequenceNumber (optional), resultFlags."""
+        app = self._require()
+        if by == "position":
+            rng = Range(byPosition=RangeByPosition(referenceIndex=int(ref), count=count))
+        elif by == "sequence":
+            rng = Range(bySequenceNumber=RangeBySequenceNumber(referenceSequenceNumber=int(ref), count=count))
+        else:
+            lt = time.localtime(ref)
+            when = DateTime(
+                date=Date((lt.tm_year - 1900, lt.tm_mon, lt.tm_mday, lt.tm_wday + 1)),
+                time=Time((lt.tm_hour, lt.tm_min, lt.tm_sec, 0)),
+            )
+            rng = Range(byTime=RangeByTime(referenceTime=when, count=count))
+        request = ReadRangeRequest(objectIdentifier=oid, propertyIdentifier=pid, range=rng, destination=Address(address))
+        return await app.request(request)
+
+    async def events(self, device: Device) -> tuple[str, list[dict]]:
+        """The device's own list of objects that are in alarm or waiting for an acknowledgement.
+        GetEventInformation (BACnet 2004 and later), or GetAlarmSummary on older controllers."""
+        app = self._require()
+        out: list[dict] = []
+        try:
+            last = None
+            for _ in range(100):  # moreEvents pages; a sane cap
+                request = GetEventInformationRequest(destination=Address(device.address))
+                if last is not None:
+                    request.lastReceivedObjectIdentifier = last
+                ack = await app.request(request)
+                for s in ack.listOfEventSummaries or []:
+                    oid = s.objectIdentifier
+                    out.append({
+                        "typeId": int(oid[0]), "instance": int(oid[1]),
+                        "eventState": str(s.eventState),
+                        "acked": [bool(b) for b in list(s.acknowledgedTransitions)[:3]],
+                        "stamps": [stamp_json(x) for x in list(s.eventTimeStamps or [])[:3]],
+                        "notifyType": str(s.notifyType) if s.notifyType is not None else "",
+                        "enable": [bool(b) for b in list(s.eventEnable or [])[:3]],
+                        "priorities": [int(x) for x in list(s.eventPriorities or [])[:3]],
+                    })
+                    last = oid
+                if not ack.moreEvents or last is None:
+                    break
+            return "event-information", out
+        except BACnetError as e:
+            if "unrecognized-service" not in error_text(e):
+                raise
+        ack = await app.request(GetAlarmSummaryRequest(destination=Address(device.address)))
+        for s in ack.listOfAlarmSummaries or []:
+            oid = s.objectIdentifier
+            out.append({
+                "typeId": int(oid[0]), "instance": int(oid[1]),
+                "eventState": str(s.alarmState),
+                "acked": [bool(b) for b in list(s.acknowledgedTransitions)[:3]],
+                "stamps": [None, None, None], "notifyType": "alarm", "enable": [], "priorities": [],
+            })
+        return "alarm-summary", out
+
     # ---- discovery -----------------------------------------------------
 
     async def scan(self, low: int | None = None, high: int | None = None, timeout: float = 3.0, target: str | None = None):
@@ -396,7 +467,7 @@ class BacnetClient:
             pids = [p for p in pids if p not in (PROP_ALL, PROP_PROPERTY_LIST)]
             results = await self.read_props(device, oid, pids)
 
-        values, errors = {}, {}
+        values, errors, detail = {}, {}, {}
         for pid, (kind, val) in results.items():
             if pid in (PROP_ALL, PROP_PROPERTY_LIST):
                 continue
@@ -408,6 +479,9 @@ class BacnetClient:
                     values[label] = decode_value(obj_class, pid, val)
                 except Exception as e:
                     errors[label] = f"decode failed: {e}"
+                parsed = structured(obj_class, pid, val)
+                if parsed is not None:
+                    detail[label] = parsed
             elif not _is_unknown_property(val):
                 errors[label] = val
 
@@ -426,7 +500,7 @@ class BacnetClient:
             COL_INSTANCE: str(instance),
             COL_STATUS: status,
         })
-        return {
+        row = {
             "key": f"{device.instance}:{type_id},{instance}",
             "device": device.instance,
             "typeId": type_id,
@@ -435,6 +509,9 @@ class BacnetClient:
             "values": values,
             "errors": errors,
         }
+        if detail:
+            row["detail"] = detail  # JSON for schedules, calendars, alarm time stamps and trend-log sources
+        return row
 
     async def read_device(self, device: Device, on_progress, only: list[tuple[int, int]] | None = None):
         """Read every object (or just `only`). on_progress(done, total, obj_result) is called per object."""

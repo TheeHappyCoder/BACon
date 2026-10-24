@@ -29,7 +29,12 @@ lets you choose the columns.
   like `present-value > 20`, then export to Excel or CSV.
 - **Health check**: saved checks that run against every site you open.
 - **Compare**: save a site to a `.bxsite` file and see what changed since.
-- **Trends**: record points by COV, falling back to polling, then chart and export them.
+- **Trends**: record points by COV, falling back to polling, then chart and export them. Trend logs
+  bring the controller's own history with them (ReadRange), so you see last night straight away.
+- **Schedules**: every Schedule object laid out by week or month as the controller runs it, with
+  exceptions, calendars, the value now and the next change.
+- **Alarms**: every object with an alarm set up, its state and acknowledgements live from the
+  controller (GetEventInformation), what sets it off and who gets notified.
 - **Network**: live BACnet traffic, issue detection (duplicate IDs, I-Am storms, error replies) and
   `.pcap` capture for Wireshark.
 - **Read-only**: BACon never writes to a device.
@@ -60,6 +65,10 @@ bacon --no-browser          # API on :8047
 npm run dev                 # UI on :5173, proxies /api to :8047
 ```
 
+No site to hand? `python scripts/simdevice.py <your-ip>` runs a simulated controller on UDP 47809 with
+points, alarms in every state, schedules, a calendar and trend logs with three days of history. Connect
+as usual, then add the device by IP as `<your-ip>:47809`.
+
 `npm run build` writes the UI into `src/bacon/web`, and `bacon` then serves it in its own window.
 Use `bacon --browser` to open it in your browser instead.
 
@@ -68,7 +77,7 @@ src/bacon/      Python backend: BACnet client, decoding, trends, network monitor
 src/bacon/data/ vendor property names
 web/            React + Vite UI
 packaging/      PyInstaller spec, icon
-scripts/        build and release
+scripts/        build, release, and the simulated controller
 ```
 
 ## Releasing

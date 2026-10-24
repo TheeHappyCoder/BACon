@@ -224,6 +224,24 @@ async def device_objects(instance: int):
     return list(objects.get(instance, {}).values())
 
 
+@app.get("/api/devices/{instance}/events")
+async def device_events(instance: int):
+    """What the controller itself reports as in alarm or unacknowledged (GetEventInformation, or GetAlarmSummary)."""
+    d = devices.get(instance)
+    if d is None:
+        raise HTTPException(404, "That device is not in the list any more.")
+    if client.app is None:
+        raise HTTPException(400, "Connect to a network first.")
+    try:
+        source, events = await client.events(d)
+    except BACnetError as e:
+        if "unrecognized-service" in error_text(e):
+            name = d.name or f"Device {instance}"
+            raise HTTPException(400, f"{name} does not answer alarm queries, so the states shown come from the last read.")
+        raise HTTPException(502, _friendly(e))
+    return {"source": source, "events": events, "at": time.time()}
+
+
 # ---- read jobs --------------------------------------------------------------
 
 
@@ -392,8 +410,22 @@ async def trend_status():
 
 @app.post("/api/trends/points")
 async def trend_add(body: TrendAdd):
-    added = trend.add(body.objects, devices)
+    added = trend.add(body.objects, devices, objects)
     return {"added": added, **trend.status()}
+
+
+@app.post("/api/trends/points/{point_id}/sync")
+async def trend_sync(point_id: int):
+    """Read a trend log's records now: after an error, or when it was added while offline."""
+    p = trend.points.get(point_id)
+    if p is None or p.log is None:
+        raise HTTPException(404, "That point is not a trend log.")
+    if client.app is None:
+        raise HTTPException(400, "Connect to a network first.")
+    if p.log.state in ("error", "unsupported", "waiting"):
+        p.log.reset()
+    await trend.sync_log(p.log)
+    return trend.status()
 
 
 @app.delete("/api/trends/points/{point_id}")

@@ -33,7 +33,10 @@ const compact = (v: number) => {
 function timeLabel(t: number, span: number) {
   const d = new Date(t * 1000)
   const p = (n: number) => String(n).padStart(2, '0')
-  return span <= 900 ? `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}` : `${p(d.getHours())}:${p(d.getMinutes())}`
+  if (span <= 900) return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  const hm = `${p(d.getHours())}:${p(d.getMinutes())}`
+  // past a day (trend-log history) the time alone is ambiguous: add the day
+  return span > 86400 ? `${d.toLocaleDateString([], { weekday: 'short', day: 'numeric' })} ${hm}` : hm
 }
 
 /** A time chart with one y axis. Step lines for on/off and multi-state points. */
@@ -177,7 +180,7 @@ export function TrendChart({
           className="pointer-events-none absolute top-1 z-10 min-w-[150px] rounded-[10px] border border-white/8 bg-[#1a1a1c] px-2.5 py-2 text-[12px] text-white shadow-(--shadow-2)"
           style={hx > width * 0.62 ? { right: width - hx + 12 } : { left: hx + 12 }}
         >
-          <div className="mb-1 text-[11px] text-white/60 tabular-nums">{new Date(hovered.t * 1000).toLocaleTimeString()}</div>
+          <div className="mb-1 text-[11px] text-white/60 tabular-nums">{new Date(hovered.t * 1000).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
           {hovered.rows.map((r) => (
             <div key={r.s.id} className="flex items-center gap-2 py-px">
               <span className="h-[2px] w-3 shrink-0 rounded-full" style={{ background: r.s.color }} />

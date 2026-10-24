@@ -14,6 +14,9 @@ import { NetworkView } from './components/NetworkView'
 import { LayoutProvider, Pane, PaneToggle } from './components/Layout'
 import { Rail, type Place } from './components/Rail'
 import { TrendsView } from './components/TrendsView'
+import { SchedulesView } from './components/SchedulesView'
+import { AlarmsView } from './components/AlarmsView'
+import { isAlarmObject, stateOf, type Live } from './alarms'
 import { ToastProvider, useToast } from './components/Toasts'
 import { DEFAULT_COLUMNS, SYNTHETIC_COLUMNS, exportColumns, exportCsv, exportXlsx } from './exporters'
 import { Badge } from './ui/components/badge'
@@ -50,6 +53,8 @@ function useClock() {
 }
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
+/** Trend logs and trend-log-multiples: their history can be shown in Trends. */
+const isTrendLog = (r: ObjectRow) => r.typeId === 20 || r.typeId === 27
 
 function Workspace() {
   const toast = useToast()
@@ -91,7 +96,7 @@ function Workspace() {
   const [baseline, setBaseline] = useState<Baseline | null>(null)
   const [booted, setBooted] = useState(false)
   const [place, setPlace] = useState<Place>('objects')
-  const [trends, setTrends] = useState<TrendStatus>({ running: false, startedAt: 0, stoppedAt: 0, interval: 10, nextRead: 0, mode: 'auto', points: [], samples: 0, file: '' })
+  const [trends, setTrends] = useState<TrendStatus>({ running: false, startedAt: 0, stoppedAt: 0, interval: 10, nextRead: 0, mode: 'auto', points: [], samples: 0, file: '', earliest: 0 })
   const [netIssues, setNetIssues] = useState(0)
   const [capturing, setCapturing] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -185,12 +190,14 @@ function Workspace() {
 
   const trendRows = async (list: ObjectRow[]) => {
     try {
-      const points = list.filter((r) => r.values['present-value'] !== undefined)
-      if (!points.length) throw new Error('None of these objects has a present value to trend.')
+      const points = list.filter((r) => (r.values['present-value'] !== undefined && r.typeId !== 8) || isTrendLog(r))
+      if (!points.length) throw new Error('None of these objects has a present value or a log to trend.')
       const res = await api.trendAdd(points)
       setTrends(res)
       const added = res.added
-      toast(added.length ? `Added ${added.length} point${added.length === 1 ? '' : 's'} to Trends` : 'Those points are already in Trends', {
+      const logs = res.points.filter((p) => added.includes(p.id) && p.log).length
+      const what = added.length ? `Added ${added.length} point${added.length === 1 ? '' : 's'} to Trends` : 'Those points are already in Trends'
+      toast(logs ? `${what}. Reading the history from ${logs === 1 ? 'the trend log' : `${logs} trend logs`}…` : what, {
         undo: added.length
           ? async () => {
               let t = res as TrendStatus
@@ -204,10 +211,59 @@ function Workspace() {
     }
   }
 
-  const showInObjects = (p: TrendPoint) => {
+  const showInObjects = (p: TrendPoint) => showRow({ device: p.device, key: `${p.device}:${p.typeId},${p.instance}` })
+  const showRow = (r: { device: number; key: string }) => {
     setPlace('objects')
-    select({ kind: 'object', device: p.device, key: `${p.device}:${p.typeId},${p.instance}` })
+    setView('objects')
+    select({ kind: 'object', device: r.device, key: r.key })
   }
+
+  /** Read some objects again and resolve once the read has finished (refresh buttons spin until then). */
+  const rereadObjects = useCallback(
+    async (device: number, objects: [number, number][]) => {
+      try {
+        const started = await api.read([device], false, objects)
+        setJobs(await api.jobs())
+        const id = started[0]?.id
+        for (let i = 0; id && i < 150; i++) {
+          await new Promise((r) => setTimeout(r, 300))
+          const job = (await api.jobs()).find((j) => j.id === id)
+          if (!job || job.state !== 'running') {
+            if (job?.state === 'failed') toast(job.error, { kind: 'error' })
+            break
+          }
+        }
+        const list = await api.objects(device)
+        setRows((r) => ({ ...r, [device]: list }))
+      } catch (e) {
+        toast(message(e), { kind: 'error' })
+      }
+    },
+    [toast],
+  )
+
+  // ---- alarms: each controller's own alarm list, polled while the Alarms page is open ----
+  const [liveAlarmsRaw, setLiveAlarms] = useState<Record<number, Live>>({})
+  const liveAlarms = useMemo(() => (status.connected ? liveAlarmsRaw : {}), [status.connected, liveAlarmsRaw]) // offline: the last read is all there is
+  const checkAlarms = useCallback(
+    async (devs: number[], reread: ObjectRow[]) => {
+      const results = await Promise.all(
+        devs.map(async (d): Promise<[number, Live]> => {
+          try {
+            const res = await api.events(d)
+            return [d, { at: res.at, source: res.source, events: res.events }]
+          } catch (e) {
+            return [d, { at: Date.now() / 1000, source: '', events: [], error: message(e) }]
+          }
+        }),
+      )
+      setLiveAlarms((l) => ({ ...l, ...Object.fromEntries(results) }))
+      const byDevice = new Map<number, [number, number][]>()
+      for (const r of reread) byDevice.set(r.device, [...(byDevice.get(r.device) ?? []), [r.typeId, r.instance]])
+      await Promise.all([...byDevice].map(([d, objs]) => rereadObjects(d, objs)))
+    },
+    [rereadObjects],
+  )
 
   // ---- network ----
   const searchDevices = useCallback(async () => {
@@ -380,6 +436,18 @@ function Workspace() {
 
   // ---- derived ----
   const visibleDevices = useMemo(() => devices.filter((d) => !hidden.has(d.instance)), [devices, hidden])
+  const allRows = useMemo(() => visibleDevices.flatMap((d) => rows[d.instance] ?? []), [visibleDevices, rows])
+  const alarmCounts = useMemo(() => {
+    let active = 0
+    let unacked = 0
+    for (const r of allRows) {
+      if (!isAlarmObject(r)) continue
+      const s = stateOf(r, liveAlarms[r.device])
+      if (s.severity !== 'normal') active++
+      if (s.unacked) unacked++
+    }
+    return { active, unacked }
+  }, [allRows, liveAlarms])
   const scopeDeviceId = selection.kind === 'network' ? null : selection.device
   const scopeDevice = scopeDeviceId === null ? null : visibleDevices.find((d) => d.instance === scopeDeviceId) ?? null
   const typeFilter = selection.kind === 'type' ? selection.type : null
@@ -544,6 +612,8 @@ function Workspace() {
         place={place}
         onPlace={setPlace}
         recording={trends.running}
+        alarms={alarmCounts.active}
+        unacked={alarmCounts.unacked}
         issues={netIssues}
         capturing={capturing}
         onNetwork={() => setConnectOpen(true)}
@@ -557,9 +627,29 @@ function Workspace() {
           onTrends={setTrends}
           onShowInObjects={showInObjects}
           onGoToObjects={() => setPlace('objects')}
-          allRows={visibleDevices.flatMap((d) => rows[d.instance] ?? [])}
+          allRows={allRows}
           devices={visibleDevices}
           onAddRows={trendRows}
+        />
+      ) : place === 'schedules' ? (
+        <SchedulesView
+          status={status}
+          rows={allRows}
+          devices={visibleDevices}
+          onShowInObjects={showRow}
+          onReread={(r, also) => rereadObjects(r.device, [[r.typeId, r.instance], ...also])}
+          onGoToObjects={() => setPlace('objects')}
+        />
+      ) : place === 'alarms' ? (
+        <AlarmsView
+          status={status}
+          rows={allRows}
+          devices={visibleDevices}
+          live={liveAlarms}
+          onCheck={checkAlarms}
+          onShowInObjects={showRow}
+          onReread={(r) => rereadObjects(r.device, [[r.typeId, r.instance]])}
+          onGoToObjects={() => setPlace('objects')}
         />
       ) : place === 'network' ? (
         <NetworkView status={status} devices={visibleDevices} />
@@ -806,8 +896,19 @@ function Workspace() {
             }
             canRead={status.connected}
             onReread={() => subject && startRead([subject.device], false, [[subject.typeId, subject.instance]])}
-            onTrend={subject && subject.values['present-value'] !== undefined && subject.typeId !== 8 ? () => trendRows([subject]) : undefined}
-            trended={!!subject && trends.points.some((p) => p.device === subject.device && p.typeId === subject.typeId && p.instance === subject.instance)}
+            onTrend={
+              subject && isTrendLog(subject)
+                ? async () => {
+                    // a log's history is the point: add it if needed, then go to the chart
+                    if (!trends.points.some((p) => p.device === subject.device && p.typeId === subject.typeId && p.instance === subject.instance)) await trendRows([subject])
+                    setPlace('trends')
+                  }
+                : subject && subject.values['present-value'] !== undefined && subject.typeId !== 8
+                  ? () => trendRows([subject])
+                  : undefined
+            }
+            trendLabel={subject && isTrendLog(subject) ? 'Show history' : undefined}
+            trended={!!subject && !isTrendLog(subject) && trends.points.some((p) => p.device === subject.device && p.typeId === subject.typeId && p.instance === subject.instance)}
             focusSignal={focusSignal}
           />
           </Pane>

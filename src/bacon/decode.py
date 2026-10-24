@@ -9,8 +9,25 @@ readable.
 
 import struct
 
-from bacpypes3.constructeddata import Any, Choice
-from bacpypes3.primitivedata import BitString, Boolean, Null, ObjectIdentifier, ObjectType, OctetString, TagClass
+from bacpypes3.constructeddata import Any, AnyAtomic, Choice
+from bacpypes3.basetypes import DateTime
+from bacpypes3.primitivedata import (
+    BitString,
+    Boolean,
+    CharacterString,
+    Date,
+    Double,
+    Enumerated,
+    Integer,
+    Null,
+    ObjectIdentifier,
+    ObjectType,
+    OctetString,
+    Real,
+    TagClass,
+    Time,
+    Unsigned,
+)
 
 
 def _dec_str(data: bytes) -> str:
@@ -108,10 +125,34 @@ def object_ids_from_any(anyval) -> list[tuple[int, int]]:
     return out
 
 
+def fmt_date(d) -> str:
+    y, m, day, _ = tuple(d)
+    if y == m == day == 255:
+        return "any date"
+    month = {13: "odd", 14: "even"}.get(m, "*" if m == 255 else f"{m:02d}")
+    dom = {32: "last", 33: "odd", 34: "even"}.get(day, "*" if day == 255 else f"{day:02d}")
+    return f"{'*' if y == 255 else y + 1900}-{month}-{dom}"
+
+
+def fmt_time(t) -> str:
+    h, m, sec, _ = tuple(t)
+    if h == m == sec == 255:
+        return "any time"
+    return ":".join("*" if x == 255 else f"{x:02d}" for x in (h, m, sec))
+
+
 def fmt(value) -> str:
     """Format a decoded bacpypes3 value as a plain string."""
     if value is None:
         return ""
+    if isinstance(value, Date):
+        return fmt_date(value)
+    if isinstance(value, Time):
+        return fmt_time(value)
+    if isinstance(value, DateTime):
+        if all(x == 255 for x in tuple(value.date) + tuple(value.time)):
+            return "never"
+        return f"{fmt_date(value.date)} {fmt_time(value.time)}"
     if isinstance(value, (bool, Boolean)):
         return "true" if int(value) else "false"
     if isinstance(value, float):
@@ -176,3 +217,134 @@ def object_type_name(type_id: int) -> str:
         except Exception:
             pass
     return f"type-{type_id}"
+
+
+# ---- structured values, for the screens that need more than a display string ----------------------------------------
+
+# property ids whose value is also kept as JSON on the object row ("detail"), keyed by the property's label
+STRUCTURED = {
+    23: "date-list",
+    32: "effective-period",
+    38: "exception-schedule",
+    54: "list-of-object-property-references",
+    123: "weekly-schedule",
+    130: "event-time-stamps",
+    132: "log-device-object-property",
+    174: "schedule-default",
+}
+
+
+def _date_json(d):
+    """[year, month, day, weekday] with None for a wildcard (month 13/14 odd/even, day 32/33/34 last/odd/even)."""
+    y, m, day, dow = tuple(d)
+    return [None if y == 255 else y + 1900, None if m == 255 else m, None if day == 255 else day, None if dow == 255 else dow]
+
+
+def _time_json(t):
+    h, m, sec, _ = tuple(t)
+    if h == 255:
+        return None
+    return f"{h:02d}:{0 if m == 255 else m:02d}:{0 if sec == 255 else sec:02d}"
+
+
+def value_json(v):
+    """An atomic value (schedule entries, schedule-default) as {type, value}."""
+    if isinstance(v, AnyAtomic):
+        try:
+            v = v.get_value()
+        except Exception:
+            return {"type": "other", "value": decode_any_raw(v)}
+    if v is None or isinstance(v, Null):
+        return {"type": "null", "value": None}
+    if isinstance(v, (Boolean, bool)):
+        return {"type": "boolean", "value": bool(int(v))}
+    if isinstance(v, Enumerated):
+        return {"type": "enumerated", "value": int(v)}
+    if isinstance(v, Unsigned):
+        return {"type": "unsigned", "value": int(v)}
+    if isinstance(v, Integer):
+        return {"type": "integer", "value": int(v)}
+    if isinstance(v, (Real, Double, float)):
+        return {"type": "real", "value": float(f"{float(v):.7g}")}
+    if isinstance(v, CharacterString):
+        return {"type": "string", "value": str(v)}
+    if isinstance(v, int):
+        return {"type": "unsigned", "value": int(v)}
+    return {"type": "other", "value": fmt(v)}
+
+
+def _calendar_entry_json(e):
+    if e.date is not None:
+        return {"date": _date_json(e.date)}
+    if e.dateRange is not None:
+        return {"range": [_date_json(e.dateRange.startDate), _date_json(e.dateRange.endDate)]}
+    if e.weekNDay is not None:
+        return {"weekNDay": [None if x == 255 else x for x in bytes(e.weekNDay)[:3]]}
+    return None
+
+
+def _times_json(items):
+    return [{"time": _time_json(x.time), "value": value_json(x.value)} for x in (items or [])]
+
+
+def _ref_json(r):
+    oid = r.objectIdentifier
+    dev = getattr(r, "deviceIdentifier", None)
+    return {
+        "object": [int(oid[0]), int(oid[1])],
+        "property": str(r.propertyIdentifier),
+        "device": int(dev[1]) if dev is not None else None,
+    }
+
+
+def stamp_json(s):
+    """An event time stamp as a local ISO date-time, {"time"} or {"sequence"}; None when it never happened."""
+    if s is None:
+        return None
+    if s.dateTime is not None:
+        d, t = tuple(s.dateTime.date), tuple(s.dateTime.time)
+        if d[0] == 255 or d[1] == 255 or d[2] == 255 or t[0] == 255:
+            return None
+        return f"{d[0] + 1900:04d}-{d[1]:02d}-{d[2]:02d}T{t[0]:02d}:{t[1] % 255:02d}:{t[2] % 255:02d}"
+    if s.time is not None:
+        return None if tuple(s.time)[0] == 255 else {"time": _time_json(s.time)}
+    if s.sequenceNumber is not None:
+        return {"sequence": int(s.sequenceNumber)}
+    return None
+
+
+def structured(obj_class, prop_id: int, anyval):
+    """JSON for the properties in STRUCTURED, or None when the value does not decode as the standard says."""
+    if obj_class is None or prop_id not in STRUCTURED:
+        return None
+    try:
+        datatype = obj_class.get_property_type(prop_id)
+        if datatype is None:
+            return None
+        v = anyval.cast_out(datatype)
+        if prop_id == 123:
+            return [_times_json(day.daySchedule) for day in v]
+        if prop_id == 38:
+            out = []
+            for ev in v:
+                p = ev.period
+                if p.calendarReference is not None:
+                    period = {"calendar": [int(p.calendarReference[0]), int(p.calendarReference[1])]}
+                else:
+                    period = _calendar_entry_json(p.calendarEntry)
+                out.append({"period": period, "times": _times_json(ev.listOfTimeValues), "priority": int(ev.eventPriority)})
+            return out
+        if prop_id == 32:
+            return [_date_json(v.startDate), _date_json(v.endDate)]
+        if prop_id == 23:
+            return [x for x in (_calendar_entry_json(e) for e in v) if x is not None]
+        if prop_id == 174:
+            return value_json(v)
+        if prop_id in (54, 132):
+            items = [v] if hasattr(v, "objectIdentifier") else list(v)
+            return [_ref_json(r) for r in items]
+        if prop_id == 130:
+            return [stamp_json(s) for s in v]
+    except Exception:
+        return None
+    return None

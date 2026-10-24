@@ -38,8 +38,8 @@ export function AddPointsSheet({
   const [text, setText] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
 
-  // only things with a present value can be trended
-  const candidates = useMemo(() => rows.filter((r) => r.values['present-value'] !== undefined && r.typeId !== 8), [rows])
+  // things with a present value, and trend logs (their history is read from the controller)
+  const candidates = useMemo(() => rows.filter((r) => (r.values['present-value'] !== undefined && r.typeId !== 8) || r.typeId === 20 || r.typeId === 27), [rows])
   const inDevice = useMemo(() => (device === 'all' ? candidates : candidates.filter((r) => String(r.device) === device)), [candidates, device])
   const typeCounts = useMemo(() => {
     const m = new Map<string, number>()

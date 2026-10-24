@@ -32,9 +32,12 @@ export function PropertiesPanel({
   canRead,
   focusSignal,
   onTrend,
+  trendLabel,
   trended,
 }: {
   onTrend?: () => void
+  /** the button's words, when it is not "Trend" (a trend log shows its history) */
+  trendLabel?: string
   trended?: boolean
   subject: ObjectRow | null
   subjectLabel: string
@@ -280,7 +283,7 @@ export function PropertiesPanel({
             {onTrend ? (
               <Button size="sm" variant="secondary" onClick={onTrend} disabled={trended}>
                 <LineChart />
-                {trended ? 'Trending' : 'Trend'}
+                {trended ? (trendLabel ? 'In Trends' : 'Trending') : trendLabel ?? 'Trend'}
               </Button>
             ) : null}
             <Button size="sm" variant="secondary" onClick={onReread} disabled={!canRead}>

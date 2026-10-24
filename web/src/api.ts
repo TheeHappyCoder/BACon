@@ -38,7 +38,22 @@ export type ObjectRow = {
   status: 'ok' | 'partial' | 'failed'
   values: Record<string, string>
   errors: Record<string, string>
+  /** JSON for schedules, calendars, alarm time stamps and trend-log sources, keyed by property */
+  detail?: Record<string, unknown>
 }
+
+/** What a controller reports as in alarm or unacknowledged. stamps: to-offnormal, to-fault, to-normal (local ISO). */
+export type DeviceEvent = {
+  typeId: number
+  instance: number
+  eventState: string
+  acked: boolean[]
+  stamps: (string | { time: string } | { sequence: number } | null)[]
+  notifyType: string
+  enable: boolean[]
+  priorities: number[]
+}
+export type DeviceEvents = { source: 'event-information' | 'alarm-summary'; events: DeviceEvent[]; at: number }
 
 export type Job = {
   id: string
@@ -58,7 +73,7 @@ export type TrendPoint = {
   name: string
   deviceName: string
   units: string
-  method: 'waiting' | 'cov' | 'poll' | 'error' | 'stopped'
+  method: 'waiting' | 'cov' | 'poll' | 'error' | 'stopped' | 'log'
   last: string
   lastT: number
   samples: number
@@ -67,6 +82,10 @@ export type TrendPoint = {
   min: number | null
   max: number | null
   avg: number | null
+  /** trend logs: the type of the object logged, and which channel of a trend-log-multiple */
+  sourceType: number | null
+  channel: number | null
+  log?: { state: 'waiting' | 'loading' | 'ready' | 'error' | 'unsupported'; loaded: number; total: number; error: string; interval: number; fetchedAt: number }
 }
 export type TrendStatus = {
   running: boolean
@@ -79,6 +98,8 @@ export type TrendStatus = {
   points: TrendPoint[]
   samples: number
   file: string
+  /** the oldest sample, including history read from trend logs */
+  earliest: number
 }
 /** [time, avg, min, max, last text] per bucket */
 export type Bucket = [number, number | null, number | null, number | null, string]
@@ -187,6 +208,8 @@ export const api = {
     call<{ loaded: number[]; savedAt: string; host: string }>('POST', '/api/site/open', file),
   trends: () => call<TrendStatus>('GET', '/api/trends'),
   trendAdd: (objects: ObjectRow[]) => call<TrendStatus & { added: number[] }>('POST', '/api/trends/points', { objects }),
+  trendSync: (id: number) => call<TrendStatus>('POST', `/api/trends/points/${id}/sync`),
+  events: (instance: number) => call<DeviceEvents>('GET', `/api/devices/${instance}/events`),
   trendRemove: (id: number) => call<TrendStatus>('DELETE', `/api/trends/points/${id}`),
   trendStart: (interval: number, mode: string) => call<TrendStatus>('POST', '/api/trends/start', { interval, mode }),
   trendStop: () => call<TrendStatus>('POST', '/api/trends/stop'),

@@ -5,9 +5,9 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from '../ui/components/tooltip'
 import { LAYOUT } from '../ui/motion'
 import { AppMark, MARK_STATUS_LABEL, type MarkStatus } from './AppMark'
 
-const { CircleDot, Download, Info, LineChart, Radar, WifiCog } = Hugeicons
+const { Notification, CalendarClock, CircleDot, Download, Info, LineChart, Radar, WifiCog } = Hugeicons
 
-export type Place = 'objects' | 'trends' | 'network'
+export type Place = 'objects' | 'trends' | 'schedules' | 'alarms' | 'network'
 
 function RailButton({ label, active, onClick, children, badge }: { label: string; active?: boolean; onClick: () => void; children: ReactNode; badge?: ReactNode }) {
   return (
@@ -41,6 +41,8 @@ export function Rail({
   place,
   onPlace,
   recording,
+  alarms,
+  unacked,
   issues,
   capturing,
   onNetwork,
@@ -54,6 +56,9 @@ export function Rail({
   place: Place
   onPlace: (p: Place) => void
   recording: boolean
+  /** objects in alarm or fault, and how many of those (or of the returned-to-normal) wait for an acknowledgement */
+  alarms: number
+  unacked: number
   issues: number
   capturing: boolean
   onNetwork: () => void
@@ -79,6 +84,25 @@ export function Rail({
           badge={recording ? <span className="absolute top-[7px] right-[7px] size-2 rounded-full border-2 border-(--rail-bg) bg-(--status-ok-strong)" /> : null}
         >
           <LineChart className="size-[19px]" />
+        </RailButton>
+        <RailButton label="Schedules" active={place === 'schedules'} onClick={() => onPlace('schedules')}>
+          <CalendarClock className="size-[19px]" />
+        </RailButton>
+        <RailButton
+          label={['Alarms', alarms ? `${alarms} active` : '', unacked ? `${unacked} unacknowledged` : ''].filter(Boolean).join(' · ')}
+          active={place === 'alarms'}
+          onClick={() => onPlace('alarms')}
+          badge={
+            alarms ? (
+              <span className="absolute top-[3px] right-[3px] inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-(--rail-bg) bg-(--status-alarm-strong) px-1 text-[10px] font-medium text-white">
+                {alarms}
+              </span>
+            ) : unacked ? (
+              <span className="absolute top-[7px] right-[7px] size-2 rounded-full border-2 border-(--rail-bg) bg-(--status-warn-strong)" />
+            ) : null
+          }
+        >
+          <Notification className="size-[19px]" />
         </RailButton>
         <RailButton
           label={['Network', capturing ? 'capturing' : '', issues ? `${issues} issues` : ''].filter(Boolean).join(' · ')}

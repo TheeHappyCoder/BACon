@@ -15,8 +15,9 @@ import { cn } from '../ui/utils'
 import { SERIES, TrendChart, type ChartSeries } from './TrendChart'
 import { Pane, PaneToggle } from './Layout'
 import { useToast } from './Toasts'
+import { SPIN, useSpin } from './spin'
 
-const { MoreHorizontal, FileSpreadsheet, FileText, Trash2, XIcon, ArrowRight, ChevronDown, Plus, Play, Timer } = Hugeicons
+const { MoreHorizontal, FileSpreadsheet, FileText, Trash2, XIcon, ArrowRight, ChevronDown, Plus, Play, Timer, ReloadIcon } = Hugeicons
 
 const RANGES = { '15m': 900, '1h': 3600, '6h': 21600, '24h': 86400, all: 0 } as const
 type Range = keyof typeof RANGES
@@ -41,10 +42,14 @@ function fmtInterval(sec: number) {
 /** Points share a chart only when they share a unit, so a chart never needs a second axis. */
 function groupOf(p: TrendPoint): { key: string; label: string; step: boolean } {
   if (p.units && p.units !== 'no-units') return { key: `u:${p.units}`, label: p.units, step: false }
-  if ([3, 4, 5].includes(p.typeId)) return { key: 'binary', label: 'On / off', step: true }
-  if ([13, 14, 19].includes(p.typeId)) return { key: 'multistate', label: 'States', step: true }
+  const type = p.sourceType ?? p.typeId // a trend log draws like the object it logs
+  if ([3, 4, 5].includes(type)) return { key: 'binary', label: 'On / off', step: true }
+  if ([13, 14, 19].includes(type)) return { key: 'multistate', label: 'States', step: true }
   return { key: 'none', label: 'No units', step: false }
 }
+
+/** "every 15 min" for a log's own interval; logs on change or triggered have none */
+const logEvery = (sec: number) => (sec > 0 ? `every ${fmtInterval(Math.round(sec))}` : 'on change')
 
 function elapsed(from: number, to: number) {
   const s = Math.max(0, Math.round(to - from))
@@ -66,6 +71,23 @@ function ago(t: number) {
 }
 
 function MethodPill({ p, dark }: { p: TrendPoint; dark?: boolean }) {
+  const log = p.log
+  if (log) {
+    const loading = log.state === 'loading'
+    const failed = log.state === 'error' || log.state === 'unsupported'
+    return (
+      <span
+        title={failed ? log.error : `The controller's own log, ${logEvery(log.interval)}`}
+        className={cn(
+          'inline-flex h-[18px] shrink-0 items-center gap-1 rounded-full px-2 text-[11px] leading-none tabular-nums',
+          dark ? 'bg-white/10 text-white/80' : failed ? 'bg-(--status-alarm-bg)' : 'bg-(--color-ns-cyan-light)',
+        )}
+      >
+        {loading ? <ReloadIcon className={cn('size-2.5', SPIN)} /> : null}
+        {loading ? (log.total ? `log ${Math.min(log.loaded, log.total).toLocaleString()} / ${log.total.toLocaleString()}` : 'log…') : failed ? 'log unreadable' : log.state === 'waiting' ? 'log, not read' : 'trend log'}
+      </span>
+    )
+  }
   const label = p.method === 'cov' ? 'COV' : p.method === 'poll' ? 'polled' : p.method === 'error' ? 'unreadable' : p.method === 'stopped' ? 'stopped' : 'waiting'
   return (
     <span
@@ -382,7 +404,12 @@ export function TrendsView({
 
   const ids = trends.points.map((p) => p.id)
   const idsKey = ids.join(',')
-  const since = RANGES[range] ? now - RANGES[range] : trends.startedAt || now - 300
+  // a log finishing its history read redraws the charts at once, rather than at the next slow refresh
+  const logsLoading = trends.points.filter((p) => p.log?.state === 'loading').length
+  const [syncing, spinSync] = useSpin()
+  // "All" starts at the oldest sample, which history read from trend logs can put well before the recording
+  const firstT = Math.min(trends.startedAt || Infinity, trends.earliest || Infinity)
+  const since = RANGES[range] ? now - RANGES[range] : Number.isFinite(firstT) ? firstT : now - 300
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now() / 1000), 1000)
@@ -397,7 +424,7 @@ export function TrendsView({
     let stop = false
     const load = async () => {
       try {
-        const sinceNow = RANGES[range] ? Date.now() / 1000 - RANGES[range] : trends.startedAt || Date.now() / 1000 - 300
+        const sinceNow = RANGES[range] ? Date.now() / 1000 - RANGES[range] : Number.isFinite(firstT) ? firstT : Date.now() / 1000 - 300
         const res = await api.trendSeries(idsKey.split(',').map(Number), sinceNow, 360)
         if (!stop) setData(res)
       } catch {
@@ -410,7 +437,7 @@ export function TrendsView({
       stop = true
       clearInterval(t)
     }
-  }, [idsKey, range, trends.running, trends.startedAt])
+  }, [idsKey, range, trends.running, firstT, logsLoading])
 
   // charts: one per unit, at most eight series each; a point keeps its colour slot inside its chart
   const charts = useMemo(() => {
@@ -535,7 +562,7 @@ export function TrendsView({
           {trends.points.length ? (
             <>
               <ArrowRight className="size-3 text-(--ink-4)" />
-              <span className="font-medium text-(--text-strong)">{trends.running ? 'Recording' : trends.samples ? 'Recorded session' : 'New session'}</span>
+              <span className="font-medium text-(--text-strong)">{trends.running ? 'Recording' : trends.startedAt ? 'Recorded session' : 'New session'}</span>
             </>
           ) : null}
           <span className="flex-1" />
@@ -571,7 +598,7 @@ export function TrendsView({
                   running={trends.running}
                   clock={clock || '0:00'}
                   samples={trends.samples}
-                  resumable={!!trends.samples}
+                  resumable={!!trends.startedAt}
                   connected={status.connected}
                   label={`${mode === 'auto' ? 'On change' : 'On a timer'} · ${every}`}
                   next={nextIn ? `next ${elapsed(0, nextIn)}` : ''}
@@ -610,7 +637,15 @@ export function TrendsView({
                         t1={now}
                         step={c.step}
                         unit={c.label}
-                        empty={trends.running ? 'Waiting for the first values…' : 'Start recording to draw this chart.'}
+                        empty={
+                          c.points.some((p) => p.log?.state === 'loading')
+                            ? 'Reading the history from the controller…'
+                            : trends.running
+                              ? 'Waiting for the first values…'
+                              : c.points.every((p) => p.log)
+                                ? 'This log has no records yet.'
+                                : 'Start recording to draw this chart.'
+                        }
                       />
                       {/* the legend doubles as the table view: every series' numbers are always readable */}
                       <div className="mt-3 overflow-hidden rounded-[10px] bg-(--surface-card-muted)">
@@ -683,7 +718,7 @@ export function TrendsView({
                 </div>
                 <div className="relative mt-2 flex items-center justify-between text-[11.5px] text-white/60">
                   <MethodPill p={sel} dark />
-                  <span>Updated {ago(sel.lastT)}</span>
+                  <span>{sel.log ? `Newest record ${ago(sel.lastT)}` : `Updated ${ago(sel.lastT)}`}</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -699,6 +734,24 @@ export function TrendsView({
                   </div>
                 ))}
               </div>
+              {sel.log ? (
+                <div className={cn('rounded-[12px] px-3 py-2.5 text-[12.5px]', sel.log.state === 'error' || sel.log.state === 'unsupported' ? 'bg-(--status-alarm-bg)' : 'border border-(--border-subtle) bg-(--surface-card)')}>
+                  <div className="font-medium">{sel.log.state === 'error' ? 'The log could not be read' : sel.log.state === 'unsupported' ? 'History not available' : 'Trend log on the controller'}</div>
+                  <div className="mt-0.5 leading-snug text-(--text-muted)">
+                    {sel.log.state === 'error' || sel.log.state === 'unsupported'
+                      ? sel.log.error
+                      : sel.log.state === 'waiting'
+                        ? 'Not read yet. Connect, then read it, or start recording.'
+                        : `It logs ${logEvery(sel.log.interval)}. ${sel.log.loaded.toLocaleString()} record${sel.log.loaded === 1 ? '' : 's'} read${sel.log.fetchedAt ? `, last read ${ago(sel.log.fetchedAt)}` : ''}. While recording, new records are read every 30 s.`}
+                  </div>
+                  {sel.log.state !== 'loading' && sel.log.state !== 'unsupported' ? (
+                    <Button size="xs" variant="white" className="mt-2" disabled={!status.connected || syncing} onClick={() => spinSync(() => run(() => api.trendSync(sel.id)))}>
+                      <ReloadIcon className={syncing ? SPIN : ''} />
+                      {sel.log.state === 'ready' ? 'Read new records' : 'Read the log'}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
               {sel.method === 'error' ? <div className="rounded-[12px] bg-(--status-alarm-bg) px-3 py-2.5 text-[12.5px]">Could not read: {sel.error}</div> : null}
               {sel.method === 'poll' && sel.note ? (
                 <div className="rounded-[12px] bg-(--surface-card-muted) px-3 py-2.5 text-[12.5px] text-(--text-muted)">The controller refused COV ({sel.note}), so this point is polled.</div>
