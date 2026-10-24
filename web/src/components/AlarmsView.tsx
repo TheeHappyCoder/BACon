@@ -186,10 +186,11 @@ export function AlarmsView({
     { key: 'unacked', label: 'Not acknowledged', count: counts.unacked, dot: 'bg-(--status-warn)' },
     { key: 'all', label: 'Set up', count: counts.all, dot: 'bg-(--ink-4)' },
   ]
-  // the condition column (and the device, with several) only shows when the table is wide enough
+  // columns drop out as the table narrows: the condition (and device) first, then acknowledgement, which then shows
+  // as a dot by the state
   const grid = multiDevice
-    ? 'grid-cols-[112px_minmax(150px,1.6fr)_88px_100px_152px] @[860px]:grid-cols-[112px_minmax(170px,1.6fr)_minmax(110px,1fr)_96px_minmax(160px,1.4fr)_110px_150px]'
-    : 'grid-cols-[112px_minmax(150px,1.6fr)_88px_100px_152px] @[760px]:grid-cols-[112px_minmax(170px,1.6fr)_96px_minmax(160px,1.4fr)_110px_150px]'
+    ? 'grid-cols-[104px_minmax(130px,1fr)_80px_96px] @[620px]:grid-cols-[112px_minmax(150px,1.6fr)_88px_100px_152px] @[860px]:grid-cols-[112px_minmax(170px,1.6fr)_minmax(110px,1fr)_96px_minmax(160px,1.4fr)_110px_150px]'
+    : 'grid-cols-[104px_minmax(130px,1fr)_80px_96px] @[620px]:grid-cols-[112px_minmax(150px,1.6fr)_88px_100px_152px] @[760px]:grid-cols-[112px_minmax(170px,1.6fr)_96px_minmax(160px,1.4fr)_110px_150px]'
   const wide = multiDevice ? '@[860px]:block' : '@[760px]:block'
 
   return (
@@ -292,7 +293,7 @@ export function AlarmsView({
               </div>
               <ScrollArea scrollFade scrollFadeSides={{ left: false, top: false }} className="min-h-0 flex-1">
                 {shown.length ? (
-                  <div className="@container min-w-[560px]">
+                  <div className="@container min-w-[380px]">
                     <div className={cn('sticky top-0 z-[2] grid gap-3 border-t border-(--border-divider) bg-(--surface-card-muted) px-4 py-1.5 text-[11.5px] text-(--text-muted)', grid)}>
                       <span>State</span>
                       <span>Object</span>
@@ -300,7 +301,7 @@ export function AlarmsView({
                       <span className="text-right">Value</span>
                       <span className={cn('hidden', wide)}>Alarm when</span>
                       <span>Since</span>
-                      <span>Acknowledged</span>
+                      <span className="hidden @[620px]:block">Acknowledged</span>
                     </div>
                     {shown.map((i) => (
                       <button
@@ -309,8 +310,9 @@ export function AlarmsView({
                         data-active={selectedKey === i.row.key ? 'true' : undefined}
                         className={cn('grid h-[52px] w-full items-center gap-3 border-t border-(--border-divider) px-4 text-left text-[12.5px] transition-colors hover:bg-(--surface-hover) data-[active=true]:bg-(--surface-checked)', grid)}
                       >
-                        <span>
+                        <span className="flex items-center gap-1.5">
                           <StateChip state={i.state} />
+                          {i.state.unacked ? <span title="Not acknowledged" className="size-2 shrink-0 rounded-full bg-(--status-warn-strong) @[620px]:hidden" /> : null}
                         </span>
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{i.row.values['object-name'] || i.row.key}</span>
@@ -331,7 +333,7 @@ export function AlarmsView({
                             <span className="text-(--text-faint)">–</span>
                           )}
                         </span>
-                        <span>
+                        <span className="hidden @[620px]:block">
                           <AckMark state={i.state} />
                         </span>
                       </button>

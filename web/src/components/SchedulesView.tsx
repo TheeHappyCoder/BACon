@@ -522,7 +522,7 @@ function WeekGrid({ p, days, segsByDay, calendars, now }: { p: Prepared; days: D
   const minute = now.getHours() * 60 + now.getMinutes()
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto px-4 pt-3 pb-4 [scrollbar-width:thin]">
-      <div className="flex min-w-[640px] gap-1.5 pb-2">
+      <div className="flex min-w-[460px] gap-1.5 pb-2">
         <div className="w-11 shrink-0" />
         {days.map((d, i) => {
           const today = sameDay(d, now)
@@ -535,7 +535,7 @@ function WeekGrid({ p, days, segsByDay, calendars, now }: { p: Prepared; days: D
           )
         })}
       </div>
-      <div className="flex min-h-[460px] min-w-[640px] flex-1 gap-1.5">
+      <div className="flex min-h-[460px] min-w-[460px] flex-1 gap-1.5">
         <div className="relative w-11 shrink-0">
           {HOURS.map((h) => (
             <div key={h} className="absolute left-0 -translate-y-1/2 font-mono text-[10px] text-(--text-faint) tabular-nums select-none" style={{ top: `${(h / 24) * 100}%` }}>
@@ -605,7 +605,7 @@ function Block({ p, seg, day, calendars }: { p: Prepared; seg: Segment; day: Dat
       >
         {minutes >= 40 ? (
           <div className="flex min-h-0 flex-1 flex-col px-1.5 py-1.5 text-[11px] leading-4">
-            <span className={cn('font-medium [overflow-wrap:anywhere]', minutes >= 90 ? 'line-clamp-2' : 'truncate')}>{label}</span>
+            <span className="truncate font-medium">{label}</span>
             {minutes >= 90 ? (
               <span className="truncate text-[10.5px] text-[rgba(41,41,41,.6)] tabular-nums">
                 <span className="@[96px]:hidden">{hhmm(seg.start)}</span>
@@ -632,14 +632,14 @@ function Block({ p, seg, day, calendars }: { p: Prepared; seg: Segment; day: Dat
 function MonthGrid({ p, days, month, calendars, now, onDay }: { p: Prepared; days: Date[]; month: number; calendars: Calendars; now: Date; onDay: (d: Date) => void }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto px-4 pt-3 pb-4 [scrollbar-width:thin]">
-      <div className="grid min-w-[560px] grid-cols-7 gap-1.5 pb-2">
+      <div className="grid min-w-[420px] grid-cols-7 gap-1.5 pb-2">
         {DAY_SHORT.map((d) => (
           <div key={d} className="pl-1 text-[12px] text-(--text-muted)">
             {d}
           </div>
         ))}
       </div>
-      <div className="grid min-h-[420px] min-w-[560px] flex-1 grid-cols-7 grid-rows-6 gap-1.5">
+      <div className="grid min-h-[420px] min-w-[420px] flex-1 grid-cols-7 grid-rows-6 gap-1.5">
         {days.map((d, i) => {
           const segs = daySegments(p.s, d, calendars)
           const off = segs.length === 1 && segs[0].source === 'off'
@@ -651,7 +651,7 @@ function MonthGrid({ p, days, month, calendars, now, onDay }: { p: Prepared; day
               onClick={() => onDay(d)}
               title="Open this week"
               className={cn(
-                'group flex min-h-[64px] flex-col rounded-[10px] border border-[rgba(41,41,41,0.06)] bg-[#fafafa] p-1.5 text-left transition-colors hover:border-(--border-strong)',
+                '@container group flex min-h-[64px] min-w-0 flex-col rounded-[10px] border border-[rgba(41,41,41,0.06)] bg-[#fafafa] p-1.5 text-left transition-colors hover:border-(--border-strong)',
                 d.getMonth() !== month && 'opacity-45',
               )}
               style={off ? { backgroundImage: HATCH } : undefined}
@@ -666,8 +666,12 @@ function MonthGrid({ p, days, month, calendars, now, onDay }: { p: Prepared; day
                   {d.getDate()}
                 </span>
                 {exIdx !== undefined ? (
-                  <span className="min-w-0 truncate rounded-full border border-dashed border-(--ink-3) px-1.5 text-[10.5px] leading-4 text-(--text-muted)">
-                    {exceptionName(p.s.exceptions[exIdx].period, p.s.row.device, calendars)}
+                  // a named chip when the cell has room, a dashed marker when it does not
+                  <span
+                    title={exceptionName(p.s.exceptions[exIdx].period, p.s.row.device, calendars)}
+                    className="inline-flex size-2.5 shrink-0 rounded-full border-[1.5px] border-dashed border-(--ink-3) @[120px]:size-auto @[120px]:min-w-0 @[120px]:border @[120px]:px-1.5"
+                  >
+                    <span className="hidden truncate text-[10.5px] leading-4 text-(--text-muted) @[120px]:inline">{exceptionName(p.s.exceptions[exIdx].period, p.s.row.device, calendars)}</span>
                   </span>
                 ) : null}
               </div>

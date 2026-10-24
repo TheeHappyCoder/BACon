@@ -43,6 +43,64 @@ lets you choose the columns.
 |---|---|
 | ![Trends](docs/images/trends.png) | ![Network](docs/images/network.png) |
 
+## What you can do with it
+
+### Find what's wrong with one line
+
+Type a query in the search box and press Enter. It filters every object read, across every device.
+
+![Querying for points in fault, then sensors reading too high](docs/gifs/query.gif)
+
+| To find | Type |
+|---|---|
+| Points in fault | `status-flags has fault` |
+| Sensors reading too high | `present-value > 26 and units = degrees-celsius` |
+| Frost risk | `present-value < 5 and units = degrees-celsius` |
+| Anything the controller doesn't trust | `reliability is set and reliability != no-fault-detected` |
+| Anything in alarm | `status-flags has in-alarm` |
+| Points left overridden or out of service | `status-flags has overridden or out-of-service = true` |
+| Inputs with no units | `type = analog-input and units = no-units` |
+| Points nobody described | `description is missing` |
+| A plant by name | `name contains "AHU-1"` |
+| Points with an I/O address (Siemens controllers) | `[3019] is set` |
+
+`and`, `or`, `not` and brackets combine them; quotes go around names or values with spaces, and case
+doesn't matter. `!=` also matches objects that don't have the property at all, so pair it with `is set`.
+
+### Keep a query as a health check
+
+Save a query as a check and it runs on every site you open, next to the built-in checks for faults,
+alarms, manual overrides, duplicate names and missing descriptions.
+
+![Saving a query as a health check](docs/gifs/health.gif)
+
+### Pick the columns, export to Excel
+
+Tick any property, standard or vendor-specific, and it becomes a column in the table and the export.
+
+![Ticking properties as columns and exporting](docs/gifs/export.gif)
+
+### See last night straight away
+
+Add a controller's Trend Log and its stored history is on the chart in seconds, before you've
+recorded anything. Each channel of a Trend Log Multiple becomes its own line.
+
+![Adding trend logs and their history appearing](docs/gifs/trendlog.gif)
+
+### Read a schedule the way the controller runs it
+
+Every Schedule object, by week or month, with holiday calendars and one-off exceptions laid over the
+weekly hours, the value now, and when it changes next.
+
+![Browsing schedules by week and month](docs/gifs/schedules.gif)
+
+### See what's in alarm, and why
+
+Objects with an alarm set up, their state and acknowledgements straight from the controller, what sets
+them off, and who gets notified.
+
+![The alarms page and an alarm's detail](docs/gifs/alarms.gif)
+
 ## Install
 
 Download `BACon.exe` from the [latest release](https://github.com/TheeHappyCoder/BACon/releases/latest)

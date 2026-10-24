@@ -194,6 +194,17 @@ def build(instance: int):
     )
     objs += [sat_ai, zone, oat, rh, filt, fan, occ, mode, sp]
 
+    # more zones, so filters have something to find: one warm, one with a failed sensor
+    zones = [("Zone temp level 1", 22.4, None), ("Zone temp level 3", 26.9, None), ("Zone temp level 4", 21.7, None),
+             ("Zone temp level 5", 0.0, "over-range"), ("Zone temp level 6", 23.1, None)]
+    for n, (name, pv, fault) in enumerate(zones, start=5):
+        objs.append(AI(
+            objectIdentifier=("analog-input", n), objectName=name, presentValue=pv,
+            units=EngineeringUnits("degrees-celsius"), covIncrement=0.2, description=f"VAV {n - 4} room sensor",
+            statusFlags=StatusFlags([0, 1, 0, 0] if fault else [0, 0, 0, 0]),
+            reliability=Reliability(fault or "no-fault-detected"),
+        ))
+
     objs.append(NC(
         objectIdentifier=("notification-class", 1), objectName="Critical alarms", notificationClass=1,
         priority=ArrayOf(Unsigned, _length=3)([3, 3, 200]), ackRequired=EventTransitionBits([1, 1, 0]),
@@ -383,7 +394,7 @@ async def main():
     ap.add_argument("--prefix", type=int, default=24)
     ap.add_argument("--instance", type=int, default=1001)
     ap.add_argument("--no-seq", action="store_true", help="act like a controller that does not number log records")
-    ap.add_argument("--max-items", type=int, default=60, help="abort ReadRange asking for more records than this")
+    ap.add_argument("--max-items", type=int, default=1000, help="abort ReadRange asking for more records than this")
     opts = ap.parse_args()
 
     args = SimpleArgumentParser().parse_args([

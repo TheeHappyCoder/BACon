@@ -180,7 +180,13 @@ export function AddPointsSheet({
                     </span>
                   </span>
                   <span className="shrink-0 text-right text-[12.5px] tabular-nums">
-                    {already ? <span className="text-(--text-muted)">trending</span> : r.values['present-value']}
+                    {already ? (
+                      <span className="text-(--text-muted)">trending</span>
+                    ) : r.typeId === 20 || r.typeId === 27 ? (
+                      <span className="text-(--text-muted)">{r.values['record-count'] ? `log · ${Number(r.values['record-count']).toLocaleString()} records` : 'log'}</span>
+                    ) : (
+                      r.values['present-value']
+                    )}
                   </span>
                 </label>
               )
