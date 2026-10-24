@@ -6,6 +6,9 @@ Everything a BMS or a scanner does to the device lands in the activity log, and 
 """
 
 import asyncio
+import ctypes
+import ipaddress
+import os
 import random
 import time
 from collections import deque
@@ -23,12 +26,16 @@ from bacpypes3.apdu import (
     ReinitializeDeviceRequest,
     SimpleAckPDU,
     SubscribeCOVRequest,
+    ConfirmedServiceChoice,
     TimeSynchronizationRequest,
+    UnconfirmedServiceChoice,
     UTCTimeSynchronizationRequest,
     WhoHasRequest,
     WhoIsRequest,
     WritePropertyMultipleRequest,
     WritePropertyRequest,
+    confirmed_request_types,
+    unconfirmed_request_types,
 )
 from bacpypes3.app import Application
 from bacpypes3.argparse import SimpleArgumentParser
@@ -48,9 +55,11 @@ from bacpypes3.basetypes import (
     LimitEnable,
     NotifyType,
     ObjectPropertyReference,
+    ObjectTypesSupported,
     Polarity,
     PriorityValue,
     Reliability,
+    ServicesSupported,
     SetpointReference,
     SpecialEvent,
     SpecialEventPeriod,
@@ -63,6 +72,7 @@ from bacpypes3.errors import ExecutionError
 from bacpypes3.local.analog import AnalogInputObject, AnalogInputObjectIR, AnalogOutputObject, AnalogValueObject
 from bacpypes3.local.binary import BinaryInputObject, BinaryInputObjectIR, BinaryValueObject
 from bacpypes3.local.cmd import Commandable
+from bacpypes3.local.cov import COVIncrementCriteria, GenericCriteria
 from bacpypes3.local.multistate import MultiStateOutputObject, MultiStateValueObject
 from bacpypes3.local.object import Object as _Local
 from bacpypes3.object import (
@@ -73,6 +83,7 @@ from bacpypes3.object import (
     TrendLogMultipleObject,
     TrendLogObject,
 )
+from bacpypes3.pdu import Address
 from bacpypes3.primitivedata import (
     CharacterString,
     Date,
@@ -113,46 +124,79 @@ class Guard:
         await super().write_property(attr, value, index, priority)
 
 
+class _LiveFlags:
+    """bacpypes3 works status-flags out from event-state, reliability and out-of-service on every read, so nothing ever
+    changes the statusFlags the COV detection watches: it would report the flags as they were when it was made. Read
+    them live instead, and watch the three properties they come from so a change in any of them is notified."""
+
+    @property
+    def statusFlags(self):
+        return self.obj.statusFlags
+
+    @statusFlags.setter
+    def statusFlags(self, value):
+        pass
+
+
+class IncrementCOV(_LiveFlags, COVIncrementCriteria):
+    properties_tracked = COVIncrementCriteria.properties_tracked + ("eventState", "reliability", "outOfService")
+
+
+class ChangeCOV(_LiveFlags, GenericCriteria):
+    properties_tracked = GenericCriteria.properties_tracked + ("eventState", "reliability", "outOfService")
+
+
 ALARM = ("highLimit", "lowLimit", "deadband", "limitEnable", "timeDelay", "notificationClass", "eventEnable", "covIncrement")
 
 
 class AI(Guard, AnalogInputObject):
+    _cov_criteria = IncrementCOV
     _writable = ("covIncrement",)
 
 
 class AIA(Guard, AnalogInputObjectIR):
+    _cov_criteria = IncrementCOV
     _writable = ALARM
 
 
 class AO(Guard, AnalogOutputObject):
+    _cov_criteria = IncrementCOV
     _writable = ("presentValue", "relinquishDefault", "covIncrement")
 
 
 class AVC(Guard, Commandable, AnalogValueObject):
+    _cov_criteria = IncrementCOV
     _writable = ("presentValue", "relinquishDefault", "covIncrement")
 
 
 class AV(Guard, AnalogValueObject):
+    _cov_criteria = IncrementCOV
     _writable = ()
 
 
 class BI(Guard, BinaryInputObject):
-    pass
+    _cov_criteria = ChangeCOV
 
 
 class BIA(Guard, BinaryInputObjectIR):
+    _cov_criteria = ChangeCOV
     _writable = ("timeDelay", "notificationClass", "eventEnable", "alarmValue")
 
 
 class BVC(Guard, Commandable, BinaryValueObject):
+    _cov_criteria = ChangeCOV
     _writable = ("presentValue", "relinquishDefault")
 
 
 class MSVC(Guard, Commandable, MultiStateValueObject):
+    # bacpypes3 gives multistate objects COVIncrementCriteria, which needs a covIncrement they don't have: the
+    # subscription fails half made, and the monitor it leaves behind breaks every later present-value change
+    _cov_criteria = ChangeCOV
     _writable = ("presentValue", "relinquishDefault")
 
 
 class MSOC(Guard, MultiStateOutputObject):
+    _cov_criteria = ChangeCOV
     _writable = ("presentValue", "relinquishDefault")
 
 
@@ -329,6 +373,16 @@ class RasherApp(Application):
             if isinstance(apdu, (WritePropertyRequest, WritePropertyMultipleRequest)):
                 o.after_write(apdu)
 
+    def get_services_supported(self) -> ServicesSupported:
+        """bacpypes3's own version names the unconfirmed services through the confirmed enumeration, so Who-Is shows up
+        as add-list-element and Time Sync as atomic-read-file; this is the same introspection with the right names."""
+        ss = ServicesSupported([])
+        for choices, types in ((ConfirmedServiceChoice, confirmed_request_types), (UnconfirmedServiceChoice, unconfirmed_request_types)):
+            for choice, cls in types.items():
+                if hasattr(self, "do_" + cls.__name__):
+                    ss[getattr(ss, choices(choice).attr)] = 1
+        return ss
+
     # ---- services bacpypes3 leaves to the application ----------------------
 
     async def do_ReadRangeRequest(self, apdu: ReadRangeRequest) -> None:
@@ -382,9 +436,18 @@ class RasherApp(Application):
         self.owner.time_sync(apdu.time, utc=True)
 
 
+def _object_types(dev) -> ObjectTypesSupported:
+    """Bacpypes3's device object reports no object types at all; these are the ones the device actually has."""
+    bits = ObjectTypesSupported([])
+    for objid in (dev._app.objectIdentifier if dev._app else [dev.objectIdentifier]):
+        bits[int(objid[0])] = 1
+    return bits
+
+
 class RoomController:
-    def __init__(self, ip: str, prefix: int, port: int, instance: int, name: str):
+    def __init__(self, ip: str, prefix: int, port: int, instance: int, name: str, iam_to: str = "peers"):
         self.ip, self.prefix, self.port, self.instance, self.name = ip, prefix, port, instance, name
+        self.iam_to = iam_to  # who else hears each I-Am, beyond the broadcast: "peers", "none", or addresses
         self.app: RasherApp | None = None
         self.room = Room()
         self.speed = 1
@@ -396,7 +459,7 @@ class RoomController:
         self.restart_until = 0.0
         self.clock_offset = 0.0
         self.last_sync: dict | None = None
-        self.activity: deque[dict] = deque(maxlen=600)
+        self.activity: deque[dict] = deque(maxlen=10000)
         self.next_id = 1
         self.writes: dict[str, dict] = {}
         self.reads: dict[str, dict] = {}
@@ -419,6 +482,7 @@ class RoomController:
         app = RasherApp.from_args(args)
         app.owner = self
         dev = app.device_object
+        dev.__class__ = type("RasherDevice", (type(dev),), {"protocolObjectTypesSupported": property(_object_types, lambda self, v: None)})
         dev.vendorName = "Rasher"
         dev.modelName = "RC-1 Room controller"
         dev.firmwareRevision = "1.0"
@@ -429,11 +493,32 @@ class RoomController:
             app.add_object(obj)
             self.objs[str(obj.objectIdentifier)] = obj
         self.app = app
+        await self.ignore_port_unreachable()
         self.started = time.time()
         self.sync_logs()
         self._task = asyncio.create_task(self.run())
         self.log("Rasher", "Start", f"Online at {self.ip}:{self.port} as device {self.instance}", kind="local")
-        app.i_am()  # announce, like a controller that just booted
+        self.i_am()  # announce, like a controller that just booted
+
+    async def ignore_port_unreachable(self) -> None:
+        """On Windows a datagram to a port nobody is listening on (a BMS that has gone, still subscribed or still a
+        peer) comes back as an error on the next receive, and asyncio then stops reading the socket for good: the
+        device goes deaf. Turn that report off (SIO_UDP_CONNRESET, which Python's socket.ioctl doesn't offer)."""
+        if os.name != "nt":
+            return
+        wsa_ioctl = ctypes.windll.ws2_32.WSAIoctl
+        wsa_ioctl.argtypes = [ctypes.c_size_t, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p,
+                              ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.c_void_p, ctypes.c_void_p]
+        for link in self.app.link_layers.values():
+            server = getattr(link, "server", None)
+            for _ in range(50):  # bacpypes3 opens the socket in a task of its own
+                if server is None or server.local_transport is not None:
+                    break
+                await asyncio.sleep(0.02)
+            transport = getattr(server, "local_transport", None)
+            if transport is not None:
+                off, done = ctypes.c_uint32(0), ctypes.c_uint32()
+                wsa_ioctl(transport.get_extra_info("socket").fileno(), 0x9800000C, ctypes.byref(off), 4, None, 0, ctypes.byref(done), None, None)
 
     async def stop(self) -> None:
         for task in (self._task, self._storm):
@@ -796,8 +881,32 @@ class RoomController:
 
     def _announce(self) -> None:
         if self.app and not self.offline_reason():
-            self.app.i_am()
+            self.i_am()
             self.log("Rasher", "I-Am", "Started up and announced on the network", kind="discovery")
+
+    def iam_targets(self) -> list[str]:
+        """Where each I-Am goes besides the broadcast. The broadcast only reaches this device's own port, so in "own" mode
+        a BMS on 47808 never hears it; "peers" sends it to every address that has spoken to the device as well."""
+        out = []
+        for item in self.iam_to.split(","):
+            item = item.strip()
+            out += list(self.peers) if item == "peers" else [item] if item and item != "none" else []
+        targets = []
+        for a in out:
+            host, _, port = a.partition(":")
+            try:
+                ipaddress.IPv4Address(host)  # peers holds local sources too, like "Room unit"
+                port = int(port or 47808)
+            except ValueError:
+                continue
+            if port != self.port and f"{host}:{port}" not in targets:  # the same port already hears the broadcast
+                targets.append(f"{host}:{port}")
+        return targets
+
+    def i_am(self) -> None:
+        self.app.i_am()
+        for a in self.iam_targets():
+            self.app.i_am(Address(a))
 
     def drop_subscriptions(self) -> None:
         if not self.app:
@@ -829,7 +938,7 @@ class RoomController:
         async def run():
             end = time.time() + seconds
             while time.time() < end and self.app:
-                self.app.i_am()
+                self.i_am()
                 await asyncio.sleep(0.1)
             self.log("Rasher", "I-Am storm", "Storm over", kind="device")
 
@@ -984,7 +1093,10 @@ class RoomController:
             "points": points,
             "subscriptions": subs,
             "peers": sorted(self.peers.values(), key=lambda p: -p["last"]),
-            "activity": [a for a in self.activity if a["id"] > since][-200:],
+            # with since, everything after it: a poller that falls behind still gets the lot, and is told if the log
+            # itself no longer reaches back that far
+            "activity": [a for a in self.activity if a["id"] > since][-200 if since <= 0 else None:],
+            "activityTruncated": since > 0 and bool(self.activity) and self.activity[0]["id"] > since + 1,
         }
 
     def point(self, key: str, obj) -> dict:

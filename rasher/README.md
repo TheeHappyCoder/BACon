@@ -37,10 +37,10 @@ A room controller, RC-1, looking after a meeting room with a fan coil. As many o
 |---|---|
 | Objects | Analog input, output and value; binary input and value; multi-state output and value; loop; schedule; calendar; notification class; trend log; trend log multiple; device; network port |
 | Commanding | WriteProperty with a real 16-level priority array and relinquish default; the controller's own loop writes at 16, its schedule at 12. Read-only properties refuse writes (write-access-denied), and inputs take writes only when out of service |
-| COV | SubscribeCOV, confirmed and unconfirmed, with lifetimes and COV increments |
+| COV | SubscribeCOV, confirmed and unconfirmed, with lifetimes, on the analog, binary and multi-state objects. Analog objects notify on their COV increment; every object also notifies when its status flags change, and each notification carries the flags a ReadProperty would return |
 | Alarms | Intrinsic reporting: high and low limits on room temperature and CO2, change of state on the window contact; GetEventInformation, GetAlarmSummary, AcknowledgeAlarm |
 | History | Trend logs with three days of history from the room model; ReadRange by position, sequence number and time |
-| Device management | Who-Is / I-Am, Who-Has / I-Have, ReadPropertyMultiple, DeviceCommunicationControl, ReinitializeDevice (cold start clears the priority arrays), TimeSynchronization and UTCTimeSynchronization |
+| Device management | Who-Is / I-Am, Who-Has / I-Have, ReadPropertyMultiple, DeviceCommunicationControl, ReinitializeDevice (cold start clears the priority arrays), TimeSynchronization and UTCTimeSynchronization. protocol-services-supported and protocol-object-types-supported list exactly these. Each I-Am is broadcast on the device's port and also sent to every address that has spoken to the device (`iamTo` in `/api/start`: `"peers"`, `"none"`, or `"ip:port,ip:port"`), so a BMS on another port hears boots and storms |
 
 ## Run it
 

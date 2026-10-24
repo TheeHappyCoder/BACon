@@ -29,7 +29,7 @@ from .version import __version__
 app = FastAPI(title="Rasher")
 lock = asyncio.Lock()
 
-DEFAULTS = {"adapter": "", "ip": "", "mode": "extra", "instance": 2001, "prefix": "RC", "port": 47809}
+DEFAULTS = {"adapter": "", "ip": "", "mode": "extra", "instance": 2001, "prefix": "RC", "port": 47809, "iamTo": "peers"}
 
 
 def settings() -> dict:
@@ -76,7 +76,7 @@ class Host:
         for i in range(count):
             instance = self.next_instance(int(cfg["instance"]))
             ip, port = (ips[i], 47808) if extra else (a["ip"], self.free_port(int(cfg["port"]), a["ip"]))
-            dev = RoomController(ip, a["prefix"], port, instance, f"{cfg['prefix']}-{instance}")
+            dev = RoomController(ip, a["prefix"], port, instance, f"{cfg['prefix']}-{instance}", cfg["iamTo"])
             try:
                 await dev.start()
             except Exception as e:
@@ -196,6 +196,7 @@ class StartBody(BaseModel):
     port: int = 47809
     instance: int
     prefix: str = "RC"
+    iamTo: str = "peers"  # also unicast each I-Am to: "peers" (whoever has spoken to it), "none", or "ip:port,ip:port"
 
 
 @app.post("/api/start")
@@ -326,7 +327,7 @@ async def control(instance: int, c: Control):
             obj = d.obj(c.key)
             d.acknowledge(obj, str(c.value or obj.eventState), "Rasher")
         elif c.action == "iam":
-            d.app.i_am()
+            d.i_am()
             d.log("Rasher", "I-Am", "Announced on the network", kind="discovery")
         else:
             raise HTTPException(400, f"Unknown action {c.action!r}")
