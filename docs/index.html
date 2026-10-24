@@ -199,13 +199,13 @@
 
   /* ---- closing: the sky again, to bookend the hero ---- */
   .closing { padding: clamp(88px, 11vw, 150px) 10px 10px; }
-  .closing .sky-panel { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; padding: clamp(80px, 11vw, 150px) 24px; background-position: center 20%; }
+  .closing .sky-panel { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: clamp(56px, 7vw, 96px) 24px; background-position: center 20%; }
   .closing .sky-panel::before { background: linear-gradient(180deg, rgba(18, 52, 98, 0.3), rgba(18, 52, 98, 0.06)); }
   .closing h2 { font-size: clamp(42px, 6vw, 84px); line-height: 0.96; letter-spacing: -0.055em; text-shadow: 0 2px 30px rgba(10, 40, 90, 0.18); }
   .closing p { font-size: clamp(16px, 1.3vw, 18px); color: rgba(255, 255, 255, 0.92); max-width: 44ch; }
   .closing .ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
   .closing .smart { margin-top: 6px; font-size: 12.5px; color: rgba(255, 255, 255, 0.75); }
-  footer .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding: 26px 0 34px; font-size: 13px; color: var(--ink-2); }
+  footer .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding: 34px 0 48px; font-size: 13px; color: var(--ink-2); }
   footer a { text-decoration: none; }
   footer a:hover { color: var(--ink); }
   footer .spacer { flex: 1; }
@@ -567,7 +567,12 @@
   // ---- the page nav slides in once the hero is scrolled past ----
   const nav = document.getElementById('nav')
   const heroPanel = document.querySelector('.hero')
-  addEventListener('scroll', () => nav.classList.toggle('show', scrollY > heroPanel.offsetHeight - 40), { passive: true })
+  const closingPanel = document.querySelector('.closing .sky-panel')
+  // shown between the hero and the closing panel; it never sits over the closing sky
+  addEventListener('scroll', () => {
+    const closingTop = closingPanel.getBoundingClientRect().top
+    nav.classList.toggle('show', scrollY > heroPanel.offsetHeight - 40 && closingTop > 90)
+  }, { passive: true })
 
   // ---- the count-up on the story number ----
   const big = document.querySelector('[data-count]')
