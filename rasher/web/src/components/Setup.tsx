@@ -21,7 +21,8 @@ function Label({ children, hint }: { children: React.ReactNode; hint?: string })
   )
 }
 
-/** Put a controller on the network: pick the adapter, give it an address of its own and test it, name it, start. */
+/** Put a controller on the network: pick the equipment (when there's a choice) and the adapter, give it an address of
+ *  its own and test it, name it, start. */
 export function Setup({ onStarted }: { onStarted: (instance: number) => void }) {
   const [data, setData] = useState<SetupData | null>(null)
   const [adapter, setAdapter] = useState('')
@@ -30,6 +31,7 @@ export function Setup({ onStarted }: { onStarted: (instance: number) => void }) 
   const [port, setPort] = useState('47809')
   const [prefix, setPrefix] = useState('RC')
   const [instance, setInstance] = useState('2001')
+  const [type, setType] = useState('fcu')
   const [check, setCheck] = useState<IpCheck | null>(null)
   const [testing, setTesting] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -45,6 +47,7 @@ export function Setup({ onStarted }: { onStarted: (instance: number) => void }) 
       setIp(s.ip || (a ? suggest(a.ip) : ''))
       setPrefix(s.prefix)
       setInstance(String(s.instance))
+      setType(d.profiles.some((p) => p.type === s.type) ? s.type : (d.profiles[0]?.type ?? 'fcu'))
       if (s.mode === 'own' && s.port !== 47808) setPort(String(s.port))
     })
   }, [])
@@ -68,7 +71,7 @@ export function Setup({ onStarted }: { onStarted: (instance: number) => void }) 
     setStarting(true)
     setError('')
     try {
-      const res = await api.start({ adapter, mode, ip, port: Number(port) || 47809, instance: Number(instance), prefix })
+      const res = await api.start({ adapter, mode, ip, port: Number(port) || 47809, instance: Number(instance), prefix, type })
       onStarted(res.instance)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -77,6 +80,7 @@ export function Setup({ onStarted }: { onStarted: (instance: number) => void }) 
     }
   }
 
+  const choice = (data?.profiles.length ?? 0) > 1
   const ready = !!a && !!prefix.trim() && /^\d+$/.test(instance) && (mode === 'own' ? /^\d+$/.test(port) : check?.state === 'free')
 
   return (
@@ -85,12 +89,29 @@ export function Setup({ onStarted }: { onStarted: (instance: number) => void }) 
         <div className="flex items-center gap-3">
           <RasherMark size={34} state="stopped" />
           <div>
-            <h1 className="text-[18px] leading-tight font-medium tracking-[-0.02em] sm:text-[22px]">Put a room controller on your network</h1>
+            <h1 className="text-[18px] leading-tight font-medium tracking-[-0.02em] sm:text-[22px]">{choice ? 'Put a controller on your network' : 'Put a room controller on your network'}</h1>
             <p className="text-[13px] text-(--text-muted)">A BACnet/IP device you can see, touch and break, next to the tools you're testing.</p>
           </div>
         </div>
 
         <div className="mt-6 space-y-5">
+          {choice ? (
+            <div>
+              <Label>Equipment</Label>
+              <div className="flex flex-wrap gap-2">
+                {data!.profiles.map((p) => (
+                  <button
+                    key={p.type}
+                    onClick={() => setType(p.type)}
+                    className={`rounded-[12px] border px-3 py-2 text-left text-[13px] transition-colors ${type === p.type ? 'border-(--action-primary) bg-(--color-primary-50)' : 'border-(--border-subtle) hover:border-(--border-default)'}`}
+                  >
+                    <span className="font-medium">{p.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div>
             <Label>Network adapter</Label>
             <div className="flex flex-wrap gap-2">

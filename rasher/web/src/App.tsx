@@ -99,9 +99,9 @@ function DeviceScreen({ instance, onGone, onPick }: { instance: number; onGone: 
     [instance, poll, toast],
   )
 
-  const add = async (count: number) => {
+  const add = async (count: number, type?: string) => {
     try {
-      const res = await api.add(count)
+      const res = await api.add(count, type)
       if (!bridge()) toast(`Added ${res.instances.length === 1 ? `device ${res.instances[0]}` : `devices ${res.instances[0]}–${res.instances[res.instances.length - 1]}`}. Switch to them from the list at the bottom.`)
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), { kind: 'error' })

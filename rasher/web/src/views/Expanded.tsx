@@ -2,19 +2,19 @@ import { useState } from 'react'
 import { Hugeicons } from '@ui/components/hugeicons'
 import { ScrollArea } from '@ui/components/scroll-area'
 import { Tabs, TabsList, TabsTab } from '@ui/components/tabs'
-import type { Activity, Control, Point, Running } from '../api'
+import type { Activity, Control, Running } from '../api'
 import { isAlarming, needsAck } from '../format'
 import { ActivityLog } from '../components/ActivityLog'
 import { AddDevices } from '../components/AddDevices'
 import { AlarmsView } from '../components/AlarmsView'
 import { DeviceView } from '../components/DeviceView'
-import { Faceplate } from '../components/Faceplate'
 import { Inspector } from '../components/Inspector'
+import { Leds } from '../components/Leds'
 import { Points } from '../components/Points'
 import { PowerSwitch } from '../components/PowerSwitch'
 import { RasherMark } from '../components/RasherMark'
-import { RoomPanel } from '../components/RoomPanel'
 import { TrendsView } from '../components/TrendsView'
+import { profileOf } from '../profiles'
 
 const { PanelLeftClose, XIcon } = Hugeicons
 
@@ -26,8 +26,8 @@ const count = (n: number, tone = 'var(--surface-track)') => (
   </span>
 )
 
-/** Everything: the unit and the room on the left, the device's points, traffic, alarms and trends in the middle,
- *  and the selected point on the right. */
+/** Everything: the profile's unit and controls on the left, the device's points, traffic, alarms and trends in the
+ *  middle, and the selected point on the right. */
 export function Expanded({
   s,
   activity,
@@ -42,7 +42,7 @@ export function Expanded({
   network: number
   control: (c: Control) => Promise<void>
   onCollapse: () => void
-  onAdd: (count: number) => Promise<void>
+  onAdd: (count: number, type?: string) => Promise<void>
   switcher?: React.ReactNode
 }) {
   const [view, setView] = useState<View>('points')
@@ -53,7 +53,7 @@ export function Expanded({
   const unacked = s.points.filter(needsAck).length
   const unread = view === 'activity' ? 0 : Math.max(0, network - seen)
   const degraded = !s.device.powered || s.device.restarting || s.device.dcc !== 'enable'
-  const mode = s.points.find((p) => p.key === 'multi-state-value,1') as Point
+  const ui = profileOf(s)
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-(--surface-page) text-(--text-strong)">
@@ -68,7 +68,7 @@ export function Expanded({
         </span>
         <div className="flex-1" />
         {switcher}
-        <AddDevices onAdd={onAdd} align="right" />
+        <AddDevices onAdd={onAdd} type={s.device.type} align="right" />
         <PowerSwitch on={s.device.powered} booting={s.device.restarting} onChange={(v) => control({ action: 'power', value: v })} />
         <button onClick={onCollapse} className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-(--text-muted) hover:bg-(--surface-track) hover:text-(--text-strong)">
           <PanelLeftClose className="size-3.5" />
@@ -78,19 +78,7 @@ export function Expanded({
 
       <div className="flex min-h-0 flex-1 gap-3 px-3 pb-3">
         <aside className="flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto">
-          <div className="pt-4">
-            <Faceplate
-              s={s}
-              activityCount={network}
-              onOffset={(v) => control({ action: 'offset', value: v })}
-              onPresence={() =>
-                mode.activePriority === 8
-                  ? control({ action: 'release', key: 'multi-state-value,1', priority: 8 })
-                  : control({ action: 'write', key: 'multi-state-value,1', value: 1, priority: 8 })
-              }
-            />
-          </div>
-          <RoomPanel s={s} control={control} />
+          <ui.Side s={s} control={control} leds={<Leds s={s} activityCount={network} />} />
         </aside>
 
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
@@ -114,9 +102,9 @@ export function Expanded({
           <ScrollArea key={view} className="min-h-0 flex-1">
             {view === 'points' ? <Points points={s.points} selected={selected} onSelect={setSelected} /> : null}
             {view === 'activity' ? <ActivityLog items={activity} onSelect={setSelected} /> : null}
-            {view === 'alarms' ? <AlarmsView s={s} control={control} onSelect={setSelected} /> : null}
-            {view === 'trends' ? <TrendsView instance={s.device.instance} /> : null}
-            {view === 'device' ? <DeviceView s={s} control={control} /> : null}
+            {view === 'alarms' ? <AlarmsView s={s} control={control} onSelect={setSelected} scenarios={ui.scenarios(s, control)} /> : null}
+            {view === 'trends' ? <TrendsView instance={s.device.instance} charts={ui.charts} /> : null}
+            {view === 'device' ? <DeviceView s={s} control={control} faults={ui.faults} /> : null}
           </ScrollArea>
         </section>
 

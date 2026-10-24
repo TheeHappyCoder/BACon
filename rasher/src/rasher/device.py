@@ -1,5 +1,8 @@
-"""The simulated room controller: its BACnet objects, the services a real controller answers, and the loop that ties
-the room model to the objects.
+"""A simulated BACnet device: the services a real controller answers, and the loop that runs its equipment profile.
+
+The device is the same for every kind of equipment: power, boot, faults, communication control, I-Am, COV, alarms,
+schedules, trend logs and the activity log. What it controls comes from its profile (profiles/), which supplies the
+objects, the physical model and the control logic.
 
 Everything a BMS or a scanner does to the device lands in the activity log, and every write is remembered per object
 (who, when, at what priority), so the UI can show the device being worked on.
@@ -40,34 +43,23 @@ from bacpypes3.apdu import (
 from bacpypes3.app import Application
 from bacpypes3.argparse import SimpleArgumentParser
 from bacpypes3.basetypes import (
-    Action,
     CalendarEntry,
-    DailySchedule,
-    DateRange,
     DateTime,
-    Destination,
     DeviceObjectPropertyReference,
-    EngineeringUnits,
     EventState,
     EventTransitionBits,
     GetAlarmSummaryAlarmSummary,
     GetEventInformationEventSummary,
-    LimitEnable,
     NotifyType,
-    ObjectPropertyReference,
     ObjectTypesSupported,
-    Polarity,
     PriorityValue,
     Reliability,
     ServicesSupported,
-    SetpointReference,
-    SpecialEvent,
-    SpecialEventPeriod,
     StatusFlags,
     TimeStamp,
     TimeValue,
 )
-from bacpypes3.constructeddata import ArrayOf, ListOf
+from bacpypes3.constructeddata import ArrayOf
 from bacpypes3.errors import ExecutionError
 from bacpypes3.local.analog import AnalogInputObject, AnalogInputObjectIR, AnalogOutputObject, AnalogValueObject
 from bacpypes3.local.binary import BinaryInputObject, BinaryInputObjectIR, BinaryValueObject
@@ -85,17 +77,13 @@ from bacpypes3.object import (
 )
 from bacpypes3.pdu import Address
 from bacpypes3.primitivedata import (
-    CharacterString,
     Date,
     Enumerated,
     Null,
     ObjectIdentifier,
-    Real,
     Time,
-    Unsigned,
 )
 
-from .model import FAN, MODES, Inputs, Room, occupied_by_schedule
 from .trendlogs import Log, stamp
 
 VENDOR_ID = 999
@@ -346,7 +334,7 @@ SERVICE = {
 
 
 class RasherApp(Application):
-    owner: "RoomController"
+    owner: "Device"
 
     async def indication(self, apdu) -> None:
         o = self.owner
@@ -444,15 +432,78 @@ def _object_types(dev) -> ObjectTypesSupported:
     return bits
 
 
-class RoomController:
-    def __init__(self, ip: str, prefix: int, port: int, instance: int, name: str, iam_to: str = "peers"):
+class Profile:
+    """A kind of equipment. One instance per device: it holds the physical model, builds the objects, and runs the
+    control logic each second. Actions and faults are described as {name: {"text": ..., "value": schema}}, the way
+    GET /api/d/{instance}/profile shows them, so an agent can drive a profile it has never seen."""
+
+    type = ""  # the key in settings and the API
+    label = ""
+    model = ""  # the device object's model-name
+    location = ""
+    description = ""
+    logs: list[tuple[str, int]] = []  # its trend logs, seeded by history() and fed by sample()
+    actions: dict[str, dict] = {}  # control actions beyond the device's own
+    faults: dict[str, dict] = {}  # faults beyond flaky and slow, all switched on and off
+
+    def __init__(self, dev: "Device"):
+        self.dev = dev
+
+    def history(self, now: float) -> None:
+        """Run the model through the past so the trend logs open with history, and leave it at now."""
+
+    def build(self) -> list:
+        """The BACnet objects, from the model as history() left it."""
+        return []
+
+    def sample(self, t: float) -> None:
+        """One record in each trend log."""
+
+    async def tick(self, now: float) -> None:
+        """One second of control: read the objects, step the model, write the results back."""
+
+    def offline(self, now: float) -> None:
+        """One second with the controller switched off or booting: the plant carries on without it."""
+
+    def state(self) -> dict:
+        """What the face needs, merged into the snapshot."""
+        return {}
+
+    async def act(self, action: str, value) -> bool:
+        """Handle a control action; False if it isn't one of this profile's."""
+        return False
+
+    def trend(self, since: float) -> dict:
+        """The trend data the UI charts, from the device's own logs."""
+        return {}
+
+
+# the control actions every device takes, whatever its profile, in the shape Profile.actions uses
+ACTIONS = {
+    "power": {"text": "The power switch. Off answers nothing; on boots for a few seconds, drops COV subscriptions and sends an I-Am", "value": {"type": "boolean"}},
+    "speed": {"text": "How fast the model's clock runs; schedules keep real time", "value": {"type": "integer", "min": 1, "max": 600}},
+    "fault": {"text": "Switch a fault on or off", "name": {"type": "string", "values": "the keys of faults"}, "value": "as the fault describes"},
+    "storm": {"text": "Broadcast I-Am ten times a second", "value": {"type": "integer", "min": 1, "units": "s", "default": 10}},
+    "restart": {"text": "Restart the device; a cold start also clears every priority array", "value": {"type": "string", "values": ["warmstart", "coldstart"], "default": "warmstart"}},
+    "write": {"text": "Write a point's present value", "key": {"type": "string", "values": "a writable point's key"}, "value": "as the point describes", "priority": {"type": "integer", "min": 1, "max": 16, "default": 16}},
+    "release": {"text": "Relinquish a point's present value at a priority", "key": {"type": "string", "values": "a commandable point's key"}, "priority": {"type": "integer", "min": 1, "max": 16}},
+    "oos": {"text": "Take a point out of service (or back); an out-of-service input stops following the model and takes writes", "key": {"type": "string", "values": "a point's key"}, "value": {"type": "boolean"}},
+    "ack": {"text": "Acknowledge a point's alarm transition", "key": {"type": "string", "values": "a point with alarm"}, "value": {"type": "string", "values": ["offnormal", "fault", "normal"], "default": "its event state"}},
+    "iam": {"text": "Send one I-Am"},
+}
+FAULTS = {
+    "flaky": {"text": "Drops about a third of requests, so tools have to retry", "value": {"type": "boolean"}},
+    "slow": {"text": "Waits before answering each request", "value": {"type": "integer", "min": 0, "units": "ms"}},
+}
+
+
+class Device:
+    def __init__(self, profile: type[Profile], ip: str, prefix: int, port: int, instance: int, name: str, iam_to: str = "peers"):
         self.ip, self.prefix, self.port, self.instance, self.name = ip, prefix, port, instance, name
         self.iam_to = iam_to  # who else hears each I-Am, beyond the broadcast: "peers", "none", or addresses
         self.app: RasherApp | None = None
-        self.room = Room()
         self.speed = 1
-        self.auto_people = True
-        self.faults = {"slow": 0, "flaky": False, "sensor": False}
+        self.faults = {"slow": 0, "flaky": False, **{k: False for k in profile.faults}}
         self.powered = True
         self.dcc = "enable"
         self.dcc_until: float | None = None
@@ -470,6 +521,7 @@ class RoomController:
         self._task: asyncio.Task | None = None
         self._storm: asyncio.Task | None = None
         self._last_log = 0.0
+        self.profile = profile(self)
 
     # ---- lifecycle ---------------------------------------------------------
 
@@ -484,12 +536,12 @@ class RoomController:
         dev = app.device_object
         dev.__class__ = type("RasherDevice", (type(dev),), {"protocolObjectTypesSupported": property(_object_types, lambda self, v: None)})
         dev.vendorName = "Rasher"
-        dev.modelName = "RC-1 Room controller"
+        dev.modelName = self.profile.model
         dev.firmwareRevision = "1.0"
         dev.applicationSoftwareVersion = "Rasher 0.1"
-        dev.location = "Level 2, Meeting room 2.04"
-        dev.description = "Simulated room controller: heating, cooling, fan coil, CO2"
-        for obj in self.build():
+        dev.location = self.profile.location
+        dev.description = self.profile.description
+        for obj in self.profile.build():
             app.add_object(obj)
             self.objs[str(obj.objectIdentifier)] = obj
         self.app = app
@@ -530,120 +582,6 @@ class RoomController:
 
     # ---- objects -----------------------------------------------------------
 
-    def build(self) -> list:
-        r = self.room
-        c = "degrees-celsius"
-        now = time.time()
-        objs = [
-            AIA(objectIdentifier=("analog-input", 1), objectName="Room temperature", presentValue=round(r.temp, 2),
-                units=EngineeringUnits(c), statusFlags=flags(), covIncrement=0.1, description="Wall unit sensor",
-                highLimit=26.0, lowLimit=16.0, deadband=0.5, limitEnable=LimitEnable([1, 1]), outOfService=False, **ir(1, 30)),
-            AI(objectIdentifier=("analog-input", 2), objectName="Outside air temperature", presentValue=round(r.outside, 1),
-               units=EngineeringUnits(c), statusFlags=flags(), covIncrement=0.5, outOfService=False,
-               reliability=Reliability("no-fault-detected"), description="Shared from the roof weather station"),
-            AI(objectIdentifier=("analog-input", 3), objectName="Room humidity", presentValue=round(r.humidity, 1),
-               units=EngineeringUnits("percent-relative-humidity"), statusFlags=flags(), covIncrement=1.0, outOfService=False,
-               reliability=Reliability("no-fault-detected")),
-            AIA(objectIdentifier=("analog-input", 4), objectName="Room CO2", presentValue=round(r.co2),
-                units=EngineeringUnits("parts-per-million"), statusFlags=flags(), covIncrement=25.0, outOfService=False,
-                highLimit=1200.0, lowLimit=0.0, deadband=100.0, limitEnable=LimitEnable([0, 1]), **ir(2, 60, (1, 0, 1))),
-            AVC(objectIdentifier=("analog-value", 1), objectName="Comfort setpoint", presentValue=21.0, relinquishDefault=21.0,
-                units=EngineeringUnits(c), statusFlags=flags(), covIncrement=0.1, outOfService=False,
-                minPresValue=12.0, maxPresValue=30.0, description="Base setpoint; the room unit dial adds the offset"),
-            AVC(objectIdentifier=("analog-value", 2), objectName="Setpoint offset", presentValue=0.0, relinquishDefault=0.0,
-                units=EngineeringUnits("delta-degrees-kelvin"), statusFlags=flags(), covIncrement=0.1, outOfService=False,
-                minPresValue=-3.0, maxPresValue=3.0, description="Set from the room unit's + and -"),
-            AV(objectIdentifier=("analog-value", 3), objectName="Effective setpoint", presentValue=21.0,
-               units=EngineeringUnits(c), statusFlags=flags(), covIncrement=0.1, outOfService=False),
-            AO(objectIdentifier=("analog-output", 1), objectName="Heating valve", presentValue=0.0, relinquishDefault=0.0,
-               units=EngineeringUnits("percent"), statusFlags=flags(), covIncrement=1.0, outOfService=False,
-               reliability=Reliability("no-fault-detected"), description="Fan coil heating valve, 0-10 V"),
-            AO(objectIdentifier=("analog-output", 2), objectName="Cooling valve", presentValue=0.0, relinquishDefault=0.0,
-               units=EngineeringUnits("percent"), statusFlags=flags(), covIncrement=1.0, outOfService=False,
-               reliability=Reliability("no-fault-detected"), description="Fan coil chilled water valve, 0-10 V"),
-            MSOC(objectIdentifier=("multi-state-output", 1), objectName="Fan speed", presentValue=1, relinquishDefault=1,
-                 numberOfStates=4, stateText=ArrayOf(CharacterString)(FAN), statusFlags=flags(), outOfService=False,
-                 reliability=Reliability("no-fault-detected")),
-            BIA(objectIdentifier=("binary-input", 1), objectName="Window contact", presentValue="inactive",
-                polarity=Polarity("normal"), statusFlags=flags(), activeText="Open", inactiveText="Closed", outOfService=False,
-                alarmValue="active", **ir(2, 5, (1, 0, 1))),
-            BI(objectIdentifier=("binary-input", 2), objectName="Presence detector", presentValue="inactive",
-               polarity=Polarity("normal"), statusFlags=flags(), activeText="Present", inactiveText="Empty", outOfService=False,
-               reliability=Reliability("no-fault-detected")),
-            BVC(objectIdentifier=("binary-value", 1), objectName="Occupancy", presentValue="active", relinquishDefault="inactive",
-                statusFlags=flags(), activeText="Occupied", inactiveText="Unoccupied", outOfService=False,
-                description="Written by the occupancy schedule at priority 12"),
-            MSVC(objectIdentifier=("multi-state-value", 1), objectName="Operating mode", presentValue=1, relinquishDefault=1,
-                 numberOfStates=4, stateText=ArrayOf(CharacterString)(MODES), statusFlags=flags(), outOfService=False,
-                 description="The controller sets this at priority 16 from occupancy and presence"),
-            LoopObj(objectIdentifier=("loop", 1), objectName="Room temperature loop", presentValue=0.0, statusFlags=flags(),
-                    eventState=EventState("normal"), outOfService=False, outputUnits=EngineeringUnits("percent"),
-                    manipulatedVariableReference=ObjectPropertyReference(objectIdentifier=oid("analog-output", 1), propertyIdentifier="present-value"),
-                    controlledVariableReference=ObjectPropertyReference(objectIdentifier=oid("analog-input", 1), propertyIdentifier="present-value"),
-                    controlledVariableValue=21.0, controlledVariableUnits=EngineeringUnits(c),
-                    setpointReference=SetpointReference(setpointReference=ObjectPropertyReference(objectIdentifier=oid("analog-value", 3), propertyIdentifier="present-value")),
-                    setpoint=21.0, action=Action("reverse"), priorityForWriting=16, proportionalConstant=40.0,
-                    proportionalConstantUnits=EngineeringUnits("percent"), integralConstant=900.0,
-                    integralConstantUnits=EngineeringUnits("seconds"), maximumOutput=100.0, minimumOutput=0.0),
-            NC(objectIdentifier=("notification-class", 1), objectName="Comfort alarms", notificationClass=1,
-               priority=ArrayOf(Unsigned, _length=3)([64, 64, 200]), ackRequired=EventTransitionBits([1, 1, 0]),
-               recipientList=ListOf(Destination)([])),
-            NC(objectIdentifier=("notification-class", 2), objectName="Maintenance", notificationClass=2,
-               priority=ArrayOf(Unsigned, _length=3)([120, 120, 200]), ackRequired=EventTransitionBits([0, 0, 0]),
-               recipientList=ListOf(Destination)([])),
-        ]
-
-        year = time.localtime(now).tm_year - 1900
-        objs.append(Cal(
-            objectIdentifier=("calendar", 1), objectName="Public holidays", presentValue=False,
-            dateList=ListOf(CalendarEntry)([
-                CalendarEntry(date=Date((255, 1, 1, 255))),
-                CalendarEntry(date=Date((255, 12, 25, 255))),
-                CalendarEntry(date=Date((255, 12, 26, 255))),
-                CalendarEntry(dateRange=DateRange(startDate=Date((year, 12, 27, 255)), endDate=Date((year, 12, 31, 255)))),
-            ]),
-        ))
-        on, off = Enumerated(1), Enumerated(0)
-        week = [DailySchedule(daySchedule=[tv(7, 0, on), tv(18, 0, off)]) for _ in range(5)] + [
-            DailySchedule(daySchedule=[tv(8, 0, on), tv(12, 0, off)]),
-            DailySchedule(daySchedule=[]),
-        ]
-        objs.append(Sched(
-            objectIdentifier=("schedule", 1), objectName="Occupancy schedule", presentValue=on,
-            description="Office hours, Saturday morning",
-            effectivePeriod=DateRange(startDate=Date((255, 255, 255, 255)), endDate=Date((255, 255, 255, 255))),
-            weeklySchedule=ArrayOf(DailySchedule, _length=7)(week),
-            exceptionSchedule=ArrayOf(SpecialEvent)([
-                SpecialEvent(period=SpecialEventPeriod(calendarReference=oid("calendar", 1)), listOfTimeValues=[tv(0, 0, off)], eventPriority=1),
-            ]),
-            scheduleDefault=off, priorityForWriting=12, statusFlags=flags(), reliability=Reliability("no-fault-detected"),
-            outOfService=False, listOfObjectPropertyReferences=ListOf(DeviceObjectPropertyReference)([ref("binary-value", 1)]),
-        ))
-
-        tl = dict(
-            enable=True, stopWhenFull=False, bufferSize=5000, logInterval=6000, statusFlags=flags(),
-            eventState=EventState("normal"), loggingType="polled", alignIntervals=True, intervalOffset=0,
-            notificationThreshold=1000, recordsSinceNotification=0, lastNotifyRecord=0, eventEnable=EventTransitionBits([0, 0, 0]),
-            ackedTransitions=EventTransitionBits([1, 1, 1]), notifyType=NotifyType("event"),
-            eventTimeStamps=ArrayOf(TimeStamp, _length=3)([ts(None), ts(None), ts(None)]), notificationClass=2,
-            recordCount=0, totalRecordCount=0,
-        )
-        for n, (name, src) in enumerate([
-            ("Room temperature log", ref("analog-input", 1)),
-            ("Effective setpoint log", ref("analog-value", 3)),
-            ("Heating valve log", ref("analog-output", 1)),
-            ("Room CO2 log", ref("analog-input", 4)),
-        ], start=1):
-            objs.append(TL(objectIdentifier=("trend-log", n), objectName=name, logDeviceObjectProperty=src, trigger=False, **tl))
-        objs.append(TLM(
-            objectIdentifier=("trend-log-multiple", 1), objectName="Room log",
-            logDeviceObjectProperty=ArrayOf(DeviceObjectPropertyReference)([
-                ref("analog-input", 1), ref("analog-value", 3), ref("analog-output", 1), ref("analog-output", 2),
-            ]),
-            **tl,
-        ))
-        return objs
-
     def obj(self, key: str):
         return self.objs.get(key)
 
@@ -657,30 +595,9 @@ class RoomController:
     # ---- history -----------------------------------------------------------
 
     def history(self) -> None:
-        """Run the room through the last three days so the trend logs open with history, then carry on from there."""
-        room = Room(temp=19.0)
-        self.logs = {(k, n): Log((k, n), multiple=k == "trend-log-multiple") for k, n in [
-            ("trend-log", 1), ("trend-log", 2), ("trend-log", 3), ("trend-log", 4), ("trend-log-multiple", 1)]}
-        now = time.time()
-        t = now - 3 * 86400
-        t -= t % 900
-        while t <= now:
-            occ = occupied_by_schedule(t)
-            room.people = room.people_by_schedule(t)
-            mode = "Comfort" if occ and room.people else "Standby" if occ else "Economy"
-            room.step(t, 60, Inputs(mode=mode, occupied=occ))
-            if t % 900 < 60:
-                self.sample(room, t)
-            t += 60
-        room.people = room.people_by_schedule(now)
-        self.room = room
-
-    def sample(self, room: Room, t: float) -> None:
-        self.logs[("trend-log", 1)].add(t, round(room.temp, 2))
-        self.logs[("trend-log", 2)].add(t, room.effective_setpoint)
-        self.logs[("trend-log", 3)].add(t, room.heat)
-        self.logs[("trend-log", 4)].add(t, round(room.co2))
-        self.logs[("trend-log-multiple", 1)].add(t, [round(room.temp, 2), room.effective_setpoint, room.heat, room.cool])
+        """The trend logs open with three days of history from the profile's model, which then carries on from there."""
+        self.logs = {key: Log(key, multiple=key[0] == "trend-log-multiple") for key in self.profile.logs}
+        self.profile.history(time.time())
 
     def sync_logs(self) -> None:
         for key, log in self.logs.items():
@@ -709,74 +626,24 @@ class RoomController:
         now = time.time()
         if self.dcc_until and now >= self.dcc_until:
             self.set_dcc("enable", None)
-        o = self.obj
-        room = self.room
         if self.offline_reason():
-            # no controller: the valves close and the fan stops, but the room carries on getting warmer or colder
-            room.step(now, self.speed, Inputs(heat_cmd=0, cool_cmd=0, fan_cmd="Off", mode="Comfort", occupied=False))
+            self.profile.offline(now)
             return
 
-        await self.run_schedule(now)
-        occupied = str(o("binary-value,1").presentValue) == "active"
-        if self.auto_people:
-            room.people = room.people_by_schedule(now)
-
-        # the controller's own choice of mode, at priority 16; anything higher wins
-        mode_obj = o("multi-state-value,1")
-        auto_mode = 1 if occupied and room.people else 2 if occupied else 3
-        await mode_obj.write_property("presentValue", Unsigned(auto_mode), priority=16)
-        mode = MODES[int(mode_obj.presentValue) - 1]
-
-        heat_cmd = self.held(o("analog-output,1"))
-        cool_cmd = self.held(o("analog-output,2"))
-        fan_held = self.held(o("multi-state-output,1"))
-        inp = Inputs(
-            setpoint=float(o("analog-value,1").presentValue),
-            offset=float(o("analog-value,2").presentValue),
-            mode=mode,
-            occupied=occupied,
-            heat_cmd=float(heat_cmd) if heat_cmd is not None else None,
-            cool_cmd=float(cool_cmd) if cool_cmd is not None else None,
-            fan_cmd=FAN[int(fan_held) - 1] if fan_held is not None else None,
-        )
-        room.step(now, self.speed, inp)
-
-        # the loop's outputs go to the actuators at priority 16
-        await o("analog-output,1").write_property("presentValue", Real(room.heat_loop), priority=16)
-        await o("analog-output,2").write_property("presentValue", Real(room.cool_loop), priority=16)
-        await o("multi-state-output,1").write_property("presentValue", Unsigned(FAN.index(room.fan if fan_held is None else room.fan) + 1), priority=16)
-
-        sensor = o("analog-input,1")
-        if not sensor.outOfService:
-            if self.faults["sensor"]:
-                sensor.reliability = Reliability("open-loop")
-                sensor.presentValue = Real(-50.0)  # what a broken NTC usually reads
-            else:
-                if str(sensor.reliability) != "no-fault-detected":
-                    sensor.reliability = Reliability("no-fault-detected")
-                sensor.presentValue = Real(round(room.temp, 2))
-        for key, value in (("analog-input,2", round(room.outside, 1)), ("analog-input,3", round(room.humidity, 1)), ("analog-input,4", round(room.co2))):
-            if not o(key).outOfService:
-                o(key).presentValue = Real(value)
-        for key, active in (("binary-input,1", room.window_open), ("binary-input,2", room.people > 0)):
-            if not o(key).outOfService:
-                o(key).presentValue = Enumerated(1 if active else 0)
-        o("analog-value,3").presentValue = Real(room.effective_setpoint)
-        loop = o("loop,1")
-        loop.presentValue = Real(room.heat_loop)
-        loop.controlledVariableValue = Real(float(sensor.presentValue))
-        loop.setpoint = Real(room.heat_sp)
+        for sched in [o for o in self.objs.values() if isinstance(o, Sched)]:
+            await self.run_schedule(sched, now)
+        await self.profile.tick(now)
 
         self.track_transitions()
         if now - self._last_log >= 60:
             self._last_log = now
-            self.sample(room, now)
+            self.profile.sample(now)
             self.sync_logs()
-        cal = o("calendar,1")
-        cal.presentValue = any(entry_matches(e, time.localtime(now)) for e in cal.dateList)
+        for cal in [o for o in self.objs.values() if isinstance(o, Cal)]:
+            cal.presentValue = any(entry_matches(e, time.localtime(now)) for e in cal.dateList)
 
-    async def run_schedule(self, now: float) -> None:
-        sched = self.obj("schedule,1")
+    async def run_schedule(self, sched, now: float) -> None:
+        """Work out the schedule's value now and write it to the binary objects it references."""
         if sched.outOfService:
             return
         day = time.localtime(now)
@@ -807,13 +674,16 @@ class RoomController:
             if value is None or isinstance(value, Null):
                 value = sched.scheduleDefault
         raw = value.get_value() if hasattr(value, "get_value") else value
-        target = self.obj("binary-value,1")
         want = Enumerated(1 if int(raw) else 0)
         if sched.presentValue != want:
             sched.presentValue = want
-        pa = target.priorityArray[int(sched.priorityForWriting) - 1]
-        if pa.null is not None or int(getattr(pa, pa._choice)) != int(want):
-            await target.write_property("presentValue", Enumerated(int(want)), priority=int(sched.priorityForWriting))
+        for r in sched.listOfObjectPropertyReferences or []:
+            target = self.obj(str(r.objectIdentifier))
+            if target is None:
+                continue
+            pa = target.priorityArray[int(sched.priorityForWriting) - 1]
+            if pa.null is not None or int(getattr(pa, pa._choice)) != int(want):
+                await target.write_property("presentValue", Enumerated(int(want)), priority=int(sched.priorityForWriting))
 
     # ---- alarms ------------------------------------------------------------
 
@@ -1079,16 +949,11 @@ class RoomController:
                         "object": str(objid), "name": self.label(objid), "subscriber": str(s.client_addr),
                         "process": int(s.proc_id), "confirmed": bool(s.confirmed), "lifetime": int(s.lifetime or 0),
                     })
-        r = self.room
         return {
-            "device": {"instance": self.instance, "name": self.name, "ip": self.ip, "port": self.port, "prefix": self.prefix,
+            "device": {"instance": self.instance, "name": self.name, "type": self.profile.type, "ip": self.ip, "port": self.port, "prefix": self.prefix,
                        "started": self.started, "powered": self.powered, "dcc": self.dcc, "dccUntil": self.dcc_until, "restarting": time.time() < self.restart_until,
                        "lastSync": self.last_sync},
-            "room": {"temp": round(r.temp, 2), "humidity": round(r.humidity, 1), "co2": round(r.co2), "people": r.people,
-                     "autoPeople": self.auto_people, "window": r.window_open, "outside": round(r.outside, 1),
-                     "outsideOverride": r.outside_override, "heat": r.heat, "cool": r.cool, "heatLoop": r.heat_loop,
-                     "coolLoop": r.cool_loop, "fan": r.fan, "heatSp": round(r.heat_sp, 2), "coolSp": round(r.cool_sp, 2),
-                     "speed": self.speed},
+            **self.profile.state(),
             "faults": self.faults,
             "points": points,
             "subscriptions": subs,
@@ -1097,6 +962,31 @@ class RoomController:
             # itself no longer reaches back that far
             "activity": [a for a in self.activity if a["id"] > since][-200 if since <= 0 else None:],
             "activityTruncated": since > 0 and bool(self.activity) and self.activity[0]["id"] > since + 1,
+        }
+
+    def describe(self) -> dict:
+        """The device for an agent that hasn't met its profile: its points with what each takes, the control actions with
+        their values, and the faults."""
+        p = self.profile
+        points = []
+        for key, obj in self.objs.items():
+            pt = self.point(key, obj)
+            item = {k: pt[k] for k in ("key", "type", "instance", "name", "description", "units", "commandable", "writable")}
+            if pt["writable"]:
+                if "states" in pt and pt["type"].startswith("binary"):
+                    item["value"] = {"type": "string", "values": ["inactive", "active"], "texts": pt["states"]}
+                elif "states" in pt:
+                    item["value"] = {"type": "integer", "min": 1, "max": len(pt["states"]), "texts": pt["states"]}
+                else:
+                    lo, hi = getattr(obj, "minPresValue", None), getattr(obj, "maxPresValue", None)
+                    item["value"] = {"type": "number", **({"min": float(lo)} if lo is not None else {}), **({"max": float(hi)} if hi is not None else {})}
+            if pt.get("alarm"):
+                item["alarm"] = {"nc": pt["alarm"]["nc"], "limits": pt["alarm"]["limits"], "alarmValue": pt["alarm"]["alarmValue"]}
+            points.append(item)
+        return {
+            "type": p.type, "label": p.label, "model": p.model, "points": points,
+            "actions": [{"action": k, "scope": "device", **v} for k, v in ACTIONS.items()] + [{"action": k, "scope": p.type, **v} for k, v in p.actions.items()],
+            "faults": [{"name": k, **v} for k, v in {**FAULTS, **p.faults}.items()],
         }
 
     def point(self, key: str, obj) -> dict:

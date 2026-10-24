@@ -1,9 +1,11 @@
 /** The backend's JSON API (src/rasher/server.py). */
 
 export type Adapter = { name: string; ip: string; prefix: number; up: boolean }
-export type Settings = { adapter: string; ip: string; mode: 'extra' | 'own'; instance: number; prefix: string; port: number }
-export type Setup = { settings: Settings; adapters: Adapter[]; admin: boolean; leftover: string[]; windowed: boolean }
-export type DeviceSummary = { instance: number; name: string; ip: string; port: number; powered: boolean }
+export type Settings = { adapter: string; ip: string; mode: 'extra' | 'own'; instance: number; prefix: string; port: number; type: string }
+/** A kind of equipment a device can be (src/rasher/profiles). */
+export type ProfileInfo = { type: string; label: string; model: string }
+export type Setup = { settings: Settings; adapters: Adapter[]; admin: boolean; leftover: string[]; windowed: boolean; profiles: ProfileInfo[] }
+export type DeviceSummary = { instance: number; name: string; type: string; ip: string; port: number; powered: boolean }
 export type IpCheck = { state: 'free' | 'taken' | 'yours' | 'invalid'; text: string; mac?: string }
 
 export type Write = { by: string; at: number; property: string; value: string; priority: number | null }
@@ -42,30 +44,14 @@ export type Point = {
   records?: number
 }
 export type Activity = { id: number; t: number; source: string; service: string; detail: string; kind: 'read' | 'write' | 'cov' | 'alarm' | 'discovery' | 'device' | 'dropped' | 'local'; object: string | null }
-export type Room = {
-  temp: number
-  humidity: number
-  co2: number
-  people: number
-  autoPeople: boolean
-  window: boolean
-  outside: number
-  outsideOverride: number | null
-  heat: number
-  cool: number
-  heatLoop: number
-  coolLoop: number
-  fan: string
-  heatSp: number
-  coolSp: number
-  speed: number
-}
-export type Faults = { slow: number; flaky: boolean; sensor: boolean }
+/** flaky and slow on every device, then the profile's own, each on or off */
+export type Faults = { slow: number; flaky: boolean } & Record<string, boolean | number>
 export type Subscription = { object: string; name: string; subscriber: string; process: number; confirmed: boolean; lifetime: number }
 export type Peer = { address: string; first: number; last: number; requests: number }
 export type DeviceInfo = {
   instance: number
   name: string
+  type: string
   ip: string
   port: number
   prefix: number
@@ -83,7 +69,6 @@ export type State =
       devices: number
       extraIp: string | null
       device: DeviceInfo
-      room: Room
       faults: Faults
       points: Point[]
       subscriptions: Subscription[]
@@ -111,13 +96,8 @@ const post = <T>(path: string, body?: unknown) => call<T>(path, { method: 'POST'
 
 export type Control =
   | { action: 'power'; value: boolean }
-  | { action: 'offset'; value: number }
-  | { action: 'people'; value: number | null }
-  | { action: 'window'; value: boolean }
-  | { action: 'outside'; value: number | null }
-  | { action: 'temp'; value: number }
   | { action: 'speed'; value: number }
-  | { action: 'fault'; name: keyof Faults; value: boolean | number }
+  | { action: 'fault'; name: string; value: boolean | number }
   | { action: 'storm'; value?: number }
   | { action: 'restart'; value: 'warmstart' | 'coldstart' }
   | { action: 'write'; key: string; value: number | string; priority: number | null }
@@ -125,13 +105,21 @@ export type Control =
   | { action: 'oos'; key: string; value: boolean }
   | { action: 'ack'; key: string; value?: string }
   | { action: 'iam' }
+  // fcu
+  | { action: 'offset'; value: number }
+  | { action: 'people'; value: number | null }
+  | { action: 'window'; value: boolean }
+  | { action: 'outside'; value: number | null }
+  | { action: 'temp'; value: number }
 
 export const api = {
   setup: () => call<Setup>('/api/setup'),
   test: (ip: string, adapter: string) => post<IpCheck>('/api/test', { ip, adapter }),
-  start: (body: { adapter: string; mode: 'extra' | 'own'; ip: string; port: number; instance: number; prefix: string }) => post<{ instance: number }>('/api/start', body),
+  start: (body: { adapter: string; mode: 'extra' | 'own'; ip: string; port: number; instance: number; prefix: string; type: string }) => post<{ instance: number }>('/api/start', body),
   devices: () => call<DeviceSummary[]>('/api/devices'),
-  add: (count: number) => post<{ instances: number[] }>('/api/devices', { count }),
+  profiles: () => call<ProfileInfo[]>('/api/profiles'),
+  /** count more like the newest device, or count of a type */
+  add: (count: number, type?: string) => post<{ instances: number[] }>('/api/devices', type ? { devices: [{ type, count }] } : { count }),
   remove: (instance: number) => call<{ ok: true }>(`/api/devices/${instance}`, { method: 'DELETE' }),
   forget: (ip: string) => post<{ ok: true }>(`/api/forget?ip=${encodeURIComponent(ip)}`),
   state: (instance: number, since: number) => call<State>(`/api/d/${instance}/state?since=${since}`),

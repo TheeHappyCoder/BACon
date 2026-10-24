@@ -1,10 +1,11 @@
 import { Button } from '@ui/components/button'
 import type { Control, Point, Running } from '../api'
 import { STATE_LABEL, ago, when } from '../format'
+import type { Scenario } from '../profiles'
 
 const lastChange = (p: Point) => Math.max(...(p.alarm?.stamps.map((s) => s ?? 0) ?? [0]))
 
-export function AlarmsView({ s, control, onSelect }: { s: Running; control: (c: Control) => void; onSelect: (key: string) => void }) {
+export function AlarmsView({ s, control, onSelect, scenarios }: { s: Running; control: (c: Control) => void; onSelect: (key: string) => void; scenarios: Scenario[] }) {
   const list = s.points.filter((p) => p.alarm)
   return (
     <div className="px-[18px] pt-4 pb-6">
@@ -37,12 +38,7 @@ export function AlarmsView({ s, control, onSelect }: { s: Running; control: (c: 
 
       <h3 className="mt-6 mb-2 text-[12px] font-medium text-(--text-muted)">Make something happen</h3>
       <div className="grid grid-cols-2 gap-2.5">
-        {[
-          { title: 'Overheat the room', text: 'Room temperature to 27.5 °C, past its 26 °C high limit. It alarms after 30 s.', go: () => control({ action: 'temp', value: 27.5 }) },
-          { title: 'Open the window', text: 'The window contact alarms after 5 s, and heating and cooling stop.', go: () => control({ action: 'window', value: !s.room.window }), on: s.room.window },
-          { title: 'Break the sensor', text: 'The room sensor reads -50 °C with reliability open-loop: a fault.', go: () => control({ action: 'fault', name: 'sensor', value: !s.faults.sensor }), on: s.faults.sensor },
-          { title: 'Pack the room', text: 'Twelve people: CO2 climbs past 1200 ppm within a few minutes (faster at 120×).', go: () => control({ action: 'people', value: s.room.people >= 12 ? null : 12 }), on: s.room.people >= 12 },
-        ].map((x) => (
+        {scenarios.map((x) => (
           <button key={x.title} onClick={x.go} className="rounded-[14px] border border-(--border-subtle) p-3.5 text-left transition-colors hover:border-(--border-default) data-on:border-(--action-primary) data-on:bg-(--color-primary-50)" data-on={x.on || undefined}>
             <div className="text-[13px] font-medium">{x.on ? `Undo: ${x.title.toLowerCase()}` : x.title}</div>
             <div className="mt-0.5 text-[12px] text-(--text-muted)">{x.text}</div>

@@ -22,14 +22,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import netip
-from .device import RoomController
+from .device import Device
 from .paths import data_dir
+from .profiles import PROFILES
 from .version import __version__
 
 app = FastAPI(title="Rasher")
 lock = asyncio.Lock()
 
-DEFAULTS = {"adapter": "", "ip": "", "mode": "extra", "instance": 2001, "prefix": "RC", "port": 47809, "iamTo": "peers"}
+DEFAULTS = {"adapter": "", "ip": "", "mode": "extra", "instance": 2001, "prefix": "RC", "port": 47809, "iamTo": "peers", "type": "fcu"}
 
 
 def settings() -> dict:
@@ -46,7 +47,7 @@ def save_settings(s: dict) -> None:
 
 
 class Entry:
-    def __init__(self, dev: RoomController, extra_ip: str | None):
+    def __init__(self, dev: Device, extra_ip: str | None):
         self.dev = dev
         self.extra_ip = extra_ip  # the address Rasher added for this device, taken off again when it goes
 
@@ -60,8 +61,11 @@ class Host:
     def next_instance(self, base: int) -> int:
         return max([base - 1, *self.devices]) + 1
 
-    async def add(self, count: int, cfg: dict) -> list[int]:
-        """Start `count` devices, each one instance up from the last and on the next free address (or port)."""
+    async def add(self, types: list[str], cfg: dict) -> list[int]:
+        """Start a device of each type, each one instance up from the last and on the next free address (or port)."""
+        for t in types:
+            _profile(t)
+        count = len(types)
         a = _adapter(cfg["adapter"])
         extra = cfg["mode"] == "extra"
         ips: list[str] = []
@@ -76,7 +80,7 @@ class Host:
         for i in range(count):
             instance = self.next_instance(int(cfg["instance"]))
             ip, port = (ips[i], 47808) if extra else (a["ip"], self.free_port(int(cfg["port"]), a["ip"]))
-            dev = RoomController(ip, a["prefix"], port, instance, f"{cfg['prefix']}-{instance}", cfg["iamTo"])
+            dev = Device(PROFILES[types[i]], ip, a["prefix"], port, instance, f"{cfg['prefix']}-{instance}", cfg["iamTo"])
             try:
                 await dev.start()
             except Exception as e:
@@ -139,7 +143,11 @@ class Host:
         for instance in list(self.devices):
             await self.remove(instance)
 
-    def get(self, instance: int) -> RoomController:
+    def last_type(self, default: str) -> str:
+        """The type of the newest device, so more devices are like it."""
+        return self.devices[max(self.devices)].dev.profile.type if self.devices else default
+
+    def get(self, instance: int) -> Device:
         entry = self.devices.get(instance)
         if not entry:
             raise HTTPException(404, f"No device {instance} here.")
@@ -154,6 +162,12 @@ def _quiet_remove(ip: str) -> None:
         netip.remove(ip)
     except RuntimeError:
         pass  # an ActiveStore address goes at the next reboot anyway
+
+
+def _profile(t: str):
+    if t not in PROFILES:
+        raise HTTPException(400, f"No equipment type {t!r}. There are: {', '.join(PROFILES)}.")
+    return PROFILES[t]
 
 
 def _adapter(name: str) -> dict:
@@ -175,7 +189,14 @@ def version():
 
 @app.get("/api/setup")
 def setup():
-    return {"settings": settings(), "adapters": netip.adapters(), "admin": netip.is_admin(), "leftover": netip.added(), "windowed": host.windows is not None}
+    return {"settings": settings(), "adapters": netip.adapters(), "admin": netip.is_admin(), "leftover": netip.added(), "windowed": host.windows is not None,
+            "profiles": profiles()}
+
+
+@app.get("/api/profiles")
+def profiles():
+    """The kinds of equipment a device can be."""
+    return [{"type": p.type, "label": p.label, "model": p.model} for p in PROFILES.values()]
 
 
 class TestBody(BaseModel):
@@ -197,6 +218,7 @@ class StartBody(BaseModel):
     instance: int
     prefix: str = "RC"
     iamTo: str = "peers"  # also unicast each I-Am to: "peers" (whoever has spoken to it), "none", or "ip:port,ip:port"
+    type: str = "fcu"  # the equipment profile
 
 
 @app.post("/api/start")
@@ -206,23 +228,36 @@ async def start(body: StartBody):
         raise HTTPException(400, "The device instance must be between 0 and 4194302.")
     cfg = {**settings(), **body.model_dump(), "prefix": body.prefix.strip() or "RC"}
     async with lock:
-        new = await host.add(1, cfg)
+        new = await host.add([cfg["type"]], cfg)
     save_settings(cfg)
     return {"instance": new[0]}
 
 
+class Kind(BaseModel):
+    type: str
+    count: int = 1
+
+
 class AddBody(BaseModel):
     count: int = 1
+    devices: list[Kind] | None = None  # a mix, e.g. [{"type": "fcu", "count": 5}], instead of count more like the last
 
 
 @app.post("/api/devices")
 async def add_devices(body: AddBody):
-    """More devices like the last: one instance up, next free address. Each gets its own window when windowed."""
+    """More devices: count more like the last, or a mix of types. Each takes the next instance and the next free
+    address, and gets its own window when windowed."""
     cfg = settings()
     if not cfg["adapter"]:
         raise HTTPException(400, "Set up the first device first.")
     async with lock:
-        new = await host.add(max(1, min(50, body.count)), cfg)
+        if body.devices is None:
+            types = [host.last_type(cfg["type"])] * max(1, min(50, body.count))
+        else:
+            types = [k.type for k in body.devices for _ in range(max(0, k.count))]
+            if not 1 <= len(types) <= 50:
+                raise HTTPException(400, "Add between 1 and 50 devices at a time.")
+        new = await host.add(types, cfg)
     if host.windows:
         for instance in new:
             host.windows.open(instance)
@@ -232,7 +267,7 @@ async def add_devices(body: AddBody):
 @app.get("/api/devices")
 def list_devices():
     return [
-        {"instance": i, "name": e.dev.name, "ip": e.dev.ip, "port": e.dev.port, "powered": e.dev.powered}
+        {"instance": i, "name": e.dev.name, "type": e.dev.profile.type, "ip": e.dev.ip, "port": e.dev.port, "powered": e.dev.powered}
         for i, e in sorted(host.devices.items())
     ]
 
@@ -264,15 +299,14 @@ def state(instance: int, since: int = 0):
 
 @app.get("/api/d/{instance}/trend")
 def trend(instance: int, hours: float = 24):
-    """The room log (trend-log-multiple 1) and the CO2 log, as the device itself holds them."""
-    dev = host.get(instance)
-    since = time.time() - hours * 3600
-    room = dev.logs[("trend-log-multiple", 1)].records
-    co2 = dev.logs[("trend-log", 4)].records
-    return {
-        "room": [[t, *v] for _, t, v in room if t >= since],
-        "co2": [[t, v] for _, t, v in co2 if t >= since],
-    }
+    """What the trends view charts, from the device's own logs, in the profile's shape."""
+    return host.get(instance).profile.trend(time.time() - hours * 3600)
+
+
+@app.get("/api/d/{instance}/profile")
+def profile(instance: int):
+    """The device's type, points, control actions and faults, to drive a profile without knowing it in advance."""
+    return host.get(instance).describe()
 
 
 class Control(BaseModel):
@@ -286,24 +320,9 @@ class Control(BaseModel):
 @app.post("/api/d/{instance}/control")
 async def control(instance: int, c: Control):
     d = host.get(instance)
-    r = d.room
     try:
         if c.action == "power":
             d.power(bool(c.value))
-        elif c.action == "offset":  # the room unit's + and -
-            v = max(-3.0, min(3.0, round(float(c.value) * 2) / 2))
-            await d.write("analog-value,2", v, None, "Room unit")
-        elif c.action == "people":
-            d.auto_people = c.value is None
-            if c.value is not None:
-                r.people = max(0, min(20, int(c.value)))
-        elif c.action == "window":
-            r.window_open = bool(c.value)
-            d.log("Room", "Window", "Opened" if r.window_open else "Closed", kind="local", obj="binary-input,1")
-        elif c.action == "outside":
-            r.outside_override = None if c.value is None else float(c.value)
-        elif c.action == "temp":  # nudge the room, e.g. to test an alarm without waiting
-            r.temp = float(c.value)
         elif c.action == "speed":
             d.speed = max(1, min(600, int(c.value)))
         elif c.action == "fault":
@@ -329,7 +348,7 @@ async def control(instance: int, c: Control):
         elif c.action == "iam":
             d.i_am()
             d.log("Rasher", "I-Am", "Announced on the network", kind="discovery")
-        else:
+        elif not await d.profile.act(c.action, c.value):
             raise HTTPException(400, f"Unknown action {c.action!r}")
     except HTTPException:
         raise
@@ -508,7 +527,7 @@ def main():
     if cfg["adapter"] and host.loop:
         # set up before: start the first device straight away, like YABE's simulator
         try:
-            first = asyncio.run_coroutine_threadsafe(host.add(1, cfg), host.loop).result(timeout=60)[0]
+            first = asyncio.run_coroutine_threadsafe(host.add([cfg["type"]], cfg), host.loop).result(timeout=60)[0]
         except Exception:
             first = None  # the window opens on setup, which shows what went wrong
     windows.open(first)

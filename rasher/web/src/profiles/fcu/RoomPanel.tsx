@@ -1,6 +1,7 @@
 import { Hugeicons } from '@ui/components/hugeicons'
 import { Switch } from '@ui/components/switch'
-import type { Control, Point, Running } from '../api'
+import type { Control, Point } from '../../api'
+import type { FcuRunning } from '.'
 
 const { Minus, Plus } = Hugeicons
 
@@ -65,7 +66,7 @@ function Actuator({ label, point, loop, tone }: { label: string; point: Point; l
   )
 }
 
-export function RoomPanel({ s, control }: { s: Running; control: (c: Control) => void }) {
+export function RoomPanel({ s, control }: { s: FcuRunning; control: (c: Control) => void }) {
   const r = s.room
   const pt = (k: string) => s.points.find((p) => p.key === k) as Point
   const fan = pt('multi-state-output,1')

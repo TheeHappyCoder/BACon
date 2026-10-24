@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Hugeicons } from '@ui/components/hugeicons'
-import type { Point, Running } from '../api'
+import type { Control, Point } from '../../api'
+import type { FcuRunning } from '.'
 
 const { Minus, Plus, Flame, Snowflake, Users, Wind, Sun, Moon, Clock } = Hugeicons
 
@@ -15,20 +16,6 @@ function useClock(offset = 0) {
   }, [])
   const d = new Date(now + offset * 1000)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-/** True for a moment whenever `count` goes up: the LED's flicker for each request the device answers. */
-function usePulse(count: number) {
-  const [on, setOn] = useState(false)
-  const last = useRef(count)
-  useEffect(() => {
-    if (count === last.current) return
-    last.current = count
-    setOn(true)
-    const t = setTimeout(() => setOn(false), 120)
-    return () => clearTimeout(t)
-  }, [count])
-  return on
 }
 
 function FanGlyph({ speed }: { speed: number }) {
@@ -55,7 +42,8 @@ function FanGlyph({ speed }: { speed: number }) {
 
 const co2Tone = (ppm: number) => (ppm >= 1200 ? '#ff6a5f' : ppm >= 900 ? '#ffc04a' : '#7ddc7a')
 
-export function Faceplate({ s, onOffset, onPresence, activityCount }: { s: Running; onOffset: (v: number) => void; onPresence: () => void; activityCount: number }) {
+/** RC-1 on the wall: the display, - and + for the setpoint offset, and Here for comfort now (priority 8). */
+export function Faceplate({ s, control, leds }: { s: FcuRunning; control: (c: Control) => void; leds: React.ReactNode }) {
   const pt = (k: string) => s.points.find((p) => p.key === k) as Point
   const temp = pt('analog-input,1')
   const offset = Number(pt('analog-value,2').value ?? 0)
@@ -68,8 +56,6 @@ export function Faceplate({ s, onOffset, onPresence, activityCount }: { s: Runni
   const off = !s.device.powered
   const offline = off || s.device.restarting
   const clock = useClock(s.device.lastSync?.offset ?? 0)
-  const pulse = usePulse(activityCount)
-  const inAlarm = s.points.some((p) => p.alarm && p.alarm.state !== 'normal')
   const fanSpeed = Math.max(0, (fan.states ?? []).indexOf(fan.display))
   const heating = s.room.heat > 0.5
   const cooling = s.room.cool > 0.5
@@ -83,9 +69,11 @@ export function Faceplate({ s, onOffset, onPresence, activityCount }: { s: Runni
     return () => clearTimeout(t)
   }, [touched])
   const press = (d: number) => {
-    onOffset(Math.max(-3, Math.min(3, offset + d)))
+    control({ action: 'offset', value: Math.max(-3, Math.min(3, offset + d)) })
     setTouched(Date.now())
   }
+  const onPresence = () =>
+    localMode ? control({ action: 'release', key: 'multi-state-value,1', priority: 8 }) : control({ action: 'write', key: 'multi-state-value,1', value: 1, priority: 8 })
 
   const [whole, frac] = (fault ? '--.-' : Number(temp.value).toFixed(1)).split('.')
   const sp = s.room.heatSp === 8 ? 8 : base + offset
@@ -179,10 +167,7 @@ export function Faceplate({ s, onOffset, onPresence, activityCount }: { s: Runni
             <Users className="mr-1.5 size-[15px]" />
             {localMode ? 'Auto' : 'Here'}
           </button>
-          <span className="flex items-center gap-1.5">
-            <span className="rs-led size-[5px]" data-on={pulse && !offline} />
-            <span className={`rs-led size-[5px] ${!off && inAlarm ? 'rs-blink' : ''}`} data-tone={off ? undefined : s.device.restarting ? 'amber' : inAlarm ? 'alarm' : undefined} />
-          </span>
+          {leds}
         </div>
         <button className="rs-key size-12" aria-label="Raise the setpoint" onClick={() => press(0.5)} disabled={offline}>
           <Plus className="size-[20px]" />

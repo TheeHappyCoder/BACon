@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import { TrendChart, SERIES, type ChartSeries } from '@bacon/components/TrendChart'
-
-type Trend = { room: [number, number, number, number, number][]; co2: [number, number][] }
+import { TrendChart } from '@bacon/components/TrendChart'
+import type { Chart } from '../profiles'
 
 const RANGES = [
   { hours: 2, label: '2 hours' },
@@ -9,10 +8,10 @@ const RANGES = [
   { hours: 72, label: '3 days' },
 ]
 
-/** What the device's own trend logs hold: the same records a BMS gets with ReadRange. */
-export function TrendsView({ instance }: { instance: number }) {
+/** What the device's own trend logs hold: the same records a BMS gets with ReadRange. The profile picks the charts. */
+export function TrendsView({ instance, charts }: { instance: number; charts: (data: unknown) => Chart[] }) {
   const [hours, setHours] = useState(24)
-  const [data, setData] = useState<Trend>({ room: [], co2: [] })
+  const [data, setData] = useState<unknown>(null)
   useEffect(() => {
     let stop = false
     const load = () =>
@@ -30,16 +29,6 @@ export function TrendsView({ instance }: { instance: number }) {
 
   const t1 = Date.now() / 1000
   const t0 = t1 - hours * 3600
-  const fmt = (v: number, u: string) => `${Number(v.toFixed(1))} ${u}`
-  const temps: ChartSeries[] = [
-    { id: 't', name: 'Room temperature', color: SERIES[0], points: data.room.map((r) => [r[0], r[1], fmt(r[1], '°C')]) },
-    { id: 's', name: 'Effective setpoint', color: SERIES[2], points: data.room.map((r) => [r[0], r[2], fmt(r[2], '°C')]), hold: true },
-  ]
-  const valves: ChartSeries[] = [
-    { id: 'h', name: 'Heating valve', color: SERIES[1], points: data.room.map((r) => [r[0], r[3], fmt(r[3], '%')]) },
-    { id: 'c', name: 'Cooling valve', color: SERIES[0], points: data.room.map((r) => [r[0], r[4], fmt(r[4], '%')]) },
-  ]
-  const co2: ChartSeries[] = [{ id: 'co2', name: 'Room CO2', color: SERIES[3], points: data.co2.map((r) => [r[0], r[1], fmt(r[1], 'ppm')]) }]
 
   return (
     <div className="px-[18px] pt-3 pb-6">
@@ -57,11 +46,7 @@ export function TrendsView({ instance }: { instance: number }) {
           ))}
         </span>
       </div>
-      {[
-        { title: 'Temperature', series: temps, unit: '°C' },
-        { title: 'Valves', series: valves, unit: '%' },
-        { title: 'CO2', series: co2, unit: 'ppm' },
-      ].map((c) => (
+      {charts(data).map((c) => (
         <section key={c.title} className="mb-3 rounded-[14px] border border-(--border-subtle) px-3.5 pt-3 pb-2">
           <div className="mb-1 flex items-center gap-3 text-[12px]">
             <span className="font-medium">{c.title}</span>

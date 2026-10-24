@@ -2,6 +2,7 @@ import { Button } from '@ui/components/button'
 import { Switch } from '@ui/components/switch'
 import type { Control, Running } from '../api'
 import { ago, when } from '../format'
+import type { ProfileUI } from '../profiles'
 
 function Card({ title, children, aside }: { title: string; children: React.ReactNode; aside?: React.ReactNode }) {
   return (
@@ -27,7 +28,7 @@ function FaultRow({ title, text, children }: { title: string; text: string; chil
   )
 }
 
-export function DeviceView({ s, control }: { s: Running; control: (c: Control) => void }) {
+export function DeviceView({ s, control, faults }: { s: Running; control: (c: Control) => void; faults: ProfileUI['faults'] }) {
   const d = s.device
   const f = s.faults
   return (
@@ -84,9 +85,13 @@ export function DeviceView({ s, control }: { s: Running; control: (c: Control) =
             ))}
           </span>
         </FaultRow>
-        <FaultRow title="Sensor fault" text="Room temperature reads -50 °C with reliability open-loop.">
-          <Switch checked={f.sensor} onCheckedChange={(v) => control({ action: 'fault', name: 'sensor', value: v })} />
-        </FaultRow>
+        {Object.keys(f)
+          .filter((k) => k !== 'flaky' && k !== 'slow')
+          .map((k) => (
+            <FaultRow key={k} title={faults[k]?.title ?? k} text={faults[k]?.text ?? ''}>
+              <Switch checked={!!f[k]} onCheckedChange={(v) => control({ action: 'fault', name: k, value: v })} />
+            </FaultRow>
+          ))}
         <FaultRow title="I-Am storm" text="Ten I-Ams a second for 10 s: what a network monitor should flag.">
           <Button size="xs" variant="secondary" onClick={() => control({ action: 'storm', value: 10 })}>
             Start
