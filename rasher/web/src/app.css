@@ -93,11 +93,6 @@ kbd, code, pre, samp { font-family: inherit; }
 .rs-fan { transform-origin: center; animation: rs-turn var(--rs-fan, 0s) linear infinite; }
 .rs-fan[data-speed="0"] { animation: none; }
 
-/* Air moving down a duct: dashes that run faster with more airflow. */
-@keyframes rs-flow { to { stroke-dashoffset: -24; } }
-.rs-flow { animation: rs-flow var(--rs-flow, 0s) linear infinite; }
-.rs-flow[data-still="true"] { animation: none; }
-
 @media (prefers-reduced-motion: reduce) {
-  .rs-fan, .rs-blink, .rs-flow { animation: none; }
+  .rs-fan, .rs-blink { animation: none; }
 }
