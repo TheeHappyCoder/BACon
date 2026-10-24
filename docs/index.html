@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
-  /* BACon's own tokens (Novacore): ink and paper, one blue action, lime for "live" */
+  /* BACon's own tokens (Novacore): ink and paper, lime for "live", and the sky from the hero */
   :root {
     --ink: #292929;
     --ink-2: #555555;
@@ -23,19 +23,19 @@
     --ink-4: #c4c4c4;
     --paper: #f6f6f6;
     --paper-2: #f0f0f0;
-    --paper-3: #e9e9e9;
     --card: #ffffff;
     --lime: #c6f56f;
     --blue: #305dde;
-    --yellow: #f9eb57;
     --line: rgba(41, 41, 41, 0.08);
     --line-2: rgba(41, 41, 41, 0.14);
-    --line-3: rgba(41, 41, 41, 0.22);
     --frame: 1180px;
-    --gutter: clamp(20px, 4vw, 40px);
+    --gutter: clamp(16px, 4vw, 40px);
+    --radius: 28px;
     --sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
     --mono: 'Geist Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    --serif: 'Instrument Serif', Georgia, serif;
     --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --sky: #6aa6dc url('images/hero-sky.jpg') no-repeat;
   }
   *, *::before, *::after { box-sizing: border-box; }
   html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -43,215 +43,174 @@
   img { display: block; max-width: 100%; }
   a { color: inherit; }
   p { margin: 0; }
-  h1, h2, h3 { margin: 0; font-weight: 500; letter-spacing: -0.035em; }
+  h1, h2, h3 { margin: 0; font-weight: 500; letter-spacing: -0.04em; }
+  em { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spacing: -0.01em; }
   code { font: 400 0.92em var(--mono); letter-spacing: 0; }
   ::selection { background: var(--lime); color: var(--ink); }
   :focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 8px; }
+  .wrap { max-width: var(--frame); width: calc(100% - var(--gutter) * 2); margin: 0 auto; }
 
-  /* ---- the frame: hairline rails down the page, dividers across it, a crosshair where they meet ---- */
-  .rails { position: absolute; inset: 0 0 auto 0; height: 100%; pointer-events: none; z-index: 0; }
-  .rails::before, .rails::after { content: ''; position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line); }
-  .rails::before { left: max(var(--gutter), calc(50% - var(--frame) / 2)); }
-  .rails::after { right: max(var(--gutter), calc(50% - var(--frame) / 2)); }
-  .band { position: relative; border-top: 1px solid var(--line); z-index: 1; }
-  .frame { position: relative; max-width: var(--frame); width: calc(100% - var(--gutter) * 2); margin: 0 auto; }
-  .band > .frame::before, .band > .frame::after {
-    content: ''; position: absolute; top: -6px; width: 11px; height: 11px; z-index: 2;
-    background: linear-gradient(var(--ink-3), var(--ink-3)) center / 1px 100% no-repeat, linear-gradient(var(--ink-3), var(--ink-3)) center / 100% 1px no-repeat;
-  }
-  .band > .frame::before { left: -6px; }
-  .band > .frame::after { right: -6px; }
-
-  /* packets: lime dots that run along a divider now and then, like traffic on the wire */
-  .packet { position: absolute; top: -2px; left: 0; width: 7px; height: 3px; border-radius: 3px; background: var(--lime); box-shadow: 0 0 0 1px rgba(41, 41, 41, 0.08), 0 0 12px 2px rgba(198, 245, 111, 0.9); pointer-events: none; z-index: 3; }
-  .packet::before { content: ''; position: absolute; right: 5px; top: 1px; width: 140px; height: 1px; background: linear-gradient(90deg, transparent, rgba(132, 190, 40, 0.85)); }
-  .packet.rtl::before { right: auto; left: 5px; background: linear-gradient(270deg, transparent, rgba(132, 190, 40, 0.85)); }
-  .packet-label { position: absolute; top: -22px; left: 8px; font: 500 10px/1 var(--mono); color: var(--ink-2); white-space: nowrap; background: var(--paper); padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; }
-
-  /* ---- small parts, as in the app ---- */
-  .eyebrow { display: inline-flex; align-items: center; gap: 8px; font: 500 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
-  .eyebrow .n { color: var(--ink-3); }
-  .chip { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; background: var(--paper-2); font: 500 11.5px/1 var(--mono); letter-spacing: 0; color: var(--ink-2); white-space: nowrap; }
-  .btn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid transparent; font: 500 14px/1 var(--sans); letter-spacing: -0.01em; text-decoration: none; white-space: nowrap; transition: transform 0.15s var(--ease), background-color 0.2s, border-color 0.2s; }
+  /* ---- pieces used everywhere ---- */
+  .badge { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--lime); color: var(--ink); font: 500 11.5px/1 var(--mono); letter-spacing: 0.01em; white-space: nowrap; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid transparent; font: 500 14px/1 var(--sans); letter-spacing: -0.01em; text-decoration: none; white-space: nowrap; cursor: pointer; transition: transform 0.15s var(--ease), background-color 0.2s, border-color 0.2s, box-shadow 0.2s; }
   .btn:active { transform: translateY(1px); }
   .btn svg { width: 15px; height: 15px; flex: none; }
-  .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 1px 2px rgba(48, 93, 222, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.16); }
-  .btn-primary:hover { background: #2a52c7; }
-  .btn-white { background: var(--card); color: var(--ink); border-color: var(--line-2); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-  .btn-white:hover { border-color: var(--line-3); }
-  .btn .meta { font: 400 11.5px/1 var(--mono); opacity: 0.7; }
-  .btn-sm { height: 34px; padding: 0 13px; font-size: 13.5px; }
-  .h2 { font-size: clamp(30px, 3.8vw, 50px); line-height: 1.02; letter-spacing: -0.045em; }
-  .soft { color: var(--ink-3); }
-  .sub { color: var(--ink-2); font-size: 15.5px; max-width: 46ch; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-  .window { overflow: hidden; border-radius: 14px; background: var(--card); border: 1px solid var(--line-3); box-shadow: 0 30px 60px -28px rgba(28, 34, 43, 0.35), 0 2px 6px rgba(28, 34, 43, 0.06); }
+  .btn-sm { height: 34px; padding: 0 14px; font-size: 13.5px; }
+  .btn-lg { height: 48px; padding: 0 22px; font-size: 15px; }
+  .btn-light { background: #fff; color: var(--ink); box-shadow: 0 8px 24px -10px rgba(10, 30, 60, 0.45); }
+  .btn-light:hover { background: #f4f6fa; }
+  .btn-ink { background: var(--ink); color: #fff; }
+  .btn-ink:hover { background: #3a3a3a; }
+  .btn-line { background: var(--card); color: var(--ink); border-color: var(--line-2); }
+  .btn-line:hover { border-color: rgba(41, 41, 41, 0.28); }
+  .glass { background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.32); color: #fff; backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%); }
+  a.glass:hover, button.glass:hover { background: rgba(255, 255, 255, 0.26); }
+  .window { overflow: hidden; border-radius: 14px; background: var(--card); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset; }
   .window-bar { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-bottom: 1px solid var(--line); background: linear-gradient(#fbfbfb, #f5f5f5); font: 500 11.5px/1 var(--mono); color: var(--ink-3); }
   .window-bar i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-4); opacity: 0.55; }
   .window-bar span { margin: 0 auto; transform: translateX(-19px); }
   .window img { width: 100%; height: auto; aspect-ratio: 960 / 600; background: var(--paper); }
-
-  /* ---- nav ---- */
-  .nav { z-index: 50; background: rgba(240, 242, 245, 0.72); backdrop-filter: saturate(160%) blur(14px); -webkit-backdrop-filter: saturate(160%) blur(14px); border-bottom: 1px solid transparent; transition: border-color 0.2s, background-color 0.2s; }
-  .nav .frame { display: flex; align-items: center; gap: 26px; height: 60px; }
-  .brand { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; font-weight: 500; font-size: 16px; letter-spacing: -0.02em; }
-  .nav-links { display: flex; gap: 20px; }
-  .nav-links a { text-decoration: none; font-size: 13.5px; color: var(--ink-2); }
-  .nav-links a:hover { color: var(--ink); }
-  .nav .spacer { flex: 1; }
-  .nav .gh { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--ink-2); text-decoration: none; }
-  .nav .gh:hover { color: var(--ink); }
-  .nav .gh svg { width: 16px; height: 16px; }
+  /* the app in a pane of glass, as in the hero */
+  .rim { padding: 9px; border-radius: 22px; background: rgba(255, 255, 255, 0.24); border: 1px solid rgba(255, 255, 255, 0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 30px 70px -30px rgba(10, 40, 90, 0.45); }
   .mark .arc-in { animation: wave 2.6s ease-in-out infinite; }
   .mark .arc-out { animation: wave 2.6s ease-in-out 0.25s infinite; }
   @keyframes wave { 0%, 100% { opacity: 0.35; } 35% { opacity: 1; } }
+  .brand { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; font-weight: 500; font-size: 16px; letter-spacing: -0.02em; }
+
+  /* ---- section heads: a lime label, a big centred line with one italic word, one sentence ---- */
+  section.block { padding-top: clamp(88px, 11vw, 150px); }
+  .head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; margin: 0 auto clamp(36px, 5vw, 56px); max-width: 860px; }
+  .head h2 { font-size: clamp(36px, 5vw, 66px); line-height: 1; letter-spacing: -0.05em; }
+  .head h2 em { color: var(--ink); }
+  .head p { font-size: clamp(16px, 1.3vw, 18px); color: var(--ink-2); max-width: 48ch; }
+
+  /* ---- the page nav: a floating pill, shown once the hero is out of view ---- */
+  .nav { position: fixed; z-index: 50; top: 12px; left: 50%; transform: translate(-50%, -140%); opacity: 0; transition: transform 0.4s var(--ease), opacity 0.3s; display: grid; grid-template-columns: auto auto auto; align-items: center; gap: 22px; height: 52px; padding: 0 8px 0 16px; border-radius: 999px; background: rgba(255, 255, 255, 0.78); border: 1px solid var(--line); box-shadow: 0 12px 30px -16px rgba(28, 34, 43, 0.3); backdrop-filter: saturate(160%) blur(16px); -webkit-backdrop-filter: saturate(160%) blur(16px); }
+  .nav.show { transform: translate(-50%, 0); opacity: 1; }
+  .nav .links { display: flex; gap: 4px; }
+  .nav .links a { height: 34px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 999px; font-size: 13.5px; color: var(--ink-2); text-decoration: none; }
+  .nav .links a:hover { background: var(--paper-2); color: var(--ink); }
 
   /* ---- hero: a rounded panel full of sky, the app rising out of the clouds ---- */
-  .hero-wrap { position: relative; z-index: 2; padding: 10px; background: var(--paper); }
-  .hero {
-    position: relative; overflow: hidden; isolation: isolate;
-    height: clamp(700px, calc(100svh - 20px), 1000px);
-    border-radius: 28px;
-    background: #6aa6dc url('images/hero-sky.jpg') center 78% / cover no-repeat;
-    color: #fff;
-  }
+  .hero-wrap { padding: 10px; }
+  .hero { position: relative; overflow: hidden; isolation: isolate; height: clamp(700px, calc(100svh - 20px), 1000px); border-radius: var(--radius); background: var(--sky); background-size: cover; background-position: center 78%; color: #fff; }
   .hero::before { content: ''; position: absolute; inset: 0; z-index: 0; background: linear-gradient(180deg, rgba(18, 52, 98, 0.32) 0%, rgba(18, 52, 98, 0.08) 34%, transparent 55%); pointer-events: none; }
-  .hero-nav { position: absolute; z-index: 3; top: 18px; left: 22px; right: 18px; display: flex; align-items: center; gap: 16px; }
-  .hero-nav .brand { color: #fff; }
-  .hero-nav .links { display: flex; gap: 2px; margin: 0 auto; padding: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.26); backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%); }
+  /* three columns, the links in the middle one: they sit on the page's centre line whatever the sides hold */
+  .hero-nav { position: absolute; z-index: 3; top: 18px; left: 22px; right: 18px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+  .hero-nav .brand { color: #fff; justify-self: start; }
+  .hero-nav .links { display: flex; gap: 2px; padding: 4px; border-radius: 999px; }
   .hero-nav .links a { height: 32px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 999px; font-size: 13.5px; color: rgba(255, 255, 255, 0.92); text-decoration: none; transition: background-color 0.2s; }
   .hero-nav .links a:hover { background: rgba(255, 255, 255, 0.16); }
-  .hero-nav .end { display: flex; align-items: center; gap: 8px; }
-  .glass { background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.3); color: #fff; backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%); }
-  .glass:hover { background: rgba(255, 255, 255, 0.24); }
-  .btn-light { background: #fff; color: var(--ink); box-shadow: 0 8px 24px -10px rgba(10, 30, 60, 0.45); }
-  .btn-light:hover { background: #f4f6fa; }
+  .hero-nav .end { justify-self: end; display: flex; align-items: center; gap: 8px; }
   .hero-copy { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; text-align: center; padding: clamp(96px, 15vh, 150px) 20px 0; }
-  .kicker { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 13px 0 11px; border-radius: 999px; font-size: 12.5px; text-decoration: none; }
-  .kicker .live { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 3px rgba(198, 245, 111, 0.35); }
-  .kicker .v { font: 500 11.5px/1 var(--mono); opacity: 0.85; }
-  .hero h1 { margin-top: 22px; font-size: clamp(48px, min(7vw, 10.5vh), 104px); line-height: 0.95; letter-spacing: -0.05em; font-weight: 500; text-shadow: 0 2px 30px rgba(10, 40, 90, 0.18); }
-  .hero h1 em { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400; letter-spacing: -0.015em; }
-  .hero .lead { margin-top: 18px; font-size: clamp(16px, 1.35vw, 19px); line-height: 1.45; color: rgba(255, 255, 255, 0.9); max-width: 40ch; text-shadow: 0 1px 14px rgba(10, 40, 90, 0.25); }
+  .kicker { display: inline-flex; align-items: center; gap: 9px; height: 32px; padding: 0 13px 0 4px; border-radius: 999px; font-size: 13px; text-decoration: none; }
+  .hero h1 { margin-top: 22px; font-size: clamp(48px, min(7vw, 10.5vh), 104px); line-height: 0.95; letter-spacing: -0.05em; text-shadow: 0 2px 30px rgba(10, 40, 90, 0.18); }
+  .hero .lead { margin-top: 18px; font-size: clamp(16px, 1.35vw, 19px); line-height: 1.45; color: rgba(255, 255, 255, 0.92); max-width: 40ch; text-shadow: 0 1px 14px rgba(10, 40, 90, 0.25); }
   .hero .ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 28px; }
-  .btn-lg { height: 46px; padding: 0 20px; font-size: 14.5px; }
-  .btn-lg svg { width: 15px; height: 15px; }
-  /* the app, in a pane of glass, cut off by the bottom of the panel */
   .hero-shot { position: absolute; z-index: 1; left: 50%; bottom: 0; transform: translateX(-50%); width: min(1080px, calc(100% - 64px)); top: clamp(400px, 57%, 600px); }
-  .hero-shot .rim { height: 100%; padding: 9px 9px 0; border-radius: 22px 22px 0 0; background: rgba(255, 255, 255, 0.22); border: 1px solid rgba(255, 255, 255, 0.5); border-bottom: 0; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 -10px 60px -20px rgba(10, 40, 90, 0.35); }
-  .hero-shot .window { border-radius: 14px 14px 0 0; border: 0; height: calc(100% + 1px); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset; }
+  .hero-shot .rim { height: 100%; padding-bottom: 0; border-bottom: 0; border-radius: 22px 22px 0 0; box-shadow: 0 -10px 60px -20px rgba(10, 40, 90, 0.35); }
+  .hero-shot .window { border-radius: 14px 14px 0 0; height: calc(100% + 1px); }
 
-  /* the page nav: hidden over the hero, slides in once you have scrolled past it */
-  .nav { position: fixed; left: 0; right: 0; top: 0; transform: translateY(-100%); transition: transform 0.35s var(--ease), border-color 0.2s; border-bottom-color: var(--line); background: rgba(246, 246, 246, 0.86); }
-  .nav.show { transform: none; }
-
-  /* ---- features: one showcase, the list on the left like the app's sidebars ---- */
-  .section-head { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: clamp(56px, 7vw, 88px) 0 32px; }
-  .section-head .h2 { margin-top: 14px; }
-  .showcase { display: grid; grid-template-columns: 330px 1fr; gap: 20px; align-items: start; padding-bottom: clamp(48px, 6vw, 72px); }
-  .tabs { display: flex; flex-direction: column; gap: 2px; }
-  .tab { position: relative; text-align: left; border: 0; background: transparent; cursor: pointer; border-radius: 12px; padding: 12px 14px 14px; font: inherit; color: inherit; transition: background-color 0.2s, box-shadow 0.2s; }
-  .tab:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
-  .tab[aria-selected='true'] { background: var(--card); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 0 0 1px var(--line); }
+  /* ---- features: a sky panel, glass tabs on the left, the app on the right ---- */
+  .sky-panel { position: relative; overflow: hidden; isolation: isolate; border-radius: var(--radius); background: var(--sky); background-size: cover; color: #fff; }
+  .sky-panel::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgba(18, 52, 98, 0.28), rgba(18, 52, 98, 0.04) 45%, transparent); }
+  .showcase { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: center; padding: clamp(18px, 2.4vw, 32px); background-position: center 35%; }
+  .tabs { display: flex; flex-direction: column; gap: 6px; }
+  .tab { position: relative; overflow: hidden; text-align: left; cursor: pointer; border-radius: 16px; padding: 14px 16px 16px; font: inherit; color: #fff; transition: background-color 0.25s, color 0.25s, box-shadow 0.25s; }
+  .tab[aria-selected='true'] { background: #fff; color: var(--ink); border-color: #fff; box-shadow: 0 14px 30px -16px rgba(10, 30, 60, 0.5); }
   .tab .row { display: flex; align-items: center; gap: 10px; }
-  .tab .dot { width: 3px; height: 18px; border-radius: 3px; background: var(--ink-4); flex: none; transition: background-color 0.2s; }
-  .tab[aria-selected='true'] .dot { background: var(--blue); }
-  .tab .t { font-size: 14.5px; font-weight: 500; letter-spacing: -0.015em; }
-  .tab .chip { margin-left: auto; height: 20px; font-size: 10.5px; }
+  .tab .t { font-size: 15px; font-weight: 500; letter-spacing: -0.015em; }
+  .tab .svc { margin-left: auto; font: 500 10.5px/1 var(--mono); opacity: 0.75; white-space: nowrap; }
+  .tab[aria-selected='true'] .svc { opacity: 1; color: var(--ink-3); }
   .tab .d { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.35s var(--ease); }
-  .tab .d > p { overflow: hidden; color: var(--ink-2); font-size: 13.5px; line-height: 1.5; padding-left: 13px; }
+  .tab .d > p { overflow: hidden; color: var(--ink-2); font-size: 13.5px; line-height: 1.5; }
   .tab[aria-selected='true'] .d { grid-template-rows: 1fr; }
   .tab[aria-selected='true'] .d > p { padding-top: 6px; }
-  .tab .bar { position: absolute; left: 27px; right: 14px; bottom: 6px; height: 2px; border-radius: 2px; background: var(--paper-2); overflow: hidden; opacity: 0; }
+  .tab .bar { position: absolute; left: 16px; right: 16px; bottom: 7px; height: 2px; border-radius: 2px; background: var(--paper-2); overflow: hidden; opacity: 0; }
   .tab[aria-selected='true'] .bar { opacity: 1; }
-  .tab .bar i { display: block; height: 100%; width: 0; background: var(--blue); border-radius: 2px; }
-  .stage .window img { transition: opacity 0.3s ease; }
-  .stage .window img.fade { opacity: 0; }
+  .tab .bar i { display: block; height: 100%; width: 0; background: var(--ink); border-radius: 2px; }
+  .stage img { transition: opacity 0.3s ease; }
+  .stage img.fade { opacity: 0; }
 
-  /* ---- story: bento cards ---- */
-  .bento { display: grid; grid-template-columns: 1fr 1.35fr 1fr; gap: 12px; padding: clamp(48px, 6vw, 72px) 0; }
-  .tile { border-radius: 20px; padding: 26px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-  .tile.dark { position: relative; overflow: hidden; background: #292929; color: #fff; border-color: transparent; }
-  .tile.dark::before { content: ''; position: absolute; top: -120px; left: -80px; width: 340px; height: 340px; border-radius: 50%; background: radial-gradient(circle, rgba(131, 231, 238, 0.22), transparent 65%); }
-  .tile.dark .eyebrow { color: rgba(255, 255, 255, 0.55); }
-  .tile.dark .eyebrow .n { color: rgba(255, 255, 255, 0.35); }
-  .tile .big { position: relative; font-size: clamp(72px, 8vw, 112px); line-height: 0.9; letter-spacing: -0.07em; font-weight: 500; margin-top: 22px; }
-  .tile .big-k { position: relative; margin-top: 14px; font-size: 14px; color: rgba(255, 255, 255, 0.65); }
-  .tile .big-k code { color: #fff; background: rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 1px 6px; font-size: 12.5px; }
-  .tile.text { display: flex; flex-direction: column; justify-content: space-between; gap: 18px; }
-  .tile.text p:first-child { font-size: clamp(19px, 1.7vw, 23px); line-height: 1.3; letter-spacing: -0.025em; }
-  .tile.text p + p { color: var(--ink-2); font-size: 14.5px; }
-  .tile.text .sig { font: 500 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
-  .tile.facts { display: grid; grid-template-rows: repeat(3, 1fr); padding: 6px 26px; }
-  .fact { display: flex; align-items: center; gap: 14px; border-top: 1px solid var(--line); }
+  /* ---- story: bento, the big number on sky ---- */
+  .bento { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 12px; }
+  .tile { border-radius: 24px; padding: 30px; background: var(--card); border: 1px solid var(--line); }
+  .tile.sky { position: relative; overflow: hidden; isolation: isolate; border: 0; color: #fff; background: var(--sky); background-size: cover; background-position: 80% 40%; }
+  .tile.sky::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(18, 52, 98, 0.35), rgba(18, 52, 98, 0.05) 70%); }
+  .tile .big { font-size: clamp(80px, 9vw, 128px); line-height: 0.88; letter-spacing: -0.07em; font-weight: 500; margin-top: 28px; text-shadow: 0 2px 30px rgba(10, 40, 90, 0.2); }
+  .tile .big-k { margin-top: 16px; font-size: 14.5px; color: rgba(255, 255, 255, 0.92); }
+  .tile .big-k code { background: rgba(255, 255, 255, 0.18); border-radius: 6px; padding: 1px 6px; font-size: 12.5px; }
+  .tile.text { display: flex; flex-direction: column; justify-content: space-between; gap: 22px; }
+  .tile.text p:first-child { font-size: clamp(20px, 1.8vw, 25px); line-height: 1.28; letter-spacing: -0.03em; }
+  .tile.text p + p { color: var(--ink-2); font-size: 15px; }
+  .tile.text .sig { font-family: var(--serif); font-style: italic; font-size: 19px; color: var(--ink-3); }
+  .tile.facts { display: grid; grid-template-rows: repeat(3, 1fr); padding: 8px 30px; }
+  .fact { display: flex; align-items: center; gap: 16px; border-top: 1px solid var(--line); }
   .fact:first-child { border-top: 0; }
-  .fact b { font-size: 30px; font-weight: 500; letter-spacing: -0.045em; min-width: 78px; }
-  .fact b small { font-size: 0.45em; color: var(--ink-3); margin-left: 2px; letter-spacing: 0; }
-  .fact span { font-size: 14px; color: var(--ink-2); line-height: 1.4; }
+  .fact b { font-size: 34px; font-weight: 500; letter-spacing: -0.05em; min-width: 84px; }
+  .fact b small { font-size: 0.42em; color: var(--ink-3); margin-left: 2px; letter-spacing: 0; }
+  .fact span { font-size: 14.5px; color: var(--ink-2); line-height: 1.4; }
 
-  /* ---- queries: one dark panel ---- */
-  .console { overflow: hidden; border-radius: 20px; background: #1f2023; color: #f4f4f5; box-shadow: 0 30px 60px -30px rgba(28, 34, 43, 0.5); margin-bottom: clamp(48px, 6vw, 72px); }
-  .console-bar { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 20px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
-  .console-bar svg { width: 16px; height: 16px; color: rgba(255, 255, 255, 0.4); flex: none; }
-  .console-bar .typed { flex: 1; font: 400 14px/1 var(--mono); color: #fff; white-space: nowrap; overflow: hidden; }
-  .console-bar .caret { display: inline-block; width: 1.5px; height: 16px; background: var(--lime); vertical-align: -3px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+  /* ---- queries: one dark panel, a search box that types its own queries ---- */
+  .console { overflow: hidden; border-radius: 24px; background: #1f2023; color: #f4f4f5; box-shadow: 0 40px 80px -40px rgba(28, 34, 43, 0.55); }
+  .console-bar { display: flex; align-items: center; gap: 12px; height: 62px; padding: 0 22px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+  .console-bar svg { width: 17px; height: 17px; color: rgba(255, 255, 255, 0.4); flex: none; }
+  .console-bar .typed { flex: 1; font: 400 15px/1 var(--mono); color: #fff; white-space: nowrap; overflow: hidden; }
+  .console-bar .caret { display: inline-block; width: 1.5px; height: 17px; background: var(--lime); vertical-align: -3px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
-  .console-bar .hits { font: 500 11.5px/1 var(--mono); padding: 7px 10px; border-radius: 8px; background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.7); white-space: nowrap; transition: background-color 0.3s, color 0.3s; }
+  .console-bar .hits { font: 500 11.5px/1 var(--mono); padding: 7px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.7); white-space: nowrap; transition: background-color 0.3s, color 0.3s; }
   .console-bar .hits.on { background: var(--lime); color: var(--ink); }
-  .qrow { display: grid; grid-template-columns: minmax(180px, 0.42fr) 1fr auto; align-items: center; gap: 20px; padding: 0 12px 0 20px; height: 58px; border-top: 1px solid rgba(255, 255, 255, 0.06); transition: background-color 0.2s; }
+  .qrow { display: grid; grid-template-columns: minmax(200px, 0.42fr) 1fr auto; align-items: center; gap: 20px; padding: 0 14px 0 22px; height: 62px; border-top: 1px solid rgba(255, 255, 255, 0.06); transition: background-color 0.2s; }
   .qrow:first-of-type { border-top: 0; }
   .qrow:hover { background: rgba(255, 255, 255, 0.035); }
-  .qrow .what { display: flex; align-items: center; gap: 10px; font-size: 14px; color: rgba(255, 255, 255, 0.86); }
+  .qrow .what { display: flex; align-items: center; gap: 10px; font-size: 14.5px; color: rgba(255, 255, 255, 0.88); }
   .qrow .what i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-  .qrow code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: #fff; }
+  .qrow code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; color: #fff; }
   .qrow code .k { color: #9db4ff; }
   .qrow code .o { color: rgba(255, 255, 255, 0.4); }
   .qrow code .s { color: #f4c891; }
-  .copy { height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.75); font: 500 12px/1 var(--sans); cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+  .copy { height: 32px; padding: 0 14px; border: 0; border-radius: 999px; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.78); font: 500 12.5px/1 var(--sans); cursor: pointer; transition: background-color 0.15s, color 0.15s; }
   .copy:hover { background: #fff; color: var(--ink); }
   .copy.done { background: var(--lime); color: var(--ink); }
 
-  /* ---- read-only: a light card, the services it uses and never uses ---- */
-  .safe { position: relative; overflow: hidden; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; padding: clamp(28px, 4vw, 44px); background: var(--card); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); margin: clamp(48px, 6vw, 72px) 0; }
-  .safe::before { content: ''; position: absolute; top: -160px; right: -120px; width: 480px; height: 480px; border-radius: 50%; background: radial-gradient(circle, rgba(198, 245, 111, 0.35), transparent 62%); pointer-events: none; }
-  .safe h2 { margin-top: 14px; font-size: clamp(30px, 3.6vw, 46px); line-height: 1.02; letter-spacing: -0.045em; }
-  .safe p { margin-top: 12px; color: var(--ink-2); font-size: 15px; max-width: 44ch; }
-  .svcs { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .svc { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 44px; padding: 0 6px 0 14px; border-radius: 12px; background: var(--paper); border: 1px solid var(--line); font: 400 12.5px/1 var(--mono); }
-  .svc em { font-style: normal; font: 500 10.5px/1 var(--mono); padding: 6px 9px; border-radius: 999px; }
-  .svc.yes em { background: var(--lime); color: var(--ink); }
-  .svc.no { color: var(--ink-3); background: transparent; border-style: dashed; }
-  .svc.no span { text-decoration: line-through; text-decoration-color: var(--ink-4); }
-  .svc.no em { background: var(--paper-2); color: var(--ink-2); }
+  /* ---- read-only: what it uses, what it never does ---- */
+  .svcs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .svc-col { border-radius: 24px; padding: 26px; background: var(--card); border: 1px solid var(--line); }
+  .svc-col h3 { display: flex; align-items: center; gap: 10px; font-size: 18px; letter-spacing: -0.02em; margin-bottom: 14px; }
+  .svc-col.never { background: transparent; border-style: dashed; border-color: rgba(41, 41, 41, 0.18); }
+  .svc-col.never h3 .badge { background: var(--paper-2); color: var(--ink-2); }
+  .svc { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 48px; border-top: 1px solid var(--line); font: 400 14px/1 var(--mono); }
+  .svc small { font: 400 13px/1 var(--sans); color: var(--ink-3); }
+  .never .svc { color: var(--ink-3); }
+  .never .svc span { text-decoration: line-through; text-decoration-color: var(--ink-4); }
 
   /* ---- faq ---- */
-  .faq { margin-bottom: clamp(48px, 6vw, 72px); overflow: hidden; border-radius: 20px; }
+  .faq { max-width: 860px; margin: 0 auto; overflow: hidden; border-radius: 24px; background: var(--card); border: 1px solid var(--line); }
   .faq details + details { border-top: 1px solid var(--line); }
-  summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 20px 24px; font-size: 15.5px; transition: background-color 0.2s; font-weight: 500; letter-spacing: -0.01em; }
+  summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 22px 26px; font-size: 16px; font-weight: 500; letter-spacing: -0.015em; transition: background-color 0.2s; }
   summary::-webkit-details-marker { display: none; }
-  summary .plus { margin-left: auto; width: 22px; height: 22px; border-radius: 50%; background: var(--paper-2); display: grid; place-items: center; flex: none; transition: transform 0.3s var(--ease), background-color 0.2s; }
-  summary .plus::before { content: ''; width: 9px; height: 9px; background: linear-gradient(var(--ink), var(--ink)) center / 100% 1.4px no-repeat, linear-gradient(var(--ink), var(--ink)) center / 1.4px 100% no-repeat; }
+  summary .plus { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: var(--paper-2); display: grid; place-items: center; flex: none; transition: transform 0.3s var(--ease), background-color 0.2s; }
+  summary .plus::before { content: ''; width: 10px; height: 10px; background: linear-gradient(var(--ink), var(--ink)) center / 100% 1.5px no-repeat, linear-gradient(var(--ink), var(--ink)) center / 1.5px 100% no-repeat; }
   details[open] summary .plus { transform: rotate(45deg); background: var(--lime); }
   details:not([open]) summary:hover { background: color-mix(in srgb, var(--ink) 2.5%, transparent); }
-  /* an open item is one panel: the question and its answer share a tint, with even space around the answer */
   details[open] { background: color-mix(in srgb, var(--ink) 2.5%, transparent); }
   details[open] summary { padding-bottom: 10px; }
-  details .a { padding: 0 24px 22px; color: var(--ink-2); font-size: 14.5px; line-height: 1.6; max-width: 70ch; }
+  details .a { padding: 0 26px 24px; color: var(--ink-2); font-size: 15px; line-height: 1.6; max-width: 66ch; }
 
-  /* ---- closing: one big card in the hero's sky ---- */
-  .closing .frame { padding: clamp(48px, 6vw, 72px) 0; }
-  .cta-card { position: relative; overflow: hidden; border-radius: 24px; padding: clamp(44px, 6vw, 80px) 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; background: linear-gradient(180deg, #e7ecf3 0%, #ece8e6 55%, #f2dccb 100%); border: 1px solid var(--line); }
-  .cta-card::after { content: ''; position: absolute; left: 50%; bottom: -40%; width: 120%; height: 80%; transform: translateX(-50%); background: radial-gradient(ellipse 50% 60% at 50% 100%, rgba(255, 196, 140, 0.5), transparent 70%); pointer-events: none; }
-  .cta-card > * { position: relative; z-index: 1; }
-  .cta-card h2 { font-size: clamp(34px, 4.6vw, 60px); line-height: 1; letter-spacing: -0.05em; }
-  .cta-card p { color: #404040; font-size: 15.5px; }
-  .cta-card .ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
-  footer .frame { display: flex; flex-wrap: wrap; gap: 10px 24px; padding: 18px 0 30px; font-size: 12.5px; color: var(--ink-2); }
+  /* ---- closing: the sky again, to bookend the hero ---- */
+  .closing { padding: clamp(88px, 11vw, 150px) 10px 10px; }
+  .closing .sky-panel { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; padding: clamp(80px, 11vw, 150px) 24px; background-position: center 20%; }
+  .closing .sky-panel::before { background: linear-gradient(180deg, rgba(18, 52, 98, 0.3), rgba(18, 52, 98, 0.06)); }
+  .closing h2 { font-size: clamp(42px, 6vw, 84px); line-height: 0.96; letter-spacing: -0.055em; text-shadow: 0 2px 30px rgba(10, 40, 90, 0.18); }
+  .closing p { font-size: clamp(16px, 1.3vw, 18px); color: rgba(255, 255, 255, 0.92); max-width: 44ch; }
+  .closing .ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
+  .closing .smart { margin-top: 6px; font-size: 12.5px; color: rgba(255, 255, 255, 0.75); }
+  footer .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; padding: 26px 0 34px; font-size: 13px; color: var(--ink-2); }
   footer a { text-decoration: none; }
   footer a:hover { color: var(--ink); }
   footer .spacer { flex: 1; }
 
-  .reveal { opacity: 0; transform: translateY(12px); transition: opacity 0.7s var(--ease), transform 0.7s var(--ease); }
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); }
   .reveal.in { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -259,62 +218,52 @@
   }
 
   @media (max-width: 960px) {
-    .nav-links { display: none; }
+    .nav .links { display: none; }
+    .nav { grid-template-columns: auto auto; }
+    .hero-nav { grid-template-columns: 1fr auto; }
     .hero-nav .links { display: none; }
-    .hero-nav .end { margin-left: auto; }
     .hero-shot { width: calc(100% - 28px); top: auto; height: 44%; }
     .showcase { grid-template-columns: 1fr; }
-    .tabs { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; scrollbar-width: none; }
-    .tab { flex: none; padding: 8px 12px; }
-    .tab .d, .tab .chip, .tab .bar { display: none; }
+    .tabs { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
+    .tab { flex: none; padding: 10px 14px; }
+    .tab .d, .tab .svc, .tab .bar { display: none; }
     .bento { grid-template-columns: 1fr; }
     .tile.facts { grid-template-rows: none; }
     .fact { padding: 14px 0; }
-    .qrow { grid-template-columns: 1fr auto; height: auto; padding: 14px 12px 14px 20px; row-gap: 6px; }
+    .qrow { grid-template-columns: 1fr auto; height: auto; padding: 14px 14px 14px 22px; row-gap: 6px; }
     .qrow code { grid-column: 1 / -1; grid-row: 2; }
-    .safe { grid-template-columns: 1fr; }
-    .section-head { flex-direction: column; align-items: flex-start; }
+    .svcs { grid-template-columns: 1fr; }
   }
   @media (max-width: 600px) {
     .hero-nav .glass { display: none; }
     .hero { height: 760px; }
     .hero-copy { padding-top: 92px; }
-    .svcs { grid-template-columns: 1fr; }
-    .nav .gh span { display: none; }
   }
 </style>
 </head>
 <body>
-<div class="rails" aria-hidden="true"></div>
 
 <header class="nav" id="nav">
-  <div class="frame">
-    <a class="brand" href="#top" aria-label="BACon home">
-      <svg class="mark" width="26" height="26" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-width="2.6" aria-hidden="true">
-        <path class="arc-out" d="M25.2 6.8a13 13 0 0 1 0 18.4M6.8 25.2a13 13 0 0 1 0-18.4" stroke="#969696"/>
-        <path class="arc-in" d="M21.7 10.3a8 8 0 0 1 0 11.4M10.3 21.7a8 8 0 0 1 0-11.4" stroke="#292929"/>
-        <circle cx="16" cy="16" r="3.6" fill="#305dde"/>
-      </svg>
-      BACon
-    </a>
-    <nav class="nav-links" aria-label="Sections">
-      <a href="#features">Features</a>
-      <a href="#queries">Queries</a>
-      <a href="#read-only">Read-only</a>
-      <a href="#faq">FAQ</a>
-    </nav>
-    <span class="spacer"></span>
-    <a class="gh" href="https://github.com/TheeHappyCoder/BACon">
-      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
-      <span>GitHub</span>
-    </a>
-    <a class="btn btn-primary btn-sm" href="https://github.com/TheeHappyCoder/BACon/releases/latest/download/BACon.exe">Download</a>
-  </div>
+  <a class="brand" href="#top" aria-label="BACon home">
+    <svg class="mark" width="24" height="24" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-width="2.6" aria-hidden="true">
+      <path class="arc-out" d="M25.2 6.8a13 13 0 0 1 0 18.4M6.8 25.2a13 13 0 0 1 0-18.4" stroke="#969696"/>
+      <path class="arc-in" d="M21.7 10.3a8 8 0 0 1 0 11.4M10.3 21.7a8 8 0 0 1 0-11.4" stroke="#292929"/>
+      <circle cx="16" cy="16" r="3.6" fill="#305dde"/>
+    </svg>
+    BACon
+  </a>
+  <nav class="links" aria-label="Sections">
+    <a href="#features">Features</a>
+    <a href="#queries">Queries</a>
+    <a href="#read-only">Read-only</a>
+    <a href="#faq">FAQ</a>
+  </nav>
+  <a class="btn btn-sm btn-ink" href="https://github.com/TheeHappyCoder/BACon/releases/latest/download/BACon.exe">Download</a>
 </header>
 
 <main id="top">
   <!-- hero -->
-  <section class="hero-wrap" id="top">
+  <section class="hero-wrap">
     <div class="hero">
       <div class="hero-nav">
         <a class="brand" href="#top" aria-label="BACon home">
@@ -325,7 +274,7 @@
           </svg>
           BACon
         </a>
-        <nav class="links" aria-label="Sections">
+        <nav class="links glass" aria-label="Sections">
           <a href="#features">Features</a>
           <a href="#queries">Queries</a>
           <a href="#read-only">Read-only</a>
@@ -337,7 +286,7 @@
         </div>
       </div>
       <div class="hero-copy">
-        <a class="kicker glass" href="https://github.com/TheeHappyCoder/BACon/releases/latest"><span class="live"></span><span class="v" data-version>v0.1.0</span>Schedules and alarms are in</a>
+        <a class="kicker glass" href="https://github.com/TheeHappyCoder/BACon/releases/latest"><span class="badge" data-version>v0.1.0</span>Schedules and alarms are in</a>
         <h1>BACnet, <em>on site.</em></h1>
         <p class="lead">Read every property of every object, find faults in one line, and export it all to Excel.</p>
         <div class="ctas">
@@ -360,18 +309,16 @@
   </section>
 
   <!-- features -->
-  <section class="band" id="features">
-    <div class="frame">
-      <div class="section-head reveal">
-        <div>
-          <span class="eyebrow"><span class="n">01</span> What it does</span>
-          <h2 class="h2">The site visit, <span class="soft">without the front end.</span></h2>
-        </div>
-        <p class="sub">Each one names the BACnet service it runs on. Nothing is mocked up: it's what the controller answers.</p>
+  <section class="block" id="features">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">Features</span>
+        <h2>The site visit, <em>in one app.</em></h2>
+        <p>Each one names the BACnet service it runs on. Nothing is mocked up: it's what the controller answers.</p>
       </div>
-      <div class="showcase reveal">
+      <div class="sky-panel showcase reveal">
         <div class="tabs" role="tablist" aria-label="Features" id="tabs"></div>
-        <div class="stage">
+        <div class="stage rim">
           <div class="window">
             <div class="window-bar"><i></i><i></i><i></i><span id="stage-title">BACon</span></div>
             <img id="stage-img" alt="" width="960" height="600">
@@ -382,18 +329,21 @@
   </section>
 
   <!-- story -->
-  <section class="band">
-    <div class="frame">
+  <section class="block">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">Why it exists</span>
+        <h2>Built on site, <em>for site.</em></h2>
+      </div>
       <div class="bento">
-        <div class="tile dark reveal">
-          <span class="eyebrow"><span class="n">02</span> Why it exists</span>
+        <div class="tile sky reveal">
           <div class="big" data-count="289">289</div>
           <p class="big-k">points with an <code>Input/Output address [3019]</code>, and no way to export them.</p>
         </div>
         <div class="tile text reveal">
-          <p>It started on site: I needed the I/O address of every point and couldn't get the XWorks file off the controller.</p>
+          <p>I needed the I/O address of every point and couldn't get the XWorks file off the controller.</p>
           <p>The explorers I had either couldn't export properties or left the vendor ones out. So I built one that reads everything, then kept adding what I reach for on every visit.</p>
-          <span class="sig">Yes, it's yet another BACnet explorer</span>
+          <span class="sig">Yes, it's yet another BACnet explorer.</span>
         </div>
         <div class="tile facts reveal">
           <div class="fact"><b>20<small>MB</small></b><span>One exe. Runs from a USB stick.</span></div>
@@ -405,14 +355,12 @@
   </section>
 
   <!-- queries -->
-  <section class="band" id="queries">
-    <div class="frame">
-      <div class="section-head reveal">
-        <div>
-          <span class="eyebrow"><span class="n">03</span> Query cookbook</span>
-          <h2 class="h2">Ready-made queries. <span class="soft">Copy, paste, done.</span></h2>
-        </div>
-        <p class="sub"><code>and</code>, <code>or</code>, <code>not</code> and brackets combine them. Case doesn't matter.</p>
+  <section class="block" id="queries">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">Query cookbook</span>
+        <h2>Copy a query, <em>find the fault.</em></h2>
+        <p><code>and</code>, <code>or</code>, <code>not</code> and brackets combine them. Case doesn't matter.</p>
       </div>
       <div class="console reveal" id="qlist">
         <div class="console-bar" aria-hidden="true">
@@ -425,36 +373,38 @@
   </section>
 
   <!-- read-only -->
-  <section class="band" id="read-only">
-    <div class="frame">
-      <div class="safe reveal">
-        <div>
-          <span class="eyebrow"><span class="n">04</span> Read-only</span>
-          <h2>It looks. <span class="soft">It never touches.</span></h2>
-          <p>Plug into a live building without a second thought. No writes, no acknowledging alarms, and COV subscriptions expire on their own if your laptop disappears.</p>
+  <section class="block" id="read-only">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">Read-only</span>
+        <h2>It looks. <em>It never touches.</em></h2>
+        <p>Plug into a live building without a second thought. COV subscriptions even expire on their own if your laptop disappears.</p>
+      </div>
+      <div class="svcs">
+        <div class="svc-col reveal">
+          <h3><span class="badge">Uses</span>Reads</h3>
+          <div class="svc"><span>ReadPropertyMultiple</span><small>every property</small></div>
+          <div class="svc"><span>ReadRange</span><small>trend log history</small></div>
+          <div class="svc"><span>GetEventInformation</span><small>live alarms</small></div>
         </div>
-        <div class="svcs" aria-label="BACnet services BACon uses and never uses">
-          <div class="svc yes"><span>ReadPropertyMultiple</span><em>uses</em></div>
-          <div class="svc no"><span>WriteProperty</span><em>never</em></div>
-          <div class="svc yes"><span>ReadRange</span><em>uses</em></div>
-          <div class="svc no"><span>AcknowledgeAlarm</span><em>never</em></div>
-          <div class="svc yes"><span>GetEventInformation</span><em>uses</em></div>
-          <div class="svc no"><span>ReinitializeDevice</span><em>never</em></div>
+        <div class="svc-col never reveal">
+          <h3><span class="badge">Never</span>Writes</h3>
+          <div class="svc"><span>WriteProperty</span><small>no values changed</small></div>
+          <div class="svc"><span>AcknowledgeAlarm</span><small>no alarms touched</small></div>
+          <div class="svc"><span>ReinitializeDevice</span><small>no restarts</small></div>
         </div>
       </div>
     </div>
   </section>
 
   <!-- faq -->
-  <section class="band" id="faq">
-    <div class="frame">
-      <div class="section-head reveal">
-        <div>
-          <span class="eyebrow"><span class="n">05</span> Questions</span>
-          <h2 class="h2">Before you <span class="soft">plug in.</span></h2>
-        </div>
+  <section class="block" id="faq">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">Questions</span>
+        <h2>Before you <em>plug in.</em></h2>
       </div>
-      <div class="faq card reveal">
+      <div class="faq reveal">
         <details><summary>"Windows protected your PC". Is it safe?<span class="plus"></span></summary><div class="a">That's SmartScreen, shown for apps without a paid code-signing certificate. Click <b>More info</b>, then <b>Run anyway</b>. The release lists the exe's SHA-256 if you want to check it.</div></details>
         <details><summary>It won't connect, or finds no devices<span class="plus"></span></summary><div class="a">Close YABE and other BACnet tools first; only one program can own UDP 47808, and BACon tells you who holds it. Across routers, register with a BBMD or add the controller by IP.</div></details>
         <details><summary>Does it read vendor properties?<span class="plus"></span></summary><div class="a">Yes. Every property a controller reports, named with YABE's vendor mappings, like the Siemens <code>Input/Output address [3019]</code>.</div></details>
@@ -464,38 +414,38 @@
   </section>
 
   <!-- closing -->
-  <section class="band closing">
-    <div class="frame">
-      <div class="cta-card reveal">
-        <h2>Take it to <span class="soft">your next site.</span></h2>
-        <p>Free and open source (MIT), read-only, one exe. Tell me what's missing.</p>
-        <div class="ctas">
-          <a class="btn btn-primary" href="https://github.com/TheeHappyCoder/BACon/releases/latest/download/BACon.exe">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.2H3V5.1Zm0 13.8 7.4 1.1v-7.1H3v6Zm8.2 1.2L21 21.5v-8.6h-9.8v7.2ZM11.2 3.9v7.3H21V2.5l-9.8 1.4Z"/></svg>
-            Download for Windows <span class="meta" data-size>20 MB</span>
-          </a>
-          <a class="btn btn-white" href="https://github.com/TheeHappyCoder/BACon">View on GitHub</a>
-        </div>
+  <section class="closing">
+    <div class="sky-panel reveal">
+      <span class="badge" data-version>v0.1.0</span>
+      <h2>Take it to <em>your next site.</em></h2>
+      <p>Free, open source (MIT) and read-only. Tell me what's missing.</p>
+      <div class="ctas">
+        <a class="btn btn-lg btn-light" href="https://github.com/TheeHappyCoder/BACon/releases/latest/download/BACon.exe">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.2H3V5.1Zm0 13.8 7.4 1.1v-7.1H3v6Zm8.2 1.2L21 21.5v-8.6h-9.8v7.2ZM11.2 3.9v7.3H21V2.5l-9.8 1.4Z"/></svg>
+          Download for Windows
+        </a>
+        <a class="btn btn-lg glass" href="https://github.com/TheeHappyCoder/BACon">View on GitHub</a>
       </div>
+      <p class="smart">First run may show "Windows protected your PC": More info, then Run anyway.</p>
     </div>
   </section>
 </main>
 
-<footer class="band">
-  <div class="frame">
+<footer>
+  <div class="wrap">
     <span>BACon <span data-version-plain>0.1.0</span></span>
     <a href="https://github.com/TheeHappyCoder/BACon/releases">Releases</a>
     <a href="https://github.com/TheeHappyCoder/BACon/issues">Report a problem</a>
     <a href="https://github.com/TheeHappyCoder/BACon/blob/main/LICENSE">MIT licence</a>
     <span class="spacer"></span>
-    <span>Vendor property names from <a href="https://sourceforge.net/projects/yetanotherbacnetexplorer/" style="text-decoration:underline;text-underline-offset:3px">YABE</a>. BACnet stack: bacpypes3.</span>
+    <span>Sky photo by Wim van 't Einde on Unsplash. Vendor property names from <a href="https://sourceforge.net/projects/yetanotherbacnetexplorer/" style="text-decoration:underline;text-underline-offset:3px">YABE</a>.</span>
   </div>
 </footer>
 
 <script>
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
 
-  // ---- features: the list on the left plays its GIF on the right, then moves on to the next ----
+  // ---- features: the tabs on the left play their GIF on the right, then move on to the next ----
   const FEATURES = [
     ["Find what's wrong", 'ReadPropertyMultiple', 'Type a query and press Enter. Points in fault, values too high, across every device.', 'gifs/query.gif', 19.3],
     ['Pick columns, export', 'ReadProperty · ALL', 'Tick any property, vendor ones included, and export to Excel or CSV.', 'gifs/export.gif', 21.0],
@@ -511,11 +461,11 @@
   let timer = null
   const buttons = FEATURES.map(([t, svc, d], i) => {
     const b = document.createElement('button')
-    b.className = 'tab'
+    b.className = 'tab glass'
     b.type = 'button'
     b.setAttribute('role', 'tab')
     b.setAttribute('aria-selected', 'false')
-    b.innerHTML = `<span class="row"><span class="dot"></span><span class="t">${t}</span><span class="chip">${svc}</span></span><span class="d"><p>${d}</p></span><span class="bar"><i></i></span>`
+    b.innerHTML = `<span class="row"><span class="t">${t}</span><span class="svc">${svc}</span></span><span class="d"><p>${d}</p></span><span class="bar"><i></i></span>`
     b.addEventListener('click', () => show(i))
     tabs.appendChild(b)
     return b
@@ -546,7 +496,7 @@
     }))
     timer = setTimeout(() => show((i + 1) % FEATURES.length), secs * 1000)
   }
-  // start when the showcase comes on screen, so the first GIF plays from the top
+  // show the first one straight away; play it from the top when the showcase comes on screen
   show(0)
   new IntersectionObserver(([e], obs) => { if (e.isIntersecting) { obs.disconnect(); current = -1; show(0) } }, { threshold: 0.25 }).observe(tabs)
 
@@ -557,7 +507,7 @@
     ['Frost risk', 'present-value < 5 and units = degrees-celsius', '#83e7ee'],
     ["Anything the controller doesn't trust", 'reliability is set and reliability != no-fault-detected', '#ef4444'],
     ['Overridden or out of service', 'status-flags has overridden or out-of-service = true', '#f9eb57'],
-    ['Siemens points with an I/O address', '[3019] is set', '#305dde'],
+    ['Siemens points with an I/O address', '[3019] is set', '#c6f56f'],
   ]
   const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const KEYWORDS = new Set(['and', 'or', 'not', 'has', 'is', 'set', 'missing', 'contains'])
@@ -610,7 +560,7 @@
   document.querySelectorAll('.reveal').forEach((el) => {
     const n = stagger.get(el.parentElement) ?? 0
     stagger.set(el.parentElement, n + 1)
-    el.style.transitionDelay = `${Math.min(n, 6) * 60}ms`
+    el.style.transitionDelay = `${Math.min(n, 6) * 70}ms`
     io.observe(el)
   })
 
@@ -635,44 +585,13 @@
     requestAnimationFrame(tick)
   }, { threshold: 0.4 }).observe(big)
 
-  // ---- packets on the wire: now and then a dot runs along a visible divider ----
-  if (!reduce) {
-    const SERVICES = ['Who-Is', 'I-Am 1001', 'ReadPropertyMultiple', 'ReadRange', 'GetEventInformation', 'COV notification']
-    const bands = [...document.querySelectorAll('.band:not(.hero)')]
-    const send = () => {
-      const pool = bands.filter((b) => { const r = b.getBoundingClientRect(); return r.top > 70 && r.top < innerHeight - 20 })
-      if (pool.length && !document.hidden) {
-        const band = pool[Math.floor(Math.random() * pool.length)]
-        const rtl = Math.random() < 0.5
-        const p = document.createElement('span')
-        p.className = 'packet' + (rtl ? ' rtl' : '')
-        if (Math.random() < 0.45) {
-          const label = document.createElement('span')
-          label.className = 'packet-label'
-          label.textContent = SERVICES[Math.floor(Math.random() * SERVICES.length)]
-          p.appendChild(label)
-        }
-        band.appendChild(p)
-        const w = band.clientWidth
-        p.animate([{ transform: `translateX(${rtl ? w + 100 : -100}px)`, opacity: 0 }, { opacity: 1, offset: 0.08 }, { opacity: 1, offset: 0.92 }, { transform: `translateX(${rtl ? -100 : w + 100}px)`, opacity: 0 }], {
-          duration: 2600 + Math.random() * 1600,
-          easing: 'cubic-bezier(.45,.05,.4,1)',
-        }).onfinish = () => p.remove()
-      }
-      setTimeout(send, 1600 + Math.random() * 2400)
-    }
-    setTimeout(send, 1400)
-  }
-
-  // ---- the latest release: version and size, straight from GitHub ----
+  // ---- the latest release: its version, straight from GitHub ----
   fetch('https://api.github.com/repos/TheeHappyCoder/BACon/releases/latest')
     .then((r) => (r.ok ? r.json() : null))
     .then((rel) => {
       if (!rel) return
       document.querySelectorAll('[data-version]').forEach((el) => (el.textContent = rel.tag_name))
       document.querySelectorAll('[data-version-plain]').forEach((el) => (el.textContent = rel.tag_name.replace(/^v/, '')))
-      const exe = (rel.assets || []).find((a) => a.name === 'BACon.exe')
-      if (exe) document.querySelectorAll('[data-size]').forEach((el) => (el.textContent = `${Math.round(exe.size / 1048576)} MB`))
     })
     .catch(() => {})
 </script>
