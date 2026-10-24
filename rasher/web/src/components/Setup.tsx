@@ -102,7 +102,10 @@ export function Setup({ onStarted }: { onStarted: (instance: number) => void }) 
                 {data!.profiles.map((p) => (
                   <button
                     key={p.type}
-                    onClick={() => setType(p.type)}
+                    onClick={() => {
+                      setType(p.type)
+                      setPrefix(p.prefix)
+                    }}
                     className={`rounded-[12px] border px-3 py-2 text-left text-[13px] transition-colors ${type === p.type ? 'border-(--action-primary) bg-(--color-primary-50)' : 'border-(--border-subtle) hover:border-(--border-default)'}`}
                   >
                     <span className="font-medium">{p.label}</span>

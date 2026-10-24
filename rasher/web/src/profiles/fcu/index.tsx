@@ -1,11 +1,12 @@
 import { SERIES, type ChartSeries } from '@bacon/components/TrendChart'
 import { Hugeicons } from '@ui/components/hugeicons'
 import type { Running } from '../../api'
+import { BarDivider, BarStepper, BarToggle, FaceBar } from '../../components/controls'
 import type { FaceProps, ProfileUI } from '..'
 import { Faceplate } from './Faceplate'
 import { RoomPanel } from './RoomPanel'
 
-const { Users, Wind, Minus, Plus } = Hugeicons
+const { Users, Wind } = Hugeicons
 
 /** The fan coil room controller, RC-1 (src/rasher/profiles/fcu.py). */
 export type Room = {
@@ -41,28 +42,11 @@ function Face({ s: run, control, leds }: FaceProps) {
       </div>
 
       {/* the room around the unit */}
-      <div className="mx-3 mb-2 flex items-center gap-2 rounded-[14px] border border-(--border-subtle) bg-(--surface-card) px-2.5 py-1.5">
-        <Users className="size-4 text-(--text-muted)" />
-        <span className="text-[12.5px] text-(--text-muted)">People</span>
-        <span className="ml-auto inline-flex h-7 items-center rounded-full bg-(--surface-track) p-[2px]">
-          <button aria-label="Fewer people" className="inline-flex size-6 items-center justify-center rounded-full text-(--text-muted) hover:bg-(--surface-card) disabled:opacity-40" disabled={r.people <= 0} onClick={() => control({ action: 'people', value: r.people - 1 })}>
-            <Minus className="size-3" />
-          </button>
-          <span className="w-6 text-center text-[12.5px] font-medium tabular-nums">{r.people}</span>
-          <button aria-label="More people" className="inline-flex size-6 items-center justify-center rounded-full text-(--text-muted) hover:bg-(--surface-card) disabled:opacity-40" disabled={r.people >= 20} onClick={() => control({ action: 'people', value: r.people + 1 })}>
-            <Plus className="size-3" />
-          </button>
-        </span>
-        <span className="mx-1 h-4 w-px bg-(--border-subtle)" />
-        <button
-          onClick={() => control({ action: 'window', value: !r.window })}
-          aria-pressed={r.window}
-          className={`inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[12.5px] transition-colors ${r.window ? 'bg-(--status-info-bg) text-(--text-strong)' : 'text-(--text-muted) hover:bg-(--surface-track)'}`}
-        >
-          <Wind className="size-3.5" />
-          {r.window ? 'Window open' : 'Window'}
-        </button>
-      </div>
+      <FaceBar>
+        <BarStepper icon={Users} label="People" value={r.people} max={20} less="Fewer people" more="More people" onChange={(v) => control({ action: 'people', value: v })} />
+        <BarDivider />
+        <BarToggle icon={Wind} on={r.window} label="Window" onLabel="Window open" onChange={(v) => control({ action: 'window', value: v })} />
+      </FaceBar>
     </>
   )
 }

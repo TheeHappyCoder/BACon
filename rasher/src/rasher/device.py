@@ -439,6 +439,7 @@ class Profile:
 
     type = ""  # the key in settings and the API
     label = ""
+    prefix = ""  # its devices' names, e.g. RC-2001, unless it's the type set up first, which uses the prefix set up
     model = ""  # the device object's model-name
     location = ""
     description = ""
@@ -979,6 +980,8 @@ class Device:
                     item["value"] = {"type": "integer", "min": 1, "max": len(pt["states"]), "texts": pt["states"]}
                 else:
                     lo, hi = getattr(obj, "minPresValue", None), getattr(obj, "maxPresValue", None)
+                    if lo is None and hi is None and pt["units"] == "%":
+                        lo, hi = 0, 100
                     item["value"] = {"type": "number", **({"min": float(lo)} if lo is not None else {}), **({"max": float(hi)} if hi is not None else {})}
             if pt.get("alarm"):
                 item["alarm"] = {"nc": pt["alarm"]["nc"], "limits": pt["alarm"]["limits"], "alarmValue": pt["alarm"]["alarmValue"]}
@@ -1057,5 +1060,6 @@ class Device:
 
 UNIT = {
     "degrees-celsius": "°C", "percent-relative-humidity": "%RH", "parts-per-million": "ppm", "percent": "%",
-    "delta-degrees-kelvin": "K", "no-units": "",
+    "delta-degrees-kelvin": "K", "no-units": "", "kilowatts": "kW", "kilowatt-hours": "kWh", "volts": "V", "amperes": "A",
+    "hertz": "Hz", "power-factor": "", "liters-per-second": "l/s", "pascals": "Pa",
 }

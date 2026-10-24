@@ -12,8 +12,9 @@ Rasher lives in the BACon repository but is its own app: it isn't part of `BACon
 
 ## What it is
 
-A room controller, RC-1, looking after a meeting room with a fan coil. As many of them as you like. RC-1 is the first
-[equipment profile](#equipment-profiles); other kinds of equipment plug in the same way.
+A room controller, RC-1, looking after a meeting room with a fan coil. As many of them as you like, and next to them
+two more kinds of equipment (see [Equipment profiles](#equipment-profiles)): EM-3, a three-phase energy meter, and
+VC-1, a VAV box with reheat.
 
 - **Open it again for another thermostat.** Like YABE's room simulator: each launch adds a device one instance up
   from the last, on the next free address, in a small window of its own. Add devices does the same for any number at
@@ -39,8 +40,8 @@ A room controller, RC-1, looking after a meeting room with a fan coil. As many o
 | Objects | Analog input, output and value; binary input and value; multi-state output and value; loop; schedule; calendar; notification class; trend log; trend log multiple; device; network port |
 | Commanding | WriteProperty with a real 16-level priority array and relinquish default; the controller's own loop writes at 16, its schedule at 12. Read-only properties refuse writes (write-access-denied), and inputs take writes only when out of service |
 | COV | SubscribeCOV, confirmed and unconfirmed, with lifetimes, on the analog, binary and multi-state objects. Analog objects notify on their COV increment; every object also notifies when its status flags change, and each notification carries the flags a ReadProperty would return |
-| Alarms | Intrinsic reporting: high and low limits on room temperature and CO2, change of state on the window contact; GetEventInformation, GetAlarmSummary, AcknowledgeAlarm |
-| History | Trend logs with three days of history from the room model; ReadRange by position, sequence number and time |
+| Alarms | Intrinsic reporting: high and low limits (room and zone temperature, CO2, demand) and change of state (the window contact, phase failure); GetEventInformation, GetAlarmSummary, AcknowledgeAlarm |
+| History | Trend logs with three days of history from each profile's model; ReadRange by position, sequence number and time |
 | Device management | Who-Is / I-Am, Who-Has / I-Have, ReadPropertyMultiple, DeviceCommunicationControl, ReinitializeDevice (cold start clears the priority arrays), TimeSynchronization and UTCTimeSynchronization. protocol-services-supported and protocol-object-types-supported list exactly these. Each I-Am is broadcast on the device's port and also sent to every address that has spoken to the device (`iamTo` in `/api/start`: `"peers"`, `"none"`, or `"ip:port,ip:port"`), so a BMS on another port hears boots and storms |
 
 ## Equipment profiles
@@ -48,8 +49,17 @@ A room controller, RC-1, looking after a meeting room with a fan coil. As many o
 A device is the same whatever it controls: the power switch and boot, faults, communication control, restarts, time
 sync, I-Am, COV, write rules, alarms, schedules, trend logs and the activity log. What it controls is its **equipment
 profile**: the BACnet objects, the physical model, the control logic that runs each second, the trend history, the
-state its face shows and the control actions it takes. RC-1, the fan coil room controller, is the first profile
-(`fcu`); every device has a type, and the default is `fcu`.
+state its face shows and the control actions it takes. Every device has a type; the default is `fcu`.
+
+| Type | Device | What it has | Its own controls | Its faults |
+|---|---|---|---|---|
+| `fcu` | RC-1 room controller, `RC-` | A four-pipe fan coil in a meeting room: heating and cooling valves, three-speed fan, CO2, window contact, presence, occupancy schedule | `offset`, `people`, `window`, `outside`, `temp` | `sensor` |
+| `meter` | EM-3 energy meter, `EM-` | A three-phase meter on an office floor's board: power, energy, 15-minute demand (alarms over 55 kW), volts and amps per phase, power factor, frequency, phase failure. Nothing to command | `load`, `pf` | `phase` (L3 lost), `ct` (L2 CT backwards) |
+| `vav` | VC-1 VAV controller, `VAV-` | A pressure-independent VAV box with hot water reheat on an open-plan zone: zone and discharge temperature, airflow and its setpoint, duct pressure, min and max airflow, damper, reheat valve, cooling, heating and airflow loops, occupancy schedule | `offset`, `people`, `pressure` (starve it below about 100 Pa), `outside`, `temp` | `sensor`, `damper` (stuck) |
+
+The device's name prefix is the one set up for the first type and the profile's own (`EM-`, `VAV-`) for the others.
+`profiles/common.py` has what more than one profile needs: the weather, the office day, the holiday calendar, the
+occupancy schedule and the trend logs.
 
 To add one, say a chiller plant:
 
@@ -71,11 +81,12 @@ To add one, say a chiller plant:
 2. **Frontend**: `web/src/profiles/chiller/` exporting a `ProfileUI` (see `web/src/profiles/index.tsx`), registered in
    `PROFILES`. `Face` is the middle of the small window, between the name, address and power switch at the top and Add
    devices and More at the bottom; put the unit there with the shared `leds` at the bottom centre, and almost every
-   control: More is for the unusual. `Side` is the left column of the full view. `faults`, `scenarios` and `charts`
-   fill in the faults card, Make something happen and the trends view. A type the UI doesn't know yet still runs,
-   with everything under More.
+   control: More is for the unusual. `components/Unit.tsx` is the unit body (glass, keys, boot screen) and
+   `components/controls.tsx` has the bar under it and the panel rows. `Side` is the left column of the full view.
+   `faults`, `scenarios` and `charts` fill in the faults card, Make something happen and the trends view. A type the
+   UI doesn't know yet still runs, with everything under More.
 
-Once a second profile exists, Setup and Add devices offer a choice of equipment.
+Setup and Add devices ask which kind of equipment.
 
 ## HTTP API
 
@@ -87,10 +98,10 @@ change it).
 | `POST /api/start` | The first device: `{"adapter", "mode": "extra" \| "own", "ip", "port", "instance", "prefix", "iamTo", "type": "fcu"}`. Saved as the pattern for the devices after it |
 | `POST /api/devices` | More devices, each the next instance on the next free address: `{"count": n}` of the same type as the newest, or a mix, `{"devices": [{"type": "fcu", "count": 5}]}` (up to 50 at a time) |
 | `GET /api/devices` | Every device: instance, name, type, address, port, power |
-| `GET /api/profiles` | The types there are |
+| `GET /api/profiles` | The types there are, with their labels and name prefixes |
 | `GET /api/d/{instance}/profile` | Discovery: the device's type, its points (with what each takes when written, and alarm limits), the control actions with their value ranges, and the faults. Enough to drive a profile without knowing it in advance |
-| `GET /api/d/{instance}/state?since=id` | The snapshot: `device` (with `type`), the profile's state (`room` for the FCU), faults, points, COV subscriptions, peers, and the activity after `since` |
-| `POST /api/d/{instance}/control` | `{"action", "key", "value", "priority", "name"}`: `power`, `speed`, `fault`, `storm`, `restart`, `write`, `release`, `oos`, `ack` and `iam` on every device, plus the profile's own (the FCU's `offset`, `people`, `window`, `outside` and `temp`) |
+| `GET /api/d/{instance}/state?since=id` | The snapshot: `device` (with `type`), the profile's state (`room`, `meter` or `zone`), faults, points, COV subscriptions, peers, and the activity after `since` |
+| `POST /api/d/{instance}/control` | `{"action", "key", "value", "priority", "name"}`: `power`, `speed`, `fault`, `storm`, `restart`, `write`, `release`, `oos`, `ack` and `iam` on every device, plus the profile's own (see the table above, or `/profile`) |
 | `GET /api/d/{instance}/trend?hours=24` | The trend data the UI charts, in the profile's shape |
 
 ## Run it
@@ -121,7 +132,7 @@ python rasher/scripts/build.py   # rasher/dist/Rasher.exe
 
 ```
 rasher/src/rasher/   Python backend: the BACnet device, trend logs, network address handling, API
-  profiles/          the equipment profiles: fcu.py is RC-1 and its room
+  profiles/          the equipment profiles: fcu.py (RC-1), meter.py (EM-3), vav.py (VC-1), and common.py
 rasher/web/          React + Vite UI (imports ../../web/src/ui from BACon)
   src/profiles/      each profile's face
 rasher/packaging/    PyInstaller spec, icon

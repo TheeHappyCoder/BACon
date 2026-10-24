@@ -80,7 +80,9 @@ class Host:
         for i in range(count):
             instance = self.next_instance(int(cfg["instance"]))
             ip, port = (ips[i], 47808) if extra else (a["ip"], self.free_port(int(cfg["port"]), a["ip"]))
-            dev = Device(PROFILES[types[i]], ip, a["prefix"], port, instance, f"{cfg['prefix']}-{instance}", cfg["iamTo"])
+            profile = PROFILES[types[i]]
+            prefix = cfg["prefix"] if profile.type == cfg["type"] else profile.prefix
+            dev = Device(profile, ip, a["prefix"], port, instance, f"{prefix}-{instance}", cfg["iamTo"])
             try:
                 await dev.start()
             except Exception as e:
@@ -196,7 +198,7 @@ def setup():
 @app.get("/api/profiles")
 def profiles():
     """The kinds of equipment a device can be."""
-    return [{"type": p.type, "label": p.label, "model": p.model} for p in PROFILES.values()]
+    return [{"type": p.type, "label": p.label, "model": p.model, "prefix": p.prefix} for p in PROFILES.values()]
 
 
 class TestBody(BaseModel):

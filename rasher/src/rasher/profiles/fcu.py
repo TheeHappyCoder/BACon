@@ -6,35 +6,27 @@ own past). Everything is in simulated seconds; the clock can run faster than rea
 ties the model to the controller's objects.
 """
 
-import math
 import random
 import time
 from dataclasses import dataclass, field
 
 from bacpypes3.basetypes import (
     Action,
-    CalendarEntry,
-    DailySchedule,
-    DateRange,
     Destination,
-    DeviceObjectPropertyReference,
     EngineeringUnits,
     EventState,
     EventTransitionBits,
     LimitEnable,
-    NotifyType,
     ObjectPropertyReference,
     Polarity,
     Reliability,
     SetpointReference,
-    SpecialEvent,
-    SpecialEventPeriod,
-    TimeStamp,
 )
 from bacpypes3.constructeddata import ArrayOf, ListOf
-from bacpypes3.primitivedata import CharacterString, Date, Enumerated, Real, Unsigned
+from bacpypes3.primitivedata import CharacterString, Enumerated, Real, Unsigned
 
-from ..device import AI, AIA, AO, AV, AVC, BI, BIA, BVC, MSOC, MSVC, NC, TL, TLM, Cal, LoopObj, Profile, Sched, flags, ir, oid, ref, ts, tv
+from ..device import AI, AIA, AO, AV, AVC, BI, BIA, BVC, MSOC, MSVC, NC, LoopObj, Profile, flags, ir, oid, ref
+from .common import holidays, occupancy_schedule, occupied_by_schedule, office_people, outdoor, trend_logs
 
 MODES = ["Comfort", "Standby", "Economy", "Frost protection"]
 FAN = ["Off", "Low", "Medium", "High"]
@@ -42,24 +34,6 @@ FAN = ["Off", "Low", "Medium", "High"]
 # How far each mode lets the room drift from the setpoint before heating or cooling starts, in kelvin.
 BAND = {"Comfort": 0.5, "Standby": 2.0, "Economy": 4.0}
 FROST = 8.0
-
-
-def outdoor(t: float) -> float:
-    """Outside air: coldest just before sunrise, warmest mid-afternoon, with a slow weather wobble."""
-    lt = time.localtime(t)
-    hour = lt.tm_hour + lt.tm_min / 60 + lt.tm_sec / 3600
-    return 14.0 + 6.0 * math.sin((hour - 9) / 24 * 2 * math.pi) + 1.5 * math.sin(t / 50000)
-
-
-def occupied_by_schedule(t: float) -> bool:
-    """The default weekly occupancy: weekdays 07:00 to 18:00, Saturday morning."""
-    lt = time.localtime(t)
-    minute = lt.tm_hour * 60 + lt.tm_min
-    if lt.tm_wday < 5:
-        return 7 * 60 <= minute < 18 * 60
-    if lt.tm_wday == 5:
-        return 8 * 60 <= minute < 12 * 60
-    return False
 
 
 @dataclass
@@ -155,18 +129,14 @@ class Room:
             self.co2 += random.uniform(-2, 2)
 
     def people_by_schedule(self, t: float) -> int:
-        """How many people a typical office room has at time t, used for the history and Auto presence."""
-        if not occupied_by_schedule(t):
-            return 0
-        lt = time.localtime(t)
-        if lt.tm_hour == 12:
-            return 1  # lunch
-        return 2 + (lt.tm_yday + lt.tm_hour) % 3
+        """How many people the room has at time t, used for the history and Auto presence."""
+        return office_people(t)
 
 
 class FCU(Profile):
     type = "fcu"
     label = "Fan coil room controller"
+    prefix = "RC"
     model = "RC-1 Room controller"
     location = "Level 2, Meeting room 2.04"
     description = "Simulated room controller: heating, cooling, fan coil, CO2"
@@ -270,55 +240,14 @@ class FCU(Profile):
                recipientList=ListOf(Destination)([])),
         ]
 
-        year = time.localtime(now).tm_year - 1900
-        objs.append(Cal(
-            objectIdentifier=("calendar", 1), objectName="Public holidays", presentValue=False,
-            dateList=ListOf(CalendarEntry)([
-                CalendarEntry(date=Date((255, 1, 1, 255))),
-                CalendarEntry(date=Date((255, 12, 25, 255))),
-                CalendarEntry(date=Date((255, 12, 26, 255))),
-                CalendarEntry(dateRange=DateRange(startDate=Date((year, 12, 27, 255)), endDate=Date((year, 12, 31, 255)))),
-            ]),
-        ))
-        on, off = Enumerated(1), Enumerated(0)
-        week = [DailySchedule(daySchedule=[tv(7, 0, on), tv(18, 0, off)]) for _ in range(5)] + [
-            DailySchedule(daySchedule=[tv(8, 0, on), tv(12, 0, off)]),
-            DailySchedule(daySchedule=[]),
-        ]
-        objs.append(Sched(
-            objectIdentifier=("schedule", 1), objectName="Occupancy schedule", presentValue=on,
-            description="Office hours, Saturday morning",
-            effectivePeriod=DateRange(startDate=Date((255, 255, 255, 255)), endDate=Date((255, 255, 255, 255))),
-            weeklySchedule=ArrayOf(DailySchedule, _length=7)(week),
-            exceptionSchedule=ArrayOf(SpecialEvent)([
-                SpecialEvent(period=SpecialEventPeriod(calendarReference=oid("calendar", 1)), listOfTimeValues=[tv(0, 0, off)], eventPriority=1),
-            ]),
-            scheduleDefault=off, priorityForWriting=12, statusFlags=flags(), reliability=Reliability("no-fault-detected"),
-            outOfService=False, listOfObjectPropertyReferences=ListOf(DeviceObjectPropertyReference)([ref("binary-value", 1)]),
-        ))
-
-        tl = dict(
-            enable=True, stopWhenFull=False, bufferSize=5000, logInterval=6000, statusFlags=flags(),
-            eventState=EventState("normal"), loggingType="polled", alignIntervals=True, intervalOffset=0,
-            notificationThreshold=1000, recordsSinceNotification=0, lastNotifyRecord=0, eventEnable=EventTransitionBits([0, 0, 0]),
-            ackedTransitions=EventTransitionBits([1, 1, 1]), notifyType=NotifyType("event"),
-            eventTimeStamps=ArrayOf(TimeStamp, _length=3)([ts(None), ts(None), ts(None)]), notificationClass=2,
-            recordCount=0, totalRecordCount=0,
-        )
-        for n, (name, src) in enumerate([
+        objs.append(holidays(now))
+        objs.append(occupancy_schedule())
+        objs += trend_logs([
             ("Room temperature log", ref("analog-input", 1)),
             ("Effective setpoint log", ref("analog-value", 3)),
             ("Heating valve log", ref("analog-output", 1)),
             ("Room CO2 log", ref("analog-input", 4)),
-        ], start=1):
-            objs.append(TL(objectIdentifier=("trend-log", n), objectName=name, logDeviceObjectProperty=src, trigger=False, **tl))
-        objs.append(TLM(
-            objectIdentifier=("trend-log-multiple", 1), objectName="Room log",
-            logDeviceObjectProperty=ArrayOf(DeviceObjectPropertyReference)([
-                ref("analog-input", 1), ref("analog-value", 3), ref("analog-output", 1), ref("analog-output", 2),
-            ]),
-            **tl,
-        ))
+        ], ("Room log", [ref("analog-input", 1), ref("analog-value", 3), ref("analog-output", 1), ref("analog-output", 2)]))
         return objs
 
     async def tick(self, now: float) -> None:

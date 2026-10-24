@@ -3,7 +3,7 @@
 export type Adapter = { name: string; ip: string; prefix: number; up: boolean }
 export type Settings = { adapter: string; ip: string; mode: 'extra' | 'own'; instance: number; prefix: string; port: number; type: string }
 /** A kind of equipment a device can be (src/rasher/profiles). */
-export type ProfileInfo = { type: string; label: string; model: string }
+export type ProfileInfo = { type: string; label: string; model: string; prefix: string }
 export type Setup = { settings: Settings; adapters: Adapter[]; admin: boolean; leftover: string[]; windowed: boolean; profiles: ProfileInfo[] }
 export type DeviceSummary = { instance: number; name: string; type: string; ip: string; port: number; powered: boolean }
 export type IpCheck = { state: 'free' | 'taken' | 'yours' | 'invalid'; text: string; mac?: string }
@@ -111,6 +111,11 @@ export type Control =
   | { action: 'window'; value: boolean }
   | { action: 'outside'; value: number | null }
   | { action: 'temp'; value: number }
+  // meter
+  | { action: 'load'; value: number | null }
+  | { action: 'pf'; value: number | null }
+  // vav
+  | { action: 'pressure'; value: number | null }
 
 export const api = {
   setup: () => call<Setup>('/api/setup'),

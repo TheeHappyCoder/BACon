@@ -1,6 +1,8 @@
 import type { ChartSeries } from '@bacon/components/TrendChart'
 import type { Control, Running } from '../api'
 import { fcu } from './fcu'
+import { meter } from './meter'
+import { vav } from './vav'
 
 export type FaceProps = { s: Running; control: (c: Control) => void; leds: React.ReactNode }
 export type Scenario = { title: string; text: string; go: () => void; on?: boolean }
@@ -24,7 +26,7 @@ export type ProfileUI = {
   charts: (data: unknown) => Chart[]
 }
 
-export const PROFILES: Record<string, ProfileUI> = { fcu }
+export const PROFILES: Record<string, ProfileUI> = { fcu, meter, vav }
 
 /** A type the backend has and this UI doesn't yet: its points and controls are all under More. */
 const plain: ProfileUI = {

@@ -2,21 +2,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { Hugeicons } from '@ui/components/hugeicons'
 import type { Control, Point } from '../../api'
+import { useClock } from '../../components/controls'
 import type { FcuRunning } from '.'
 
 const { Minus, Plus, Flame, Snowflake, Users, Wind, Sun, Moon, Clock } = Hugeicons
 
 const MODE_ICON: Record<string, typeof Sun> = { Comfort: Sun, Standby: Clock, Economy: Moon, 'Frost protection': Snowflake }
-
-function useClock(offset = 0) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [])
-  const d = new Date(now + offset * 1000)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
 
 function FanGlyph({ speed }: { speed: number }) {
   // blades turn faster at higher speeds; bars beside it show the step
