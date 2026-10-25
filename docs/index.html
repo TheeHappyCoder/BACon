@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/lenis@1/dist/lenis.css">
 <style>
   /* BACon's own tokens (Novacore): ink and paper, lime for "live", and the sky from the hero */
   :root {
@@ -458,8 +459,14 @@
   </div>
 </footer>
 
+<script src="https://unpkg.com/lenis@1/dist/lenis.min.js"></script>
 <script>
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  // ---- smooth scroll (Lenis); the in-page links glide too, landing clear of the fixed nav ----
+  if (!reduce && window.Lenis) {
+    new Lenis({ autoRaf: true, anchors: { offset: -90 } })
+  }
 
   // ---- features: the tabs on the left play their GIF on the right, then move on to the next ----
   const FEATURES = [
