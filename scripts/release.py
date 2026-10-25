@@ -35,7 +35,8 @@ def main():
     run(sys.executable, os.path.join("scripts", "build.py"))
     run("git", "commit", "-am", f"Release {version}")
     run("git", "tag", f"v{version}")
-    run("git", "push", "--follow-tags")
+    run("git", "push")
+    run("git", "push", "origin", f"v{version}")
     run("gh", "release", "create", f"v{version}", "dist/BACon.exe", "dist/BACon.exe.sha256",
         "--title", f"BACon {version}", "--notes", notes or f"BACon {version}", "--latest")
     run(sys.executable, os.path.join("scripts", "guard_latest.py"))

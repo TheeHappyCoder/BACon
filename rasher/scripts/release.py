@@ -44,7 +44,8 @@ def main():
     if subprocess.run(["git", "diff", "--quiet"], cwd=ROOT).returncode:  # the first release is already at its version
         run("git", "commit", "-am", f"Rasher release {version}")
     run("git", "tag", tag)
-    run("git", "push", "--follow-tags")
+    run("git", "push")
+    run("git", "push", "origin", tag)
     run("gh", "release", "create", tag, EXE, EXE + ".sha256",
         "--title", f"Rasher {version}", "--notes", notes or f"Rasher {version}", "--latest=false")
     run(sys.executable, os.path.join("scripts", "guard_latest.py"))
