@@ -41,7 +41,8 @@ def main():
     with open(exe + ".sha256", "w", encoding="ascii") as f:
         f.write(f"{hashlib.sha256(open(exe, 'rb').read()).hexdigest()}  Rasher.exe\n")
 
-    run("git", "commit", "-am", f"Rasher release {version}")
+    if subprocess.run(["git", "diff", "--quiet"], cwd=ROOT).returncode:  # the first release is already at its version
+        run("git", "commit", "-am", f"Rasher release {version}")
     run("git", "tag", tag)
     run("git", "push", "--follow-tags")
     run("gh", "release", "create", tag, EXE, EXE + ".sha256",
