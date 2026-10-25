@@ -1,0 +1,26 @@
+# This repo releases BACon (vX.Y.Z) and Rasher (rasher-vX.Y.Z). BACon's updater, README and site follow
+# releases/latest, so whenever any release changes, put the "latest" mark back on BACon's newest if it moved.
+name: Keep BACon as the latest release
+
+on:
+  release:
+    types: [published, released, edited, prereleased, deleted, unpublished]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: guard-latest
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - run: python3 scripts/guard_latest.py
+        env:
+          GH_TOKEN: ${{ github.token }}

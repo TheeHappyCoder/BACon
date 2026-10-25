@@ -3,6 +3,7 @@
     python scripts/release.py 0.2.0 "What changed, one line per item"
 
 The app's update button picks up the newest release (BACon.exe + BACon.exe.sha256). Needs git and gh.
+Rasher releases from this repo too, with rasher/scripts/release.py; this one is only for BACon.
 """
 
 import os
@@ -36,7 +37,8 @@ def main():
     run("git", "tag", f"v{version}")
     run("git", "push", "--follow-tags")
     run("gh", "release", "create", f"v{version}", "dist/BACon.exe", "dist/BACon.exe.sha256",
-        "--title", f"BACon {version}", "--notes", notes or f"BACon {version}")
+        "--title", f"BACon {version}", "--notes", notes or f"BACon {version}", "--latest")
+    run(sys.executable, os.path.join("scripts", "guard_latest.py"))
 
 
 if __name__ == "__main__":

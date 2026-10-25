@@ -9,6 +9,7 @@ reports what is available.
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -19,8 +20,10 @@ import urllib.request
 from .paths import data_dir
 from .version import REPO, __version__
 
-API = f"https://api.github.com/repos/{REPO}/releases/latest"
+# the repo also carries Rasher's releases (tagged rasher-vX.Y.Z), so never ask for GitHub's "latest": list them and pick ours
+API = f"https://api.github.com/repos/{REPO}/releases?per_page=50"
 EXE = "BACon.exe"
+TAG = re.compile(r"v\d+\.\d+\.\d+")
 CHECK_EVERY = 6 * 3600  # seconds; the UI asks on boot, this only stops repeat calls hammering GitHub
 
 FROZEN = bool(getattr(sys, "frozen", False))
@@ -40,6 +43,16 @@ def _get(url: str, timeout: float = 10) -> bytes:
         return r.read()
 
 
+def pick_release(releases: list) -> dict | None:
+    """The newest published BACon release: the highest vX.Y.Z tag with BACon.exe on it."""
+    ours = [
+        r for r in releases
+        if not r.get("draft") and not r.get("prerelease") and TAG.fullmatch(r.get("tag_name") or "")
+        and any(a.get("name") == EXE for a in r.get("assets") or [])
+    ]
+    return max(ours, key=lambda r: _parse(r["tag_name"]), default=None)
+
+
 class Updater:
     def __init__(self):
         self.lock = threading.Lock()
@@ -56,7 +69,9 @@ class Updater:
     def check(self, force: bool = False) -> dict:
         if force or time.time() - self.checked_at > CHECK_EVERY:
             try:
-                rel = json.loads(_get(API))
+                rel = pick_release(json.loads(_get(API)))
+                if rel is None:
+                    raise LookupError
                 assets = {a["name"]: a for a in rel.get("assets", [])}
                 exe, sha = assets.get(EXE), assets.get(EXE + ".sha256")
                 self.latest = {
@@ -69,6 +84,8 @@ class Updater:
                     "size": exe["size"] if exe else 0,
                 }
                 self.error = ""
+            except LookupError:
+                self.error = "No releases published yet."
             except urllib.error.HTTPError as e:
                 self.error = "No releases published yet." if e.code == 404 else f"GitHub answered {e.code}."
             except Exception:

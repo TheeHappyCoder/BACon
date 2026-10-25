@@ -615,11 +615,20 @@
     requestAnimationFrame(tick)
   }, { threshold: 0.4 }).observe(big)
 
-  // ---- the latest release: its version, straight from GitHub ----
-  fetch('https://api.github.com/repos/TheeHappyCoder/BACon/releases/latest')
-    .then((r) => (r.ok ? r.json() : null))
-    .then((rel) => {
+  // ---- the latest release: its version and download, straight from GitHub ----
+  // the repo also carries Rasher's releases (rasher-vX.Y.Z), so pick BACon's newest rather than trusting "latest"
+  const semver = (tag) => tag.slice(1).split('.').map(Number)
+  const newer = (a, b) => { const x = semver(a.tag_name), y = semver(b.tag_name); return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] }
+  fetch('https://api.github.com/repos/TheeHappyCoder/BACon/releases?per_page=50')
+    .then((r) => (r.ok ? r.json() : []))
+    .then((all) => {
+      const rel = all
+        .filter((r) => !r.draft && !r.prerelease && /^v\d+\.\d+\.\d+$/.test(r.tag_name) && r.assets.some((a) => a.name === 'BACon.exe'))
+        .sort(newer).pop()
       if (!rel) return
+      const exe = rel.assets.find((a) => a.name === 'BACon.exe').browser_download_url
+      document.querySelectorAll('a[href$="/releases/latest/download/BACon.exe"]').forEach((a) => (a.href = exe))
+      document.querySelectorAll('a[href$="/releases/latest"]').forEach((a) => (a.href = rel.html_url))
       document.querySelectorAll('[data-version]').forEach((el) => (el.textContent = rel.tag_name))
       document.querySelectorAll('[data-version-plain]').forEach((el) => (el.textContent = rel.tag_name.replace(/^v/, '')))
     })
