@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rasher · BACnet devices, without a site</title>
+<meta name="description" content="Simulated BACnet/IP devices you can see, touch and break: a room controller, an energy meter and a VAV box. For testing a BMS, a scanner or BACon at your desk. Free, one exe.">
+<meta property="og:title" content="Rasher · BACnet devices, without a site">
+<meta property="og:description" content="A room controller, an energy meter and a VAV box on BACnet/IP, with faces you can press and faults on demand. Free, one exe.">
+<meta property="og:image" content="https://theehappycoder.github.io/BACon/images/rasher/fcu-points.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../rasher-icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/lenis@1/dist/lenis.css">
+<link rel="stylesheet" href="../site.css">
+<style>
+  /* Rasher's screenshots are its full view, 1280 × 820 */
+  .window img.full { aspect-ratio: 1280 / 820; }
+  .nav .brand img { width: 24px; height: 24px; border-radius: 6px; }
+  .nav .to-bacon { font-size: 14px; text-decoration: none; opacity: 0.92; margin-right: 4px; }
+  .nav .to-bacon:hover { opacity: 1; }
+
+  /* ---- the three devices: a card each, the face on paper, what it has underneath ---- */
+  .devices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .device { display: flex; flex-direction: column; overflow: hidden; border-radius: 24px; background: var(--card); border: 1px solid var(--line); }
+  .device .shot { display: grid; place-items: center; padding: 28px 28px 0; background: #6aa6dc url('../images/hero-sky.jpg') no-repeat; background-size: cover; background-position: center 40%; }
+  .device:nth-child(2) .shot { background-position: 30% 70%; }
+  .device:nth-child(3) .shot { background-position: 80% 20%; }
+  /* the window down to the bar under the unit; Add devices and More are left off */
+  .device .shot img { width: min(100%, 230px); height: auto; aspect-ratio: 372 / 560; object-fit: cover; object-position: top; border-radius: 16px 16px 0 0; box-shadow: 0 -10px 40px -20px rgba(10, 40, 90, 0.45); }
+  .device .body { display: flex; flex-direction: column; gap: 10px; padding: 24px 26px 26px; }
+  .device h3 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 20px; letter-spacing: -0.03em; }
+  .device h3 code { font-size: 12px; color: var(--ink-3); }
+  .device p { color: var(--ink-2); font-size: 14.5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+  .chips span { height: 26px; display: inline-flex; align-items: center; padding: 0 10px; border-radius: 999px; background: var(--paper); font-size: 12.5px; color: var(--ink-2); }
+  .chips span.fault { background: rgba(255, 185, 162, 0.22); color: #9a3b1c; }
+
+  /* ---- BACnet coverage: six tiles ---- */
+  .coverage { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .coverage .tile { display: flex; flex-direction: column; gap: 10px; padding: 26px; }
+  .coverage h3 { font-size: 18px; letter-spacing: -0.025em; }
+  .coverage p { color: var(--ink-2); font-size: 14.5px; }
+  .coverage .tile span { font: 400 11.5px/1.5 var(--mono); color: var(--ink-3); }
+
+  @media (max-width: 960px) {
+    .devices, .coverage { grid-template-columns: 1fr; }
+    .nav .to-bacon { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <div class="side">
+    <a class="brand" href="#top" aria-label="Rasher home"><img src="../rasher-icon.svg" alt="">Rasher</a>
+    <a class="badge" href="https://github.com/TheeHappyCoder/BACon/releases/tag/rasher-v0.1.0" data-release="rasher" data-version="rasher" style="text-decoration:none">v0.1.0</a>
+  </div>
+  <div class="side">
+    <nav class="links" aria-label="Sections">
+      <a href="#devices">Devices</a>
+      <a href="#inside">Inside</a>
+      <a href="#break">Break it</a>
+      <a href="#bacnet">BACnet</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="to-bacon" href="../">BACon</a>
+    <a class="btn btn-sm dl" href="https://github.com/TheeHappyCoder/BACon/releases/download/rasher-v0.1.0/Rasher.exe" data-download="rasher">Download</a>
+  </div>
+</header>
+
+<main id="top">
+  <!-- hero -->
+  <section class="hero-wrap">
+    <div class="hero">
+      <div class="hero-copy">
+        <h1>BACnet devices, <em>without a site.</em></h1>
+        <p class="lead">Controllers you can see, touch and break. For testing a BMS, a scanner or BACon at your desk.</p>
+        <div class="ctas">
+          <a class="btn btn-lg btn-light" href="https://github.com/TheeHappyCoder/BACon/releases/download/rasher-v0.1.0/Rasher.exe" data-download="rasher">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.2H3V5.1Zm0 13.8 7.4 1.1v-7.1H3v6Zm8.2 1.2L21 21.5v-8.6h-9.8v7.2ZM11.2 3.9v7.3H21V2.5l-9.8 1.4Z"/></svg>
+            Download for Windows
+          </a>
+          <a class="btn btn-lg glass" href="#devices">See the devices</a>
+        </div>
+      </div>
+      <div class="hero-shot">
+        <div class="rim">
+          <div class="window">
+            <div class="window-bar"><i></i><i></i><i></i><span>Rasher · RC-3001</span></div>
+            <img class="full" src="../images/rasher/fcu-points.png" alt="Rasher's full view of a room controller: the wall unit and the room on the left, every point with who last read it on the right" width="1280" height="820">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- devices -->
+  <section class="block" id="devices">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">Devices</span>
+        <h2>Three kinds of kit, <em>any number.</em></h2>
+        <p>Each launch adds a device one instance up, on the next free address, in a small window of its own. Add devices makes fifty at once.</p>
+      </div>
+      <div class="devices">
+        <article class="device reveal">
+          <div class="shot"><img src="../images/rasher/fcu-compact.png" alt="The RC-1 wall unit showing 25.0 °C, setpoint 21, economy mode and 2187 ppm CO2" width="372" height="640" loading="lazy"></div>
+          <div class="body">
+            <h3>RC-1 room controller <code>RC-</code></h3>
+            <p>A four-pipe fan coil in a meeting room: heating and cooling valves, a three-speed fan, CO2, a window contact, presence and an occupancy schedule.</p>
+            <div class="chips"><span>Setpoint offset</span><span>People</span><span>Open window</span><span>Weather</span><span class="fault">Broken sensor</span></div>
+          </div>
+        </article>
+        <article class="device reveal">
+          <div class="shot"><img src="../images/rasher/meter-compact.png" alt="The EM-3 meter showing 10.6 kW on three healthy phases, demand 10.7 kW against a 55 kW limit" width="372" height="640" loading="lazy"></div>
+          <div class="body">
+            <h3>EM-3 energy meter <code>EM-</code></h3>
+            <p>A three-phase meter on an office floor's board: power, energy, 15-minute demand that alarms over 55 kW, volts and amps per phase, power factor and frequency.</p>
+            <div class="chips"><span>Load</span><span>Power factor</span><span class="fault">Lose L3</span><span class="fault">Reversed CT</span></div>
+          </div>
+        </article>
+        <article class="device reveal">
+          <div class="shot"><img src="../images/rasher/vav-compact.png" alt="The VC-1 unit showing a zone at 16.5 °C, airflow 89 l/s against a setpoint of 90 and the reheat valve at 47%" width="372" height="640" loading="lazy"></div>
+          <div class="body">
+            <h3>VC-1 VAV controller <code>VAV-</code></h3>
+            <p>A pressure-independent VAV box with hot water reheat on an open-plan zone: zone and discharge temperature, airflow and its setpoint, duct pressure, damper and reheat.</p>
+            <div class="chips"><span>Setpoint offset</span><span>People</span><span>Duct pressure</span><span class="fault">Broken sensor</span><span class="fault">Stuck damper</span></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- inside: More opens the full view -->
+  <section class="block" id="inside">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">More</span>
+        <h2>See what your <em>BMS sent.</em></h2>
+        <p>The small window is the unit. More opens everything behind it, live as your tools talk to it.</p>
+      </div>
+      <div class="sky-panel showcase reveal">
+        <div class="tabs" role="tablist" aria-label="The full view" id="tabs"></div>
+        <div class="stage rim">
+          <div class="window">
+            <div class="window-bar"><i></i><i></i><i></i><span id="stage-title">Rasher</span></div>
+            <img class="full" id="stage-img" alt="" width="1280" height="820">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- break it -->
+  <section class="block" id="break">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">Break it</span>
+        <h2>It behaves, <em>until it doesn't.</em></h2>
+        <p>Every fault is a switch, so you can find out what your BMS does about it before a real building does.</p>
+      </div>
+      <div class="split reveal">
+        <div class="half yes">
+          <h3>How it behaves <span class="badge">Normal</span></h3>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>The room follows the valves</b><span>and the weather, an open window and the people in it</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Writes land in a real priority array</b><span>16 levels · its loop writes at 16, its schedule at 12</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>A day in a few minutes</b><span>room clock at 1×, 30× or 120×</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Its own address on the LAN</b><span>UDP 47808 on a free IP, or this PC's on 47809 and up</span></div></div>
+        </div>
+        <div class="half no">
+          <h3>How it breaks <span class="badge">On demand</span></h3>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0"/></svg></span><div class="txt"><b>Pull the power</b><span>silent when off · boots, forgets COV, sends I-Am</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></span><div class="txt"><b>A flaky link, or slow replies</b><span>a third of requests dropped · 0.8 s or 2.5 s waits</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></span><div class="txt"><b>A broken sensor</b><span>reads −50 °C with reliability open-loop</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></span><div class="txt"><b>An I-Am storm, a restart</b><span>ten I-Ams a second · warm and cold starts</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- bacnet coverage -->
+  <section class="block" id="bacnet">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">BACnet/IP</span>
+        <h2>Real services, <em>on the wire.</em></h2>
+        <p>Every device is checked over BACnet against a baseline before each change, so what you test against stays put.</p>
+      </div>
+      <div class="coverage">
+        <div class="tile reveal"><h3>Objects</h3><p>Analog and binary inputs and values, multi-state, loops, schedules, calendars, notification classes, trend logs, network port.</p></div>
+        <div class="tile reveal"><h3>Commanding</h3><p>Write and relinquish with a 16-level priority array. Read-only properties refuse, and inputs take writes only when out of service.</p><span>WriteProperty</span></div>
+        <div class="tile reveal"><h3>COV</h3><p>Confirmed and unconfirmed, with lifetimes. Notifies on its increment and whenever the status flags change.</p><span>SubscribeCOV</span></div>
+        <div class="tile reveal"><h3>Alarms</h3><p>High and low limits on temperature, CO2 and demand; change of state on the window contact and phase failure.</p><span>GetEventInformation · GetAlarmSummary · AcknowledgeAlarm</span></div>
+        <div class="tile reveal"><h3>History</h3><p>Trend logs arrive with three days already in them, from each device's own model.</p><span>ReadRange by position, sequence and time</span></div>
+        <div class="tile reveal"><h3>Device management</h3><p>Discovery, communication control, restarts and time sync. A cold start clears the priority arrays.</p><span>Who-Is · Who-Has · ReinitializeDevice · TimeSynchronization</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- faq -->
+  <section class="block" id="faq">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="badge">Questions</span>
+        <h2>Before you <em>break something.</em></h2>
+      </div>
+      <div class="faq reveal">
+        <details><summary>Is it part of BACon?<span class="plus"></span></summary><div class="a">No. It's its own exe and doesn't touch BACon, but they're made to go together: <a href="../" style="text-decoration:underline;text-underline-offset:3px">BACon</a> only reads, and Rasher gives it something to read when you're not on site.</div></details>
+        <details><summary>Can it run on the same PC as BACon or YABE?<span class="plus"></span></summary><div class="a">Yes. Give each device an address of its own (Rasher tests it's free first) and it sits on UDP 47808 like a controller on the LAN. Or put devices on this PC's address on ports 47809 and up.</div></details>
+        <details><summary>Why does it ask for administrator rights?<span class="plus"></span></summary><div class="a">To add each device's address to the network adapter. The address is never used for this PC's own traffic and only lasts until the next restart, so a crash never leaves it behind.</div></details>
+        <details><summary>Can a script or an agent drive it?<span class="plus"></span></summary><div class="a">Yes. Everything the UI does goes through an HTTP API on <code>127.0.0.1:8048</code>: start devices, read their state and activity, write points, switch faults. See the <a href="https://github.com/TheeHappyCoder/BACon/tree/main/rasher#http-api" style="text-decoration:underline;text-underline-offset:3px">README</a>.</div></details>
+        <details><summary>"Windows protected your PC". Is it safe?<span class="plus"></span></summary><div class="a">That's SmartScreen, shown for apps without a paid code-signing certificate. Click <b>More info</b>, then <b>Run anyway</b>. The release lists the exe's SHA-256 if you want to check it.</div></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- closing -->
+  <section class="closing">
+    <div class="sky-panel reveal">
+      <span class="badge" data-version="rasher">v0.1.0</span>
+      <h2>Break it here, <em>not on site.</em></h2>
+      <p>Free, open source (MIT), one exe. Tell me which equipment it should be next.</p>
+      <div class="ctas">
+        <a class="btn btn-lg btn-light" href="https://github.com/TheeHappyCoder/BACon/releases/download/rasher-v0.1.0/Rasher.exe" data-download="rasher">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.2H3V5.1Zm0 13.8 7.4 1.1v-7.1H3v6Zm8.2 1.2L21 21.5v-8.6h-9.8v7.2ZM11.2 3.9v7.3H21V2.5l-9.8 1.4Z"/></svg>
+          Download for Windows
+        </a>
+        <a class="btn btn-lg glass" href="../">Get BACon too</a>
+      </div>
+      <p class="smart">First run may show "Windows protected your PC": More info, then Run anyway.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Rasher <span data-version-plain="rasher">0.1.0</span></span>
+    <a href="../">BACon</a>
+    <a href="https://github.com/TheeHappyCoder/BACon/tree/main/rasher">Source</a>
+    <a href="https://github.com/TheeHappyCoder/BACon/issues">Report a problem</a>
+    <a href="https://github.com/TheeHappyCoder/BACon/blob/main/LICENSE">MIT licence</a>
+    <span class="spacer"></span>
+    <span class="by">Built by Mark Steyn <span class="social"><a href="https://github.com/TheeHappyCoder/BACon" aria-label="BACon on GitHub" title="GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.09 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg></a><a href="https://www.linkedin.com/in/mark-steyn-b71894139/" aria-label="Mark Steyn on LinkedIn" title="LinkedIn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13ZM7.12 20.45H3.56V9h3.56v11.45ZM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0Z"/></svg></a><a href="https://x.com/theehappycoder" aria-label="Mark Steyn on X" title="X"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24h-6.66l-5.21-6.82-5.97 6.82H1.67l7.73-8.84L1.25 2.25h6.83l4.71 6.23 5.45-6.23Zm-1.16 17.52h1.83L7.08 4.13H5.12l11.96 15.64Z"/></svg></a></span></span>
+  </div>
+  <div class="wrap credits">
+    <span>Sky photo by Wim van 't Einde on Unsplash.</span>
+  </div>
+</footer>
+
+<script src="https://unpkg.com/lenis@1/dist/lenis.min.js"></script>
+<script src="../releases.js" defer></script>
+<script>
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  // ---- smooth scroll (Lenis); the in-page links glide too, landing clear of the fixed nav ----
+  if (!reduce && window.Lenis) {
+    new Lenis({ autoRaf: true, anchors: { offset: -90 } })
+  }
+
+  // ---- inside: the tabs on the left show that view on the right, then move on to the next ----
+  const VIEWS = [
+    ['Points', 'ReadProperty · WriteProperty', 'Every point with its value, who last read or wrote it, and at what priority.', 'fcu-points.png', 'RC-3001'],
+    ['Activity', 'Every request', 'Each request as it arrives, filtered by reads, writes, COV, alarms and the ones it ignored.', 'fcu-activity.png', 'RC-3001'],
+    ['Alarms', 'GetEventInformation', 'Each alarm and its state, and buttons to make one happen: push the demand, lose a phase.', 'meter-alarms.png', 'EM-4101'],
+    ['Trends', 'ReadRange', 'The trend logs it serves, charted: three days of history from the moment it starts.', 'vav-trends.png', 'VAV-4102'],
+    ['Network and faults', 'SubscribeCOV', 'Who is talking to it, its COV subscribers, the faults to switch on and the restart buttons.', 'fcu-network.png', 'RC-3001'],
+  ]
+  const SECS = 7
+  const tabs = document.getElementById('tabs')
+  const stageImg = document.getElementById('stage-img')
+  const stageTitle = document.getElementById('stage-title')
+  let current = -1
+  let timer = null
+  const buttons = VIEWS.map(([t, svc, d], i) => {
+    const b = document.createElement('button')
+    b.className = 'tab glass'
+    b.type = 'button'
+    b.setAttribute('role', 'tab')
+    b.setAttribute('aria-selected', 'false')
+    b.innerHTML = `<span class="row"><span class="t">${t}</span><span class="api">${svc}</span></span><span class="d"><p>${d}</p></span><span class="bar"><i></i></span>`
+    b.addEventListener('click', () => show(i))
+    tabs.appendChild(b)
+    return b
+  })
+  for (const [, , , src] of VIEWS) new Image().src = `../images/rasher/${src}` // so switching never waits on a download
+  function show(i) {
+    if (i === current) return
+    current = i
+    const [t, , d, src, name] = VIEWS[i]
+    buttons.forEach((b, k) => b.setAttribute('aria-selected', String(k === i)))
+    stageTitle.textContent = `Rasher · ${name} · ${t}`
+    stageImg.classList.add('fade')
+    setTimeout(() => {
+      stageImg.onload = () => stageImg.classList.remove('fade')
+      stageImg.src = `../images/rasher/${src}`
+      stageImg.alt = d
+    }, 160)
+    for (const b of buttons) {
+      const bar = b.querySelector('.bar i')
+      bar.style.transition = 'none'
+      bar.style.width = '0'
+    }
+    clearTimeout(timer)
+    if (reduce) return
+    const bar = buttons[i].querySelector('.bar i')
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      bar.style.transition = `width ${SECS}s linear`
+      bar.style.width = '100%'
+    }))
+    timer = setTimeout(() => show((i + 1) % VIEWS.length), SECS * 1000)
+  }
+  show(0)
+  new IntersectionObserver(([e], obs) => { if (e.isIntersecting) { obs.disconnect(); current = -1; show(0) } }, { threshold: 0.25 }).observe(tabs)
+
+  // ---- reveal on scroll ----
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target) }
+  }, { rootMargin: '0px 0px -6% 0px', threshold: 0.06 })
+  const stagger = new Map()
+  document.querySelectorAll('.reveal').forEach((el) => {
+    const n = stagger.get(el.parentElement) ?? 0
+    stagger.set(el.parentElement, n + 1)
+    el.style.transitionDelay = `${Math.min(n, 6) * 70}ms`
+    io.observe(el)
+  })
+
+  // ---- the nav: a bar once scrolling starts, out of the way over the closing sky ----
+  const nav = document.getElementById('nav')
+  const closingPanel = document.querySelector('.closing .sky-panel')
+  const onScroll = () => {
+    nav.classList.toggle('solid', scrollY > 8)
+    nav.classList.toggle('away', closingPanel.getBoundingClientRect().top < 90)
+  }
+  addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
+</script>
+</body>
+</html>
