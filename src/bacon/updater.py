@@ -28,6 +28,7 @@ TAG = re.compile(r"v\d+\.\d+\.\d+")
 CHECK_EVERY = 6 * 3600  # seconds; the UI asks on boot, this only stops repeat calls hammering GitHub
 
 FROZEN = bool(getattr(sys, "frozen", False))
+SYS = r"%SystemRoot%\System32"
 
 # BACON_MOCK_UPDATE=1 rehearses an update: a pretend 9.9.9, a pretend download, and a restart into this same version
 MOCK_ENV = "BACON_MOCK_UPDATE"
@@ -163,7 +164,8 @@ class Updater:
 
     def apply(self):
         """Start the swap script, then the caller exits. The script waits for this process, moves the new exe into
-        place (keeping the old one as .old until the new one is running), and starts BACon again."""
+        place (keeping the old one in the update folder, out of sight, until the new one is running), and starts BACon
+        again."""
         if self.state != "ready" or not self.staged or not (FROZEN or MOCK):
             raise RuntimeError("The update isn't downloaded yet.")
         exe = sys.executable
@@ -179,14 +181,17 @@ class Updater:
             pass
         lines = ["@echo off"]
         for p in pids:
-            lines += [f":wait{p}", f'tasklist /fi "PID eq {p}" | find " {p} " >nul && (timeout /t 1 /nobreak >nul & goto wait{p})']
+            # Windows' own tools by full path: a PATH with Git or MSYS first has a Unix find and timeout instead
+            lines += [f":wait{p}", rf'"{SYS}\tasklist.exe" /fi "PID eq {p}" | "{SYS}\find.exe" " {p} " >nul && ("{SYS}\timeout.exe" /t 1 /nobreak >nul & goto wait{p})']
         if MOCK:  # nothing to swap: start this same app again, the way it was started
             again = [exe] if FROZEN else [exe, *sys.orig_argv[1:]]
             lines += [f'cd /d "{os.getcwd()}"', f'start "" {subprocess.list2cmdline(again)}', 'del "%~f0"']
         else:
+            old = _previous()
             lines += [
-                f'move /y "{exe}" "{exe}.old" >nul',
-                f'move /y "{self.staged}" "{exe}" >nul || move /y "{exe}.old" "{exe}" >nul',
+                f'del /f /q "{old}" >nul 2>&1',
+                f'move /y "{exe}" "{old}" >nul',
+                f'move /y "{self.staged}" "{exe}" >nul || move /y "{old}" "{exe}" >nul',
                 f'start "" "{exe}"',
                 'del "%~f0"',
             ]
@@ -232,22 +237,34 @@ class Updater:
         self.staged, self.state = "mock", "ready"
 
 
+def _previous() -> str:
+    """Where the swap keeps the exe it replaced: the update folder, not next to the exe (often the Desktop)."""
+    return os.path.join(data_dir("update"), f"previous-{EXE}")
+
+
 def clean_previous():
-    """After an update, remove the old exe the swap script left behind. It can stay locked for a few seconds while
-    antivirus scans the swap, so keep trying in the background."""
-    old = sys.executable + ".old"
-    if not FROZEN or not os.path.exists(old):
+    """After an update, remove the old exe the swap script left behind, and the .old that versions before 0.1.3 left
+    next to the exe. Either can stay locked for a while (antivirus scanning the swap, OneDrive syncing a Desktop
+    folder), so keep trying in the background."""
+    if not FROZEN:
+        return
+    leftovers = [p for p in (_previous(), sys.executable + ".old") if os.path.exists(p)]
+    if not leftovers:
         return
 
     def remove():
-        for _ in range(120):
-            try:
-                os.remove(old)
+        for _ in range(600):
+            for p in list(leftovers):
+                try:
+                    os.remove(p)
+                    leftovers.remove(p)
+                except FileNotFoundError:
+                    leftovers.remove(p)
+                except OSError:
+                    pass
+            if not leftovers:
                 return
-            except FileNotFoundError:
-                return
-            except OSError:
-                time.sleep(1)
+            time.sleep(1)
 
     threading.Thread(target=remove, daemon=True).start()
 
