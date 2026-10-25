@@ -9,6 +9,7 @@ reports what is available.
 import hashlib
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -27,6 +28,10 @@ TAG = re.compile(r"v\d+\.\d+\.\d+")
 CHECK_EVERY = 6 * 3600  # seconds; the UI asks on boot, this only stops repeat calls hammering GitHub
 
 FROZEN = bool(getattr(sys, "frozen", False))
+
+# BACON_MOCK_UPDATE=1 rehearses an update: a pretend 9.9.9, a pretend download, and a restart into this same version
+MOCK_ENV = "BACON_MOCK_UPDATE"
+MOCK = os.environ.get(MOCK_ENV, "")
 
 
 def _parse(tag: str) -> tuple[int, ...]:
@@ -62,11 +67,14 @@ class Updater:
         self.state = "idle"  # idle | downloading | ready | failed
         self.done = 0
         self.total = 0
+        self.started = 0.0  # when the download began, for its speed
         self.staged = ""
 
     # ---- check ----------------------------------------------------------
 
     def check(self, force: bool = False) -> dict:
+        if MOCK:
+            return self._mock_check()
         if force or time.time() - self.checked_at > CHECK_EVERY:
             try:
                 rel = pick_release(json.loads(_get(API)))
@@ -103,11 +111,12 @@ class Updater:
             "url": latest["url"] if latest else f"https://github.com/{REPO}/releases",
             "published": latest["published"] if latest else "",
             "available": available,
-            "canInstall": available and FROZEN and bool(latest["sha"]),
+            "canInstall": available and (FROZEN or bool(MOCK)) and bool(latest["sha"]),
             "error": self.error,
             "state": self.state,
             "done": self.done,
             "total": self.total,
+            "rate": self.done / max(0.25, time.time() - self.started) if self.state == "downloading" and self.started else 0,  # bytes a second
         }
 
     # ---- download -------------------------------------------------------
@@ -120,9 +129,12 @@ class Updater:
             if not st["canInstall"]:
                 raise RuntimeError("There is no update to install." if not st["available"] else "Updates install from the packaged BACon.exe only.")
             self.state, self.done, self.total, self.error = "downloading", 0, self.latest["size"], ""
+            self.started = time.time()
         threading.Thread(target=self._download, args=(dict(self.latest),), daemon=True).start()
 
     def _download(self, latest: dict):
+        if MOCK:
+            return self._mock_download()
         folder = data_dir("update")
         target = os.path.join(folder, f"BACon-{latest['version']}.exe")
         try:
@@ -152,7 +164,7 @@ class Updater:
     def apply(self):
         """Start the swap script, then the caller exits. The script waits for this process, moves the new exe into
         place (keeping the old one as .old until the new one is running), and starts BACon again."""
-        if self.state != "ready" or not self.staged or not FROZEN:
+        if self.state != "ready" or not self.staged or not (FROZEN or MOCK):
             raise RuntimeError("The update isn't downloaded yet.")
         exe = sys.executable
         # a one-file exe runs as two processes: the bootloader (which holds the exe) and this one. Wait for both.
@@ -168,21 +180,51 @@ class Updater:
         lines = ["@echo off"]
         for p in pids:
             lines += [f":wait{p}", f'tasklist /fi "PID eq {p}" | find " {p} " >nul && (timeout /t 1 /nobreak >nul & goto wait{p})']
-        lines += [
-            f'move /y "{exe}" "{exe}.old" >nul',
-            f'move /y "{self.staged}" "{exe}" >nul || move /y "{exe}.old" "{exe}" >nul',
-            f'start "" "{exe}"',
-            'del "%~f0"',
-        ]
+        if MOCK:  # nothing to swap: start this same app again, the way it was started
+            again = [exe] if FROZEN else [exe, *sys.orig_argv[1:]]
+            lines += [f'cd /d "{os.getcwd()}"', f'start "" {subprocess.list2cmdline(again)}', 'del "%~f0"']
+        else:
+            lines += [
+                f'move /y "{exe}" "{exe}.old" >nul',
+                f'move /y "{self.staged}" "{exe}" >nul || move /y "{exe}.old" "{exe}" >nul',
+                f'start "" "{exe}"',
+                'del "%~f0"',
+            ]
         script = os.path.join(data_dir("update"), "swap.cmd")
         with open(script, "w", encoding="utf-8", newline="\r\n") as f:
             f.write("\n".join(lines) + "\n")
         # break away from the one-file bootloader's job object, or Windows ends the script when BACon exits
         flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+        env = {**os.environ, MOCK_ENV: "restarted"} if MOCK else None  # after a rehearsal, it's up to date
         try:
-            subprocess.Popen(["cmd", "/c", script], creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, close_fds=True)
+            subprocess.Popen(["cmd", "/c", script], creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, close_fds=True, env=env)
         except OSError:  # the job doesn't allow breakaway
-            subprocess.Popen(["cmd", "/c", script], creationflags=flags, close_fds=True)
+            subprocess.Popen(["cmd", "/c", script], creationflags=flags, close_fds=True, env=env)
+
+    # ---- a rehearsal ----------------------------------------------------
+
+    def _mock_check(self) -> dict:
+        """A pretend 9.9.9. Once the rehearsal has restarted (the variable is then "restarted"), nothing is newer."""
+        if not self.latest:
+            self.latest = {
+                "version": __version__ if MOCK == "restarted" else "9.9.9",
+                "notes": "A pretend release, for rehearsing an update.\n\n- Nothing is downloaded\n- Nothing is replaced\n- Restarting opens this same version again",
+                "url": f"https://github.com/{REPO}/releases",
+                "published": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "exe": "mock",
+                "sha": "mock",
+                "size": 21 * 1048576,
+            }
+        self.error = ""
+        self.checked_at = time.time()
+        return self.status()
+
+    def _mock_download(self):
+        """About eight seconds, a little uneven, like a real connection."""
+        while self.done < self.total:
+            time.sleep(0.1)
+            self.done = min(self.total, self.done + int(self.total / 80 * random.uniform(0.5, 1.5)))
+        self.staged, self.state = "mock", "ready"
 
 
 def clean_previous():

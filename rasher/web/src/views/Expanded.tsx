@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { UpdatePill, type UpdateStatus } from '@bacon/components/Updates'
 import { Hugeicons } from '@ui/components/hugeicons'
 import { ScrollArea } from '@ui/components/scroll-area'
 import { Tabs, TabsList, TabsTab } from '@ui/components/tabs'
@@ -36,6 +37,8 @@ export function Expanded({
   onCollapse,
   onAdd,
   switcher,
+  update,
+  onUpdates,
 }: {
   s: Running
   activity: Activity[]
@@ -44,6 +47,8 @@ export function Expanded({
   onCollapse: () => void
   onAdd: (count: number, type?: string) => Promise<void>
   switcher?: React.ReactNode
+  update: UpdateStatus | null
+  onUpdates: () => void
 }) {
   const [view, setView] = useState<View>('points')
   const [selected, setSelected] = useState<string | null>(null)
@@ -68,6 +73,7 @@ export function Expanded({
         </span>
         <div className="flex-1" />
         {switcher}
+        <UpdatePill app="Rasher" update={update} onClick={onUpdates} />
         <AddDevices onAdd={onAdd} type={s.device.type} align="right" />
         <PowerSwitch on={s.device.powered} booting={s.device.restarting} onChange={(v) => control({ action: 'power', value: v })} />
         <button onClick={onCollapse} className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-(--text-muted) hover:bg-(--surface-track) hover:text-(--text-strong)">

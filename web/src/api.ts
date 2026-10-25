@@ -145,19 +145,8 @@ export type PacketInfo = {
   note: string
 }
 
-export type UpdateStatus = {
-  current: string
-  latest: string
-  notes: string
-  url: string
-  published: string
-  available: boolean
-  canInstall: boolean
-  error: string
-  state: 'idle' | 'downloading' | 'ready' | 'failed'
-  done: number
-  total: number
-}
+export type { UpdateStatus } from './components/Updates'
+import type { UpdateStatus } from './components/Updates'
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response

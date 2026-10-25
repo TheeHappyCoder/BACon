@@ -4,12 +4,13 @@ import { Hugeicons } from '../ui/components/hugeicons'
 import { Tooltip, TooltipPopup, TooltipTrigger } from '../ui/components/tooltip'
 import { LAYOUT } from '../ui/motion'
 import { AppMark, MARK_STATUS_LABEL, type MarkStatus } from './AppMark'
+import { phaseOf, UpdateGlyph, updateSummary, UpdateTip, type UpdateStatus } from './Updates'
 
-const { Notification, CalendarClock, CircleDot, Download, Info, LineChart, Radar, WifiCog } = Hugeicons
+const { Notification, CalendarClock, CircleDot, LineChart, Radar, WifiCog } = Hugeicons
 
 export type Place = 'objects' | 'trends' | 'schedules' | 'alarms' | 'network'
 
-function RailButton({ label, active, onClick, children, badge }: { label: string; active?: boolean; onClick: () => void; children: ReactNode; badge?: ReactNode }) {
+function RailButton({ label, tip, active, onClick, children, badge }: { label: string; tip?: ReactNode; active?: boolean; onClick: () => void; children: ReactNode; badge?: ReactNode }) {
   return (
     <Tooltip>
       <TooltipTrigger
@@ -29,7 +30,7 @@ function RailButton({ label, active, onClick, children, badge }: { label: string
         <span className="relative">{children}</span>
         {badge}
       </TooltipTrigger>
-      <TooltipPopup side="right">{label}</TooltipPopup>
+      <TooltipPopup side="right">{tip ?? label}</TooltipPopup>
     </Tooltip>
   )
 }
@@ -46,7 +47,7 @@ export function Rail({
   issues,
   capturing,
   onNetwork,
-  updateAvailable,
+  update,
   onUpdates,
   tone = 'dark',
 }: {
@@ -62,7 +63,7 @@ export function Rail({
   issues: number
   capturing: boolean
   onNetwork: () => void
-  updateAvailable: boolean
+  update: UpdateStatus | null
   onUpdates: () => void
 }) {
   return (
@@ -128,12 +129,14 @@ export function Rail({
           <Radar className="size-[19px]" />
         </RailButton>
         <div className="flex-1" />
+        {/* About BACon; with an update, a dot, then the download's ring and percentage, then a lime tick */}
         <RailButton
-          label={updateAvailable ? 'Update available' : 'About BACon'}
+          label={updateSummary('BACon', update)}
+          tip={<UpdateTip app="BACon" update={update} />}
           onClick={onUpdates}
-          badge={updateAvailable ? <span className="absolute top-[7px] right-[7px] size-2 rounded-full border-2 border-(--rail-bg) bg-(--action-primary)" /> : null}
+          badge={phaseOf(update) === 'available' ? <span className="absolute top-[7px] right-[7px] size-2 rounded-full border-2 border-(--rail-bg) bg-(--action-primary)" /> : null}
         >
-          {updateAvailable ? <Download className="size-[19px]" /> : <Info className="size-[19px]" />}
+          <UpdateGlyph update={update} color={tone === 'dark' ? 'var(--color-ns-green)' : undefined} />
         </RailButton>
         <RailButton label="Network settings" onClick={onNetwork}>
           <WifiCog className="size-[19px]" />

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ToastProvider, useToast } from '@bacon/components/Toasts'
+import { UpdateDialog, useUpdates } from '@bacon/components/Updates'
 import { api, bridge, type Activity, type Control, type DeviceSummary, type State } from './api'
+import { RasherMark } from './components/RasherMark'
 import { Setup } from './components/Setup'
 import { Compact } from './views/Compact'
 import { Expanded } from './views/Expanded'
@@ -52,6 +54,8 @@ function DeviceScreen({ instance, onGone, onPick }: { instance: number; onGone: 
   const [state, setState] = useState<State | null>(null)
   const [activity, setActivity] = useState<Activity[]>([])
   const [expanded, setExpanded] = useState(false)
+  const [update, setUpdate] = useUpdates(api)
+  const [updateOpen, setUpdateOpen] = useState(false)
   const lastId = useRef(0)
 
   useEffect(() => {
@@ -117,10 +121,27 @@ function DeviceScreen({ instance, onGone, onPick }: { instance: number; onGone: 
   const network = activity.filter((a) => a.kind !== 'local' && a.source !== 'Rasher' && a.source !== 'Room').length
   const switcher = bridge() ? null : <Switcher current={instance} onPick={onPick} />
 
-  return expanded ? (
-    <Expanded s={state} activity={activity} network={network} control={control} onCollapse={() => expand(false)} onAdd={add} switcher={switcher} />
-  ) : (
-    <Compact s={state} control={control} onExpand={() => expand(true)} onAdd={add} switcher={switcher} activityCount={network} />
+  const updates = { update, onUpdates: () => setUpdateOpen(true) }
+
+  return (
+    <>
+      {expanded ? (
+        <Expanded s={state} activity={activity} network={network} control={control} onCollapse={() => expand(false)} onAdd={add} switcher={switcher} {...updates} />
+      ) : (
+        <Compact s={state} control={control} onExpand={() => expand(true)} onAdd={add} switcher={switcher} activityCount={network} {...updates} />
+      )}
+      <UpdateDialog
+        app="Rasher"
+        tagline="BACnet devices, without a site"
+        mark={<RasherMark size={30} />}
+        api={api}
+        open={updateOpen}
+        onOpenChange={setUpdateOpen}
+        update={update}
+        onUpdate={setUpdate}
+        restartNote="Every device window closes, and Rasher comes back with your first device. Add the others again after."
+      />
+    </>
   )
 }
 

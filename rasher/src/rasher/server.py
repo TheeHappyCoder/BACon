@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import netip
+from . import netip, updater
 from .device import Device
 from .paths import data_dir
 from .profiles import PROFILES
@@ -187,6 +187,35 @@ async def _startup():
 @app.get("/api/version")
 def version():
     return {"app": "Rasher", "version": __version__}
+
+
+@app.get("/api/update")
+async def update_status(check: bool = False, force: bool = False):
+    if check or force:
+        return await asyncio.to_thread(updater.updater.check, force)
+    return updater.updater.status()
+
+
+@app.post("/api/update/download")
+def update_download():
+    try:
+        updater.updater.download()
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return updater.updater.status()
+
+
+@app.post("/api/update/apply")
+async def update_apply():
+    """Start the swap, then close every window: main() takes the devices and their addresses down and exits, and
+    the swap script starts the new Rasher, which brings the first device back up."""
+    try:
+        updater.updater.apply()
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    if host.windows:
+        asyncio.get_running_loop().call_later(0.4, host.windows.close_all)
+    return {"ok": True}
 
 
 @app.get("/api/setup")
@@ -414,6 +443,7 @@ class Windows:
         self.webview = webview
         self.url = url
         self.by_instance: dict[int, object] = {}
+        self.all: list = []  # every open window, bound to a device or not
         self.count = 0
 
     def open(self, instance: int | None) -> None:
@@ -430,11 +460,22 @@ class Windows:
             width=COMPACT[0], height=COMPACT[1], x=x, y=y, min_size=(340, 560), background_color="#f4f4f5",
         )
         bridge._window = window
+        self.all.append(window)
         if instance is not None:
             bridge.bind(instance)
         window.events.closed += lambda: self.closed(bridge)
 
+    def close_all(self) -> None:
+        """For an update: once the last window closes, webview.start() returns and main() shuts Rasher down."""
+        for window in list(self.all):
+            try:
+                window.destroy()
+            except Exception:
+                pass
+
     def closed(self, bridge: Bridge) -> None:
+        if bridge._window in self.all:
+            self.all.remove(bridge._window)
         if bridge._instance is not None:
             self.by_instance.pop(bridge._instance, None)
             if host.loop:
@@ -486,6 +527,7 @@ def main():
     import uvicorn
 
     _log_to_file()
+    updater.clean_previous()
     port = int(os.environ.get("RASHER_PORT", "8048"))
     if _existing_rasher(port):
         _ask_existing(port)

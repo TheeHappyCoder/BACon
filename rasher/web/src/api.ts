@@ -1,3 +1,4 @@
+import type { UpdateStatus } from '@bacon/components/Updates'
 /** The backend's JSON API (src/rasher/server.py). */
 
 export type Adapter = { name: string; ip: string; prefix: number; up: boolean }
@@ -129,6 +130,9 @@ export const api = {
   forget: (ip: string) => post<{ ok: true }>(`/api/forget?ip=${encodeURIComponent(ip)}`),
   state: (instance: number, since: number) => call<State>(`/api/d/${instance}/state?since=${since}`),
   control: (instance: number, c: Control) => post<{ ok: true }>(`/api/d/${instance}/control`, c),
+  update: (check = false, force = false) => call<UpdateStatus>(`/api/update?check=${check}&force=${force}`),
+  updateDownload: () => post<UpdateStatus>('/api/update/download'),
+  updateApply: () => post<{ ok: boolean }>('/api/update/apply'),
 }
 
 /** The window around the page, when Rasher runs in its own windows (pywebview); absent in a browser. */

@@ -1,3 +1,4 @@
+import { UpdatePill, type UpdateStatus } from '@bacon/components/Updates'
 import { Hugeicons } from '@ui/components/hugeicons'
 import type { Control, Running } from '../api'
 import { AddDevices } from '../components/AddDevices'
@@ -18,6 +19,8 @@ export function Compact({
   onAdd,
   switcher,
   activityCount,
+  update,
+  onUpdates,
 }: {
   s: Running
   control: (c: Control) => void
@@ -25,6 +28,8 @@ export function Compact({
   onAdd: (count: number, type?: string) => Promise<void>
   switcher?: React.ReactNode
   activityCount: number
+  update: UpdateStatus | null
+  onUpdates: () => void
 }) {
   const { Face } = profileOf(s)
   const on = s.device.powered
@@ -46,6 +51,7 @@ export function Compact({
         <AddDevices onAdd={onAdd} type={s.device.type} up />
         {switcher}
         <div className="flex-1" />
+        <UpdatePill app="Rasher" update={update} onClick={onUpdates} />
         <button onClick={onExpand} className="inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium text-(--text-muted) hover:bg-(--surface-track) hover:text-(--text-strong)">
           More
           <PanelRight className="size-3.5" />

@@ -1,8 +1,8 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type Device, type Job, type NetInterface, type ObjectRow, type Status, type TrendPoint, type TrendStatus, type UpdateStatus } from './api'
-import type { MarkStatus } from './components/AppMark'
+import { api, type Device, type Job, type NetInterface, type ObjectRow, type Status, type TrendPoint, type TrendStatus } from './api'
 import { ConnectDialog, type NetworkSettings } from './components/ConnectDialog'
-import { UpdateDialog } from './components/UpdateDialog'
+import { AppMark, type MarkStatus } from './components/AppMark'
+import { UpdateDialog, useUpdates } from './components/Updates'
 import { Changes, compareRows, type Baseline } from './components/Changes'
 import { FilterField, type Severity } from './components/FilterBar'
 import { HealthCheck, runChecks, type SavedCheck } from './components/HealthCheck'
@@ -64,12 +64,10 @@ function Workspace() {
   const [interfaces, setInterfaces] = useState<NetInterface[]>([])
   const [net, setNet] = useStored<NetworkSettings>('bx.network.v2', { ip: '', port: 47808, bbmd: '', low: '', high: '', timeout: '3' })
   const [connectOpen, setConnectOpen] = useState(false)
-  const [update, setUpdate] = useState<UpdateStatus | null>(null)
+  // one quiet check against GitHub per launch; the rail shows a dot when a newer release is out, and the ring while
+  // it downloads
+  const [update, setUpdate] = useUpdates(api)
   const [updateOpen, setUpdateOpen] = useState(false)
-  // one quiet check against GitHub per launch; the rail shows a dot when a newer release is out
-  useEffect(() => {
-    api.update(true).then(setUpdate).catch(() => {})
-  }, [])
   const [connectBusy, setConnectBusy] = useState(false)
   const [connectError, setConnectError] = useState('')
   const [searching, setSearching] = useState(false)
@@ -617,7 +615,7 @@ function Workspace() {
         issues={netIssues}
         capturing={capturing}
         onNetwork={() => setConnectOpen(true)}
-        updateAvailable={!!update?.available}
+        update={update}
         onUpdates={() => setUpdateOpen(true)}
       />
       {place === 'trends' ? (
@@ -917,7 +915,16 @@ function Workspace() {
       </>
       )}
 
-      <UpdateDialog open={updateOpen} onOpenChange={setUpdateOpen} update={update} onUpdate={setUpdate} />
+      <UpdateDialog
+        app="BACon"
+        tagline="BACnet, on site"
+        mark={<AppMark size={30} status="healthy" />}
+        api={api}
+        open={updateOpen}
+        onOpenChange={setUpdateOpen}
+        update={update}
+        onUpdate={setUpdate}
+      />
       <ConnectDialog
         open={connectOpen}
         onOpenChange={setConnectOpen}
