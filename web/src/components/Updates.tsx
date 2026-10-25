@@ -4,12 +4,13 @@ import { Button } from '../ui/components/button'
 import { Dialog, DialogFooter, DialogHeader, DialogPopup, DialogTitle } from '../ui/components/dialog'
 import { Hugeicons } from '../ui/components/hugeicons'
 import { Tooltip, TooltipPopup, TooltipTrigger } from '../ui/components/tooltip'
+import LoadingIndicator from '../ui/loading-indicator'
 import { EASE_OUT, LAYOUT, SPRING_SWAP } from '../ui/motion'
 
 /* Self-update, shared by BACon and Rasher (which imports it as @bacon/components/Updates): the status from the
    backend's updater, a ring that fills as the download runs, and the dialog with notes and one button. */
 
-const { AlertCircle, ArrowRight, Check, Download, Info, RotateCw } = Hugeicons
+const { AlertCircle, ArrowRight, Check, Download, Info } = Hugeicons
 
 // the ring and its number ride the same spring, so they never disagree
 const PROGRESS = { stiffness: 170, damping: 28, mass: 0.6 }
@@ -309,7 +310,7 @@ export function UpdatePill({ app, update, onClick }: { app: string; update: Upda
 }
 
 /** The ready button: lime, with a light that sweeps across it once when it arrives and an arrow that nudges on hover.
- *  While it restarts, the arrow becomes a turning one. */
+ *  Clicked, the arrow gives way to the loading indicator, as in every other busy button. */
 function RestartButton({ version, onClick, busy }: { version: string; onClick: () => void; busy: boolean }) {
   const reduce = useReducedMotion()
   return (
@@ -332,11 +333,19 @@ function RestartButton({ version, onClick, busy }: { version: string; onClick: (
         />
       ) : null}
       <span className="relative">{busy ? 'Restarting…' : `Restart into ${version}`}</span>
-      {busy ? (
-        <RotateCw className="relative size-3.5 animate-spin" strokeWidth={2.4} />
-      ) : (
-        <ArrowRight className="relative size-3.5 transition-transform duration-300 ease-out group-hover/restart:translate-x-0.5" strokeWidth={2.4} />
-      )}
+      <span className="relative inline-grid size-3.5 place-items-center">
+        <AnimatePresence initial={false} mode="popLayout">
+          {busy ? (
+            <motion.span key="busy" {...SWAP} className="inline-grid">
+              <LoadingIndicator size="xsmall" minimal inheritColor contained />
+            </motion.span>
+          ) : (
+            <motion.span key="arrow" {...SWAP} className="inline-grid">
+              <ArrowRight className="size-3.5 transition-transform duration-300 ease-out group-hover/restart:translate-x-0.5" strokeWidth={2.4} />
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </span>
     </motion.button>
   )
 }
@@ -409,7 +418,7 @@ export function UpdateDialog({
         <motion.div layout transition={LAYOUT} className="flex flex-col gap-3 border-y border-(--border-subtle) bg-(--surface-card) px-5 py-4 text-[13px]">
           {restarting ? (
             <div className="flex items-center gap-3">
-              <ProgressRing value={0} phase="downloading" size={22} stroke={2.4} />
+              <LoadingIndicator size="small" minimal inheritColor contained />
               <p className="m-0 text-(--text-strong)">
                 Restarting into {app} {u?.latest}. {restartNote || 'This window closes in a moment.'}
               </p>

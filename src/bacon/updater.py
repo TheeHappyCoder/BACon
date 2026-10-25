@@ -195,7 +195,12 @@ class Updater:
             f.write("\n".join(lines) + "\n")
         # break away from the one-file bootloader's job object, or Windows ends the script when BACon exits
         flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
-        env = {**os.environ, MOCK_ENV: "restarted"} if MOCK else None  # after a rehearsal, it's up to date
+        # a one-file exe passes its own _PYI_* settings to whatever it starts; the new exe would then look for its
+        # Python in this one's temp folder, gone by the time it runs ("Failed to load Python DLL"). Start it clean.
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("_PYI_", "_MEI"))}
+        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        if MOCK:
+            env[MOCK_ENV] = "restarted"  # after a rehearsal, it's up to date
         try:
             subprocess.Popen(["cmd", "/c", script], creationflags=flags | subprocess.CREATE_BREAKAWAY_FROM_JOB, close_fds=True, env=env)
         except OSError:  # the job doesn't allow breakaway
