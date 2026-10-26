@@ -69,7 +69,7 @@ def run():
                     expect(page.get_by_text('Released and verified.', exact=False)).to_be_visible(timeout=30000)
                     page.screenshot(path=str(out / 'control-result.png'))
                     # Bulk writes act on the rows the filter shows.
-                    page.get_by_role('button', name='Show all properties').click()
+                    page.get_by_role('button', name='Close this object').click()
                     page.get_by_role('button', name=re.compile(r'^Write \d+ shown$')).click()
                     expect(page.get_by_text('groups that take the same value', exact=False)).to_be_visible(timeout=60000)
                     page.screenshot(path=str(out / 'control-groups.png'))

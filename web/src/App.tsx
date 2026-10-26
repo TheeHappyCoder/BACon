@@ -10,6 +10,8 @@ import { evaluate, parse } from './query'
 import { NetworkTree, type Selection } from './components/NetworkTree'
 import { ObjectTable, type Sort } from './components/ObjectTable'
 import { WritePointsSheet } from './components/WritePointsSheet'
+import { ColumnsSheet } from './components/ColumnsSheet'
+import { ExportDialog } from './components/ExportDialog'
 import { ActivityView } from './components/ActivityView'
 import { ControlProvider, useControl } from './components/ControlState'
 import { WRITABLE_TYPES } from './control'
@@ -26,13 +28,12 @@ import { DEFAULT_COLUMNS, SYNTHETIC_COLUMNS, exportColumns, exportCsv, exportXls
 import { Badge } from './ui/components/badge'
 import { Button } from './ui/components/button'
 import { Hugeicons } from './ui/components/hugeicons'
-import { Menu, MenuCheckboxItem, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from './ui/components/menu'
 import { ScrollArea } from './ui/components/scroll-area'
 import { Skeleton } from './ui/components/skeleton'
 import { Tabs, TabsList, TabsTab } from './ui/components/tabs'
 import { TooltipProvider } from './ui/components/tooltip'
 
-const { ArrowRight, ChevronDown, FileText, FileSpreadsheet, XIcon, CheckIcon } = Hugeicons
+const { ArrowRight, Columns3, XIcon, CheckIcon } = Hugeicons
 
 function useStored<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
@@ -95,7 +96,8 @@ function Workspace() {
   const [includeIdentity, setIncludeIdentity] = useStored('bx.includeIdentity', true)
   const [sheetPerDevice, setSheetPerDevice] = useStored('bx.sheetPerDevice', false)
   const [includeErrors, setIncludeErrors] = useStored('bx.includeErrors', true)
-  const [focusSignal, setFocusSignal] = useState(0)
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [view, setView] = useState<'objects' | 'health' | 'changes'>('objects')
   const [baseline, setBaseline] = useState<Baseline | null>(null)
   const [booted, setBooted] = useState(false)
@@ -455,7 +457,7 @@ function Workspace() {
   }, [allRows, liveAlarms])
   const scopeDeviceId = selection.kind === 'network' ? null : selection.device
   const scopeDevice = scopeDeviceId === null ? null : visibleDevices.find((d) => d.instance === scopeDeviceId) ?? null
-  const typeFilter = selection.kind === 'type' ? selection.type : null
+  const typeFilter = selection.kind === 'type' ? selection.type : selection.kind === 'object' ? selection.type ?? null : null
 
   const scopeRows = useMemo(() => {
     const base = scopeDeviceId === null ? visibleDevices.flatMap((d) => rows[d.instance] ?? []) : rows[scopeDeviceId] ?? []
@@ -543,12 +545,22 @@ function Workspace() {
     try {
       const cols = exportColumns(columns, includeIdentity)
       if (!filtered.length) throw new Error('No rows match the current filters, so there is nothing to export.')
-      if (!cols.length) throw new Error('Tick at least one property to export.')
+      if (!cols.length) throw new Error('Choose at least one property to export.')
       const name = kind === 'csv' ? exportCsv(filtered, cols, includeErrors) : await exportXlsx(filtered, cols, includeErrors, sheetPerDevice, deviceLabel)
       toast(`Exported ${filtered.length} rows to ${name}`)
     } catch (e) {
       toast(message(e), { kind: 'error' })
     }
+  }
+
+  // closing the drawer goes back to what the tree had in scope, never further out
+  const closeDrawer = () =>
+    setSelection(scopeDevice ? (typeFilter ? { kind: 'type', device: scopeDevice.instance, type: typeFilter } : { kind: 'device', device: scopeDevice.instance }) : { kind: 'network' })
+  const toggleColumn = (name: string) => {
+    const previous = columns
+    const on = columns.includes(name)
+    setColumns(on ? columns.filter((c) => c !== name) : [...columns, name])
+    toast(on ? `Removed the "${name}" column` : `Added "${name}" as a column`, { undo: () => setColumns(previous) })
   }
 
   // ---- keyboard: / to search, arrows to move through rows, Esc to deselect ----
@@ -562,19 +574,18 @@ function Workspace() {
         return
       }
       if (typing) return
-      if (e.key === 'Escape' && selection.kind === 'object') setSelection({ kind: 'device', device: selection.device })
+      if (e.key === 'Escape' && selection.kind === 'object') closeDrawer()
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && filtered.length) {
         e.preventDefault()
         const i = filtered.findIndex((r) => r.key === selectedKey)
         const next = e.key === 'ArrowDown' ? Math.min(filtered.length - 1, i + 1) : Math.max(0, i === -1 ? 0 : i - 1)
-        select({ kind: 'object', device: filtered[next].device, key: filtered[next].key })
+        select({ kind: 'object', device: filtered[next].device, key: filtered[next].key, type: typeFilter ?? undefined })
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const focusProperties = () => setFocusSignal((n) => n + 1)
   const title = scopeDevice ? scopeDevice.name || `Device ${scopeDevice.instance}` : 'All devices'
 
   // what the middle shows when there is no table yet: one sentence and the one thing to do
@@ -611,7 +622,7 @@ function Workspace() {
       }
     />
   ) : !scopeDevice && !loading ? (
-    <Empty title="Click a device in the tree to read it" text="Its objects fill this table. Tick properties on the right to add columns, then export." />
+    <Empty title="Click a device in the tree to read it" text="Its objects fill this table. Choose columns with the Columns button, then export." />
   ) : null
 
   const crumbs: { label: string; go?: () => void }[] = [{ label: 'Network', go: () => select({ kind: 'network' }) }]
@@ -622,6 +633,25 @@ function Workspace() {
   return (
     <div className="flex h-screen overflow-hidden bg-(--surface-page) text-(--text-strong)">
       {writeRows && <WritePointsSheet rows={writeRows} onClose={() => setWriteRows(null)} onWritten={() => { control.refresh(); rereadRows(writeRows) }} />}
+      <ColumnsSheet open={columnsOpen} onOpenChange={setColumnsOpen} allRows={allRows} columns={columns} onColumns={setColumns} presets={presets} onPresets={setPresets} />
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        rowCount={filtered.length}
+        columnCount={exportColumns(columns, includeIdentity).length}
+        chosenCount={columns.length}
+        includeIdentity={includeIdentity}
+        onIncludeIdentity={setIncludeIdentity}
+        sheetPerDevice={sheetPerDevice}
+        onSheetPerDevice={setSheetPerDevice}
+        includeErrors={includeErrors}
+        onIncludeErrors={setIncludeErrors}
+        onChangeColumns={() => {
+          setExportOpen(false)
+          setColumnsOpen(true)
+        }}
+        onExport={doExport}
+      />
       <Rail
         status={booted ? mark.status : 'busy'}
         statusText={booted ? mark.text : 'Starting…'}
@@ -773,35 +803,14 @@ function Workspace() {
                     Write {writableShown.length} shown
                   </Button>
                 ) : null}
-                <Menu>
-                  <MenuTrigger render={<Button size="sm" disabled={!scopeRows.length} />}>
-                    Export
-                    <ChevronDown />
-                  </MenuTrigger>
-                  <MenuPopup align="end" className="w-64">
-                    <MenuItem onClick={() => doExport('xlsx')}>
-                      <FileSpreadsheet />
-                      Excel workbook
-                    </MenuItem>
-                    <MenuItem onClick={() => doExport('csv')}>
-                      <FileText />
-                      CSV file
-                    </MenuItem>
-                    <MenuSeparator />
-                    <MenuGroup>
-                      <MenuGroupLabel>Exports the {filtered.length} rows shown</MenuGroupLabel>
-                      <MenuCheckboxItem variant="switch" checked={includeIdentity} onCheckedChange={setIncludeIdentity}>
-                        Add device and object id
-                      </MenuCheckboxItem>
-                      <MenuCheckboxItem variant="switch" checked={sheetPerDevice} onCheckedChange={setSheetPerDevice}>
-                        Excel: a sheet per device
-                      </MenuCheckboxItem>
-                      <MenuCheckboxItem variant="switch" checked={includeErrors} onCheckedChange={setIncludeErrors}>
-                        Write read errors in cells
-                      </MenuCheckboxItem>
-                    </MenuGroup>
-                  </MenuPopup>
-                </Menu>
+                <Button size="sm" variant="secondary" onClick={() => setColumnsOpen(true)} disabled={!allRows.length}>
+                  <Columns3 />
+                  Columns
+                  <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{columns.length}</span>
+                </Button>
+                <Button size="sm" disabled={!scopeRows.length} onClick={() => setExportOpen(true)}>
+                  Export
+                </Button>
               </div>
 
               {scopeRows.length > 0 ? (
@@ -895,12 +904,12 @@ function Workspace() {
                       onSelect={(k) => {
                         const r = scopeRows.find((x) => x.key === k)
                         if (!r) return
-                        if (k === selectedKey) setSelection(scopeDevice ? { kind: 'device', device: scopeDevice.instance } : { kind: 'network' })
-                        else select({ kind: 'object', device: r.device, key: k })
+                        if (k === selectedKey) closeDrawer()
+                        else select({ kind: 'object', device: r.device, key: k, type: typeFilter ?? undefined })
                       }}
                       showDevice={!scopeDevice && visibleDevices.length > 1}
                       loading={!!loading}
-                      onAddColumn={focusProperties}
+                      onAddColumn={() => setColumnsOpen(true)}
                       onRemoveColumn={(c) => setColumns(columns.filter((x) => x !== c))}
                     />
                   )
@@ -915,16 +924,11 @@ function Workspace() {
           <Pane side="right" gap={10}>
           <PropertiesPanel
             subject={subject}
-            subjectLabel={scopeDevice ? `${typeFilter ?? 'every object'} · ${scopeRows.length}` : `every device · ${scopeRows.length} objects`}
-            available={available}
-            totalRows={scopeRows.length}
+            hasRows={allRows.length > 0}
             columns={columns}
-            onColumns={setColumns}
-            presets={presets}
-            onPresets={setPresets}
-            onClearSubject={() =>
-              setSelection(scopeDevice ? (typeFilter ? { kind: 'type', device: scopeDevice.instance, type: typeFilter } : { kind: 'network' }) : { kind: 'network' })
-            }
+            onToggleColumn={toggleColumn}
+            onOpenColumns={() => setColumnsOpen(true)}
+            onClearSubject={closeDrawer}
             canRead={status.connected}
             onReread={() => subject && startRead([subject.device], false, [[subject.typeId, subject.instance]])}
             onTrend={
@@ -940,7 +944,6 @@ function Workspace() {
             }
             trendLabel={subject && isTrendLog(subject) ? 'Show history' : undefined}
             trended={!!subject && !isTrendLog(subject) && trends.points.some((p) => p.device === subject.device && p.typeId === subject.typeId && p.instance === subject.instance)}
-            focusSignal={focusSignal}
             onWritten={() => subject && rereadRows([subject])}
             onOpenSchedules={() => setPlace('schedules')}
           />

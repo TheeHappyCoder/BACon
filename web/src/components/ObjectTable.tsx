@@ -116,6 +116,7 @@ export function ObjectTable({
 }: {
   /** priority slots BACon commanded and has not released, by object key */
   held?: Map<string, { priority: number | null }[]>
+  /** opens Columns, where the table's (and the export's) columns are chosen */
   onAddColumn: () => void
   onRemoveColumn: (column: string) => void
   rows: ObjectRow[]
@@ -156,6 +157,7 @@ export function ObjectTable({
         ))}
         <button
           onClick={onAddColumn}
+          title="Choose the columns for the table and the export"
           className="inline-flex h-6 items-center gap-1 justify-self-start rounded-full border border-dashed border-(--border-strong) bg-(--surface-card) px-2.5 text-[11.5px] text-(--text-muted) transition-colors hover:border-solid hover:text-(--text-strong)"
         >
           <Plus className="size-3" />

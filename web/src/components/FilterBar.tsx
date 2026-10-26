@@ -9,7 +9,7 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '../ui/com
 import { Popover, PopoverPopup, PopoverTrigger } from '../ui/components/popover'
 import { cn } from '../ui/utils'
 
-const { Plus, XIcon, BookmarkPlus, MoreHorizontal, Filter, AlertTriangle, Search, LineChart } = Hugeicons
+const { XIcon, BookmarkPlus, MoreHorizontal, Filter, AlertTriangle, Search, LineChart } = Hugeicons
 
 export type Severity = 'critical' | 'high' | 'low'
 
@@ -350,14 +350,13 @@ export const FilterField = forwardRef<
         </div>
 
         <span className="flex h-8 shrink-0 items-center gap-0.5">
-          {active ? (
-            <span className="mr-1.5 text-[12px] tabular-nums text-(--text-muted)">
-              {matchCount} of {totalCount}
-            </span>
-          ) : null}
+          <span className="mr-1.5 text-[12px] tabular-nums text-(--text-muted)">
+            {active ? `${matchCount} of ${totalCount}` : `${totalCount} objects`}
+          </span>
           <Popover open={editing === 'new'} onOpenChange={(o) => setEditing(o ? 'new' : null)}>
-            <PopoverTrigger render={<Button aria-label="Add a filter" title="Add a filter" variant="ghost" size="icon-sm" />}>
-              <Plus />
+            <PopoverTrigger render={<Button aria-label="Add a filter" title="Add a filter" variant="secondary" size="xs" className="h-7" />}>
+              <Filter />
+              Filter
             </PopoverTrigger>
             <PopoverPopup align="end">{editing === 'new' ? builder('new') : null}</PopoverPopup>
           </Popover>

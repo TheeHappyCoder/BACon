@@ -25,7 +25,7 @@ lets you choose the columns.
 - **Discover**: Who-Is on any network adapter, optional BBMD registration, or add a device by IP.
 - **Read everything**: every object and every property, standard and vendor-specific, with clean
   handling of properties a device doesn't have and objects that fail to read.
-- **Pick and export**: tick any property to add it as a column, filter with plain words or queries
+- **Pick and export**: choose any property as a column from Columns (every device, coverage shown), filter with plain words or queries
   like `present-value > 20`, then export to Excel or CSV.
 - **Health check**: saved checks that run against every site you open.
 - **Compare**: save a site to a `.bxsite` file and see what changed since.
@@ -103,7 +103,8 @@ alarms, manual overrides, duplicate names and missing descriptions.
 
 ### Pick the columns, export to Excel
 
-Tick any property, standard or vendor-specific, and it becomes a column in the table and the export.
+Open Columns and choose any property, standard or vendor-specific. It becomes a column in the table and in every
+export, for every device, and the list shows how many objects have it.
 
 ![Ticking properties as columns and exporting](docs/gifs/export.gif)
 

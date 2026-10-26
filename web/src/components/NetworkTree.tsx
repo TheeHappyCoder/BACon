@@ -16,7 +16,8 @@ export type Selection =
   | { kind: 'network' }
   | { kind: 'device'; device: number }
   | { kind: 'type'; device: number; type: string }
-  | { kind: 'object'; device: number; key: string }
+  /** type: the object was picked from a type-filtered table, so the scope stays that type */
+  | { kind: 'object'; device: number; key: string; type?: string }
 
 function typeIcon(type: string) {
   if (type.startsWith('analog')) return <Activity />
@@ -194,7 +195,14 @@ export function NetworkTree({
   const latestJob = (inst: number) => [...jobs].reverse().find((j) => j.device === inst)
   const netId = 'net'
   const netOpen = expanded.has(netId)
-  const is = (s: Selection) => JSON.stringify(s) === JSON.stringify(selection)
+  const is = (s: Selection) => {
+    if (s.kind !== selection.kind) return false
+    if (s.kind === 'network' || selection.kind === 'network') return true
+    if (s.device !== selection.device) return false
+    if (s.kind === 'type' && selection.kind === 'type') return s.type === selection.type
+    if (s.kind === 'object' && selection.kind === 'object') return s.key === selection.key
+    return true
+  }
 
   const submitIp = async () => {
     if (!ip.trim()) return

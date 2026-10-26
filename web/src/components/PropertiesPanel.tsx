@@ -1,40 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { ObjectRow } from '../api'
-import { DEFAULT_COLUMNS, SYNTHETIC_COLUMNS } from '../exporters'
+import { SYNTHETIC_COLUMNS } from '../exporters'
 import { Button } from '../ui/components/button'
-import { Checkbox } from '../ui/components/checkbox'
 import { Hugeicons } from '../ui/components/hugeicons'
 import { Input } from '../ui/components/input'
-import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '../ui/components/menu'
 import { ScrollArea } from '../ui/components/scroll-area'
 import { Tabs, TabsList, TabsTab } from '../ui/components/tabs'
-import { cn } from '../ui/utils'
-import { useToast } from './Toasts'
 import { PointControl } from './PointControl'
 import { useControl } from './ControlState'
 
-const { ArrowUp, ArrowDown, XIcon, Undo, Bookmark, ChevronDown, Search, LineChart } = Hugeicons
-
-type Prop = { name: string; count: number }
+const { Plus, XIcon, LineChart } = Hugeicons
 
 /**
- * The right-hand drawer. With a point picked, Overview shows its live value, a command box and the priority array;
- * Properties is YABE's property grid with one addition: every property has a tick box, and a ticked property is a
- * column in the table and the export. With nothing picked it shows how many objects have each property.
+ * The right-hand drawer: one object. With a point picked, Overview shows its live value, a command box and the
+ * priority array; Properties is YABE's property grid of what this object reports. Any property can be added as a
+ * column from here, but the columns themselves (for every device, and for the export) are chosen in Columns.
  */
 export function PropertiesPanel({
   subject,
-  subjectLabel,
-  available,
-  totalRows,
+  hasRows,
   columns,
-  onColumns,
-  presets,
-  onPresets,
+  onToggleColumn,
+  onOpenColumns,
   onClearSubject,
   onReread,
   canRead,
-  focusSignal,
   onWritten,
   onOpenSchedules,
   onTrend,
@@ -46,71 +36,40 @@ export function PropertiesPanel({
   trendLabel?: string
   trended?: boolean
   subject: ObjectRow | null
-  subjectLabel: string
-  available: Prop[]
-  totalRows: number
+  /** at least one device has been read */
+  hasRows: boolean
   columns: string[]
-  onColumns: (c: string[]) => void
-  presets: Record<string, string[]>
-  onPresets: (p: Record<string, string[]>) => void
+  /** add or remove one property as a table/export column */
+  onToggleColumn: (name: string) => void
+  onOpenColumns: () => void
   onClearSubject: () => void
   onReread: () => void
   canRead: boolean
-  focusSignal: number
   /** a command was sent to the subject: read it again so the table catches up */
   onWritten: () => void
   onOpenSchedules?: () => void
 }) {
   const control = useControl()
-  const toast = useToast()
   const [query, setQuery] = useState('')
-  const [naming, setNaming] = useState(false)
-  const [presetName, setPresetName] = useState('')
   const [tab, setTab] = useState<'overview' | 'properties'>('overview')
   const [reloadSignal, setReloadSignal] = useState(0)
-  const searchRef = useRef<HTMLInputElement>(null)
   // a point, or anything else with settings BACon can write (not the device itself), gets the Overview tab
   const isPoint = !!subject && subject.typeId !== 8 && (subject.values['present-value'] !== undefined || control.fieldsOf(subject).length > 0)
   const showing = isPoint ? tab : 'properties'
-  // asking to find a property switches to the tab that has the field
-  const [seenSignal, setSeenSignal] = useState(focusSignal)
-  if (focusSignal !== seenSignal) {
-    setSeenSignal(focusSignal)
-    setTab('properties')
-  }
-  useEffect(() => {
-    if (focusSignal) searchRef.current?.focus()
-  }, [focusSignal])
 
-  const ticked = useMemo(() => new Set(columns), [columns])
-  const names = useMemo(() => {
-    if (!subject) return available
-    const own = [...new Set([...Object.keys(subject.values), ...Object.keys(subject.errors)])]
-    const counts = new Map(available.map((p) => [p.name, p.count]))
-    return own.map((name) => ({ name, count: counts.get(name) ?? 1 }))
-  }, [subject, available])
+  const isColumn = useMemo(() => new Set(columns), [columns])
+  const names = useMemo(
+    () => (subject ? [...new Set([...Object.keys(subject.values), ...Object.keys(subject.errors)])].filter((n) => !SYNTHETIC_COLUMNS.includes(n)) : []),
+    [subject],
+  )
 
   const q = query.trim().toLowerCase()
-  const match = (p: Prop) => !q || p.name.toLowerCase().includes(q) || (subject?.values[p.name] ?? '').toLowerCase().includes(q)
-  const list = names.filter(match).filter((p) => !SYNTHETIC_COLUMNS.includes(p.name))
-  const exporting = columns.filter((c) => !q || c.toLowerCase().includes(q))
-  const vendor = list.filter((p) => p.name.includes('[') && !ticked.has(p.name)).sort((a, b) => a.name.localeCompare(b.name))
-  const standard = list.filter((p) => !p.name.includes('[') && !ticked.has(p.name)).sort((a, b) => a.name.localeCompare(b.name))
-
-  const toggle = (name: string) => onColumns(ticked.has(name) ? columns.filter((c) => c !== name) : [...columns, name])
-  const move = (i: number, d: number) => {
-    const next = [...columns]
-    const j = i + d
-    if (j < 0 || j >= next.length) return
-    ;[next[i], next[j]] = [next[j], next[i]]
-    onColumns(next)
-  }
+  const list = names.filter((name) => !q || name.toLowerCase().includes(q) || (subject?.values[name] ?? '').toLowerCase().includes(q))
+  const vendor = list.filter((name) => name.includes('[')).sort((a, b) => a.localeCompare(b))
+  const standard = list.filter((name) => !name.includes('[')).sort((a, b) => a.localeCompare(b))
 
   const value = (name: string) => {
-    if (!subject) {
-      const n = available.find((p) => p.name === name)?.count ?? 0
-      return <span className="text-[11px] tabular-nums text-(--text-faint)" title={`${n} of ${totalRows} objects have this property`}>{n}/{totalRows}</span>
-    }
+    if (!subject) return null
     const err = subject.errors[name]
     if (err !== undefined)
       return (
@@ -127,33 +86,32 @@ export function PropertiesPanel({
     )
   }
 
-  const renderRow = (name: string, index?: number) => {
-    const on = ticked.has(name)
+  const renderRow = (name: string) => {
+    const on = isColumn.has(name)
     return (
       <div
         key={name}
-        className={cn(
-          'group/prop grid h-8 grid-cols-[16px_minmax(0,1fr)_minmax(0,0.9fr)] items-center gap-2.5 rounded-[9px] px-2 transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_4%,transparent)]',
-          on && 'bg-(--surface-checked) hover:bg-(--surface-checked)',
-        )}
+        className="group/prop grid h-8 grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_24px] items-center gap-2.5 rounded-[9px] px-2 transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_4%,transparent)]"
       >
-        <Checkbox checked={on} onCheckedChange={() => toggle(name)} aria-label={on ? `Stop exporting ${name}` : `Export ${name}`} />
-        <button className="min-w-0 truncate text-left text-[13px]" title={name} onClick={() => toggle(name)}>
-          {name}
-        </button>
-        <span className="flex min-w-0 items-center justify-end gap-1">
-          {index !== undefined ? (
-            <span className="hidden shrink-0 group-hover/prop:flex">
-              <Button aria-label="Move up" variant="ghost" size="icon-xs" className="size-6" disabled={index === 0} onClick={() => move(index, -1)}>
-                <ArrowUp />
-              </Button>
-              <Button aria-label="Move down" variant="ghost" size="icon-xs" className="size-6" disabled={index === columns.length - 1} onClick={() => move(index, 1)}>
-                <ArrowDown />
-              </Button>
-            </span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="min-w-0 truncate text-[13px]" title={name}>
+            {name}
+          </span>
+          {on ? (
+            <span className="inline-flex h-[18px] shrink-0 items-center rounded-full bg-(--surface-track) px-1.5 text-[10.5px] text-(--text-muted) group-hover/prop:hidden">column</span>
           ) : null}
-          <span className={cn('min-w-0 text-right', index !== undefined && 'group-hover/prop:hidden')}>{value(name)}</span>
         </span>
+        <span className="min-w-0 text-right">{value(name)}</span>
+        <Button
+          aria-label={on ? 'Remove column' : 'Add as column'}
+          title={on ? 'Remove column' : 'Add as column'}
+          variant="ghost"
+          size="icon-xs"
+          className="size-6 opacity-0 group-hover/prop:opacity-100 focus-visible:opacity-100"
+          onClick={() => onToggleColumn(name)}
+        >
+          {on ? <XIcon /> : <Plus />}
+        </Button>
       </div>
     )
   }
@@ -169,20 +127,47 @@ export function PropertiesPanel({
       </section>
     )
 
+  if (!subject)
+    return (
+      <aside className="flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+        <div className="px-[18px] pt-4 pb-3">
+          <div className="truncate text-[17px] font-medium tracking-[-0.01em]">Properties</div>
+        </div>
+        <div className="nc-view-in mx-auto flex max-w-[380px] flex-col items-center px-5 py-16 text-center">
+          {hasRows ? (
+            <>
+              <div className="text-[15px] font-medium">Pick an object</div>
+              <div className="mt-1 text-[13px] leading-normal text-(--text-muted)">
+                Click a row to see every property it reports. Columns for the table and the export are chosen with the Columns button.
+              </div>
+              <div className="mt-4">
+                <Button size="sm" variant="secondary" onClick={onOpenColumns}>
+                  Choose columns
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-[15px] font-medium">Nothing read yet</div>
+              <div className="mt-1 text-[13px] leading-normal text-(--text-muted)">Click a device in the tree. Once it is read, its objects fill the table.</div>
+            </>
+          )}
+        </div>
+      </aside>
+    )
+
   return (
     <aside className="flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
-      <div key={subject?.key ?? 'all'} className="nc-view-in flex items-start gap-3 px-[18px] pt-4 pb-3">
+      <div key={subject.key} className="nc-view-in flex items-start gap-3 px-[18px] pt-4 pb-3">
         <div className="min-w-0 flex-1">
           <div className="truncate text-[11px] text-(--text-faint)">
-            {subject ? `${subject.values['Object type']} · ${subject.instance}` : subjectLabel}
+            {subject.values['Object type']} · {subject.instance}
           </div>
-          <div className="mt-0.5 truncate text-[17px] font-medium tracking-[-0.01em]">{subject ? subject.values['object-name'] || 'Unnamed object' : 'Properties'}</div>
+          <div className="mt-0.5 truncate text-[17px] font-medium tracking-[-0.01em]">{subject.values['object-name'] || 'Unnamed object'}</div>
         </div>
-        {subject ? (
-          <Button aria-label="Show all properties" variant="secondary" size="icon-xs" onClick={onClearSubject}>
-            <XIcon />
-          </Button>
-        ) : null}
+        <Button aria-label="Close this object" title="Close" variant="secondary" size="icon-xs" onClick={onClearSubject}>
+          <XIcon />
+        </Button>
       </div>
 
       {isPoint ? (
@@ -196,7 +181,7 @@ export function PropertiesPanel({
         </div>
       ) : null}
 
-      {showing === 'overview' && subject ? (
+      {showing === 'overview' ? (
         <ScrollArea scrollFade className="min-h-0 flex-1">
           {subject.status !== 'ok' ? (
             <div className="mx-[18px] mb-1 rounded-[12px] bg-(--status-alarm-bg) px-3 py-2 text-[12px] leading-snug">{subject.values['Read status']}</div>
@@ -204,140 +189,37 @@ export function PropertiesPanel({
           <PointControl key={subject.key} row={subject} canWrite={canRead} reloadSignal={reloadSignal} onWritten={onWritten} onOpenSchedules={onOpenSchedules} />
         </ScrollArea>
       ) : (
-      <>
-      <div className="px-[18px] pb-2">
-        <div className="mb-2 flex items-start gap-2 rounded-[12px] bg-(--surface-card-muted) px-3 py-2.5 text-[12px] leading-snug text-(--text-muted)">
-          <Checkbox checked aria-hidden tabIndex={-1} className="pointer-events-none mt-px" />
-          <span>Tick a property to export it as a column.{subject ? '' : ' Pick an object to see its values.'}</span>
-        </div>
-        <Input ref={searchRef} size="sm" placeholder="Find a property, e.g. address, units, 3019" value={query} onChange={(e) => setQuery(e.target.value)} />
-        {subject && subject.status !== 'ok' ? (
-          <div className="mt-2 rounded-[12px] bg-(--status-alarm-bg) px-3 py-2 text-[12px] leading-snug">{subject.values['Read status']}</div>
-        ) : null}
-      </div>
-
-      {available.length === 0 && !subject ? (
-        <div className="flex-1">
-        <div className="mx-[18px] mt-2 flex gap-2.5 rounded-[12px] border border-dashed border-(--border-default) px-3.5 py-3 text-[12.5px] leading-snug text-(--text-muted)">
-          <Search className="mt-px size-4 shrink-0" />
-          Click a device in the tree. Once it is read, all its properties are listed here.
-        </div>
-        </div>
-      ) : (
-        <ScrollArea scrollFade className="min-h-0 flex-1">
-          <div className="flex flex-col px-2.5 pb-3">
-            {renderSection('Exporting, in this order', undefined, !exporting.length, exporting.map((name) => renderRow(name, columns.indexOf(name))))}
-            {renderSection('Vendor-specific', 'not in an EDE export', !vendor.length, vendor.map((p) => renderRow(p.name)))}
-            {renderSection('Standard', undefined, !standard.length, standard.map((p) => renderRow(p.name)))}
-            {!exporting.length && !vendor.length && !standard.length ? (
-              <p className="m-0 px-2 py-4 text-center text-[12px] text-(--text-muted)">No property matches. Try a shorter search.</p>
+        <>
+          <div className="px-[18px] pb-2">
+            <Input size="sm" placeholder="Find a property, e.g. address, units, 3019" value={query} onChange={(e) => setQuery(e.target.value)} />
+            {subject.status !== 'ok' ? (
+              <div className="mt-2 rounded-[12px] bg-(--status-alarm-bg) px-3 py-2 text-[12px] leading-snug">{subject.values['Read status']}</div>
             ) : null}
           </div>
-        </ScrollArea>
-      )}
-      </>
+          <ScrollArea scrollFade className="min-h-0 flex-1">
+            <div className="flex flex-col px-2.5 pb-3">
+              {renderSection('Vendor-specific', 'not in an EDE export', !vendor.length, vendor.map(renderRow))}
+              {renderSection('Standard', undefined, !standard.length, standard.map(renderRow))}
+              {!vendor.length && !standard.length ? (
+                <p className="m-0 px-2 py-4 text-center text-[12px] text-(--text-muted)">No property matches. Try a shorter search.</p>
+              ) : null}
+            </div>
+          </ScrollArea>
+        </>
       )}
 
-      {naming && showing === 'properties' ? (
-        <form
-          className="flex gap-2 border-t border-(--border-subtle) px-[18px] py-2.5"
-          onSubmit={(e) => {
-            e.preventDefault()
-            const name = presetName.trim()
-            if (!name) return
-            onPresets({ ...presets, [name]: columns })
-            toast(`Saved preset "${name}"`)
-            setPresetName('')
-            setNaming(false)
-          }}
-        >
-          <Input autoFocus size="sm" placeholder="Preset name, e.g. IO list" value={presetName} onChange={(e) => setPresetName(e.target.value)} />
-          <Button type="submit" size="xs" className="h-7" disabled={!presetName.trim()}>
-            Save
-          </Button>
-          <Button type="button" size="xs" variant="ghost" className="h-7" onClick={() => setNaming(false)}>
-            Cancel
-          </Button>
-        </form>
-      ) : null}
-
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-(--border-subtle) px-[18px] py-3">
-        {showing === 'overview' ? <span /> : (
-        <Menu>
-          <MenuTrigger render={<Button size="sm" variant="secondary" />}>
-            <Bookmark />
-            Presets
-            <ChevronDown />
-          </MenuTrigger>
-          <MenuPopup align="start" side="top" className="w-60">
-            {Object.keys(presets).length ? (
-              <MenuGroup>
-                <MenuGroupLabel>Apply a saved set of columns</MenuGroupLabel>
-                {Object.keys(presets).map((name) => (
-                  <MenuItem key={name} onClick={() => onColumns(presets[name])}>
-                    <span className="min-w-0 flex-1 truncate">{name}</span>
-                    <span className="text-[11px] text-(--text-faint)">{presets[name].length}</span>
-                  </MenuItem>
-                ))}
-              </MenuGroup>
-            ) : null}
-            {Object.keys(presets).length ? <MenuSeparator /> : null}
-            <MenuItem onClick={() => setNaming(true)} disabled={!columns.length}>
-              <Bookmark />
-              Save these columns as a preset
-            </MenuItem>
-            <MenuItem
-              onClick={() => {
-                const previous = columns
-                onColumns(DEFAULT_COLUMNS)
-                toast('Columns reset to the default', { undo: () => onColumns(previous) })
-              }}
-            >
-              <Undo />
-              Reset to the default columns
-            </MenuItem>
-            {Object.keys(presets).length ? (
-              <>
-                <MenuSeparator />
-                <MenuGroup>
-                  <MenuGroupLabel>Delete a preset</MenuGroupLabel>
-                  {Object.keys(presets).map((name) => (
-                    <MenuItem
-                      key={name}
-                      variant="destructive"
-                      onClick={() => {
-                        const previous = presets[name]
-                        const next = { ...presets }
-                        delete next[name]
-                        onPresets(next)
-                        toast(`Deleted preset "${name}"`, { undo: () => onPresets({ ...next, [name]: previous }) })
-                      }}
-                    >
-                      <XIcon />
-                      {name}
-                    </MenuItem>
-                  ))}
-                </MenuGroup>
-              </>
-            ) : null}
-          </MenuPopup>
-        </Menu>
-        )}
-        {subject ? (
-          <span className="flex gap-1.5">
-            {onTrend ? (
-              <Button size="sm" variant="secondary" onClick={onTrend} disabled={trended}>
-                <LineChart />
-                {trended ? (trendLabel ? 'In Trends' : 'Trending') : trendLabel ?? 'Trend'}
-              </Button>
-            ) : null}
-            <Button size="sm" variant="secondary" onClick={() => { onReread(); setReloadSignal((n) => n + 1) }} disabled={!canRead}>
-              Read again
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-(--border-subtle) px-[18px] py-3">
+        <span className="flex gap-1.5">
+          {onTrend ? (
+            <Button size="sm" variant="secondary" onClick={onTrend} disabled={trended}>
+              <LineChart />
+              {trended ? (trendLabel ? 'In Trends' : 'Trending') : trendLabel ?? 'Trend'}
             </Button>
-          </span>
-        ) : (
-          <span className="text-[12px] text-(--text-muted)">{columns.length ? `${columns.length} column${columns.length === 1 ? '' : 's'} ticked` : 'Nothing ticked yet'}</span>
-        )}
+          ) : null}
+          <Button size="sm" variant="secondary" onClick={() => { onReread(); setReloadSignal((n) => n + 1) }} disabled={!canRead}>
+            Read again
+          </Button>
+        </span>
       </div>
     </aside>
   )
