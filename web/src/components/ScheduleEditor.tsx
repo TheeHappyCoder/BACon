@@ -8,6 +8,10 @@ import { ScrollArea } from '../ui/components/scroll-area'
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '../ui/components/select'
 import { cn } from '../ui/utils'
 import { useControl } from './ControlState'
+import { DateField } from './DateField'
+import { TimeField } from './TimeField'
+
+const EX_PRIORITIES = Array.from({ length: 16 }, (_, i) => ({ value: String(i + 1), label: `P${i + 1}` }))
 
 const { Plus, XIcon, Copy } = Hugeicons
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -231,11 +235,10 @@ export function ScheduleEditor({ row, ctx, color, calendars, rowsByKey, onClose,
                   <div key={i} className="flex flex-col gap-2 rounded-[14px] border border-dashed border-(--border-default) px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <PeriodEditor ex={ex} calendars={calendars} device={row.device} onChange={(period) => setExceptions((x) => x.map((e, j) => (j === i ? { ...e, period } : e)))} />
-                      <label className="flex shrink-0 items-center gap-1.5 text-[12px] text-(--text-muted)">
-                        P
-                        <input aria-label={`Exception ${i + 1} priority`} type="number" min={1} max={16} className="h-7 w-12 rounded-[8px] border border-(--border-default) bg-(--surface-input) px-1.5 text-[12.5px] tabular-nums"
-                          value={ex.priority} onChange={(e) => setExceptions((x) => x.map((y, j) => (j === i ? { ...y, priority: Math.min(16, Math.max(1, Number(e.target.value) || 16)) } : y)))} />
-                      </label>
+<Select value={String(ex.priority)} items={EX_PRIORITIES} onValueChange={(v) => setExceptions((x) => x.map((y, j) => (j === i ? { ...y, priority: Number(v) } : y)))}>
+                        <SelectTrigger aria-label={`Exception ${i + 1} priority`} className="h-7 w-auto min-w-[64px] shrink-0 rounded-full border-0 bg-(--surface-track) px-2.5 text-[12px] tabular-nums"><SelectValue /></SelectTrigger>
+                        <SelectPopup>{EX_PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectPopup>
+                      </Select>
                       <Button aria-label={`Add a time to exception ${i + 1}`} size="icon-xs" variant="ghost" onClick={() => setExceptions((x) => x.map((y, j) => (j === i ? { ...y, times: [...y.times, { time: '12:00', value: blank() }] } : y)))}><Plus /></Button>
                       <Button aria-label={`Remove exception ${i + 1}`} size="icon-xs" variant="ghost" onClick={() => setExceptions((x) => x.filter((_, j) => j !== i))}><XIcon /></Button>
                     </div>
@@ -340,7 +343,7 @@ function EntryEditor({ entry, ctx, type, color, label, onChange, onRemove }: { e
   return (
     <span className="inline-flex h-8 items-center gap-1 rounded-full border border-(--border-subtle) bg-(--surface-card) pr-1 pl-2">
       <span className="size-2 shrink-0 rounded-full" style={{ background: entry.value.type === 'null' ? 'transparent' : fillOf(color(entry.value)), boxShadow: 'inset 0 0 0 1px rgba(41,41,41,0.15)' }} />
-      <input aria-label={`${label} time`} type="time" className="w-[74px] bg-transparent text-[12.5px] tabular-nums outline-none" value={entry.time?.slice(0, 5) ?? ''} onChange={(e) => onChange({ ...entry, time: e.target.value })} />
+      <TimeField label={`${label} time`} value={entry.time?.slice(0, 5) ?? ''} onChange={(time) => onChange({ ...entry, time })} />
       <ValueEditor value={entry.value} ctx={ctx} type={type} allowRelease label={`${label} value`} compact onChange={(value) => onChange({ ...entry, value })} />
       <button aria-label={`Remove ${label}`} onClick={onRemove} className="inline-flex size-6 items-center justify-center rounded-full text-(--text-faint) hover:bg-(--surface-track) hover:text-(--text-strong)"><XIcon className="size-3" /></button>
     </span>
@@ -364,7 +367,7 @@ function ValueEditor({ value, ctx, type, allowRelease, label, compact, onChange 
         </Select>
       ) : null}
       {!options && value.type !== 'null' ? (
-        <Input aria-label={label} type="number" step="any" size="sm" className="h-7 w-[76px] tabular-nums" value={String(value.value ?? '')} onChange={(e) => onChange({ type, value: e.target.value })} />
+        <Input aria-label={label} role="spinbutton" inputMode="decimal" size="sm" className="h-7 w-[76px] tabular-nums" value={String(value.value ?? '')} onChange={(e) => onChange({ type, value: e.target.value })} />
       ) : null}
     </span>
   )
@@ -381,11 +384,10 @@ function PeriodEditor({ ex, calendars, device, onChange }: { ex: SpecialEvent; c
 }
 
 function CalendarEntryEditor({ entry, onChange }: { entry: CalendarEntry; onChange: (e: CalendarEntry) => void }) {
-  const box = 'h-7 rounded-[8px] border border-(--border-default) bg-(--surface-input) px-1.5 text-[12.5px] tabular-nums'
   if ('date' in entry && (isoOf(entry.date) || entry.date.every((x) => x === null))) {
     return (
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <input aria-label="Date" type="date" className={box} value={isoOf(entry.date)} onChange={(e) => onChange({ date: dateOf(e.target.value, entry.date) })} />
+        <DateField size="sm" label="Date" value={isoOf(entry.date)} onChange={(iso) => onChange({ date: dateOf(iso, entry.date) })} />
         <button className="text-[11.5px] text-(--text-muted) hover:text-(--text-strong)" onClick={() => onChange({ range: [entry.date, entry.date] })}>Make a range</button>
       </span>
     )
@@ -393,9 +395,9 @@ function CalendarEntryEditor({ entry, onChange }: { entry: CalendarEntry; onChan
   if ('range' in entry && isoOf(entry.range[0]) && isoOf(entry.range[1])) {
     return (
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <input aria-label="From" type="date" className={box} value={isoOf(entry.range[0])} onChange={(e) => onChange({ range: [dateOf(e.target.value, entry.range[0]), entry.range[1]] })} />
+        <DateField size="sm" label="From" value={isoOf(entry.range[0])} onChange={(iso) => onChange({ range: [dateOf(iso, entry.range[0]), entry.range[1]] })} />
         <span className="text-(--text-faint)">to</span>
-        <input aria-label="Until" type="date" className={box} value={isoOf(entry.range[1])} onChange={(e) => onChange({ range: [entry.range[0], dateOf(e.target.value, entry.range[1])] })} />
+        <DateField size="sm" label="Until" value={isoOf(entry.range[1])} onChange={(iso) => onChange({ range: [entry.range[0], dateOf(iso, entry.range[1])] })} />
       </span>
     )
   }

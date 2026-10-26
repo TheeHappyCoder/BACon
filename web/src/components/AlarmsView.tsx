@@ -149,7 +149,7 @@ export function AlarmsView({
     return (
       <>
         <Pane side="left">
-          <aside className="flex w-full min-w-0 flex-col border-r border-(--border-subtle)">
+          <aside className="flex w-full min-w-0 flex-col">
             <PaneTitle title="Alarms" />
             <div className="mx-3 mt-1 rounded-[12px] border border-dashed border-(--border-default) px-3.5 py-3 text-[12.5px] leading-snug text-(--text-muted)">
               Objects with an alarm set up show up here once their device is read.
@@ -157,12 +157,12 @@ export function AlarmsView({
           </aside>
         </Pane>
         <main className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-[52px] shrink-0 items-center gap-1.5 pr-3 pl-2 text-[13px] text-(--text-muted)">
+          <header className="flex h-12 shrink-0 items-center border-b border-(--border-subtle) gap-1.5 pr-3 pl-2 text-[13px] text-(--text-muted)">
             <PaneToggle side="left" />
             <span>Alarms</span>
           </header>
-          <div className="flex min-h-0 flex-1 px-3 pb-3">
-            <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+          <div className="flex min-h-0 flex-1">
+            <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-(--surface-card)">
               <EmptyState
                 icon={<Notification className="size-5" />}
                 title="No alarms set up"
@@ -200,7 +200,7 @@ export function AlarmsView({
   return (
     <>
       <Pane side="left">
-        <aside className="flex w-full min-w-0 flex-col border-r border-(--border-subtle)">
+        <aside className="flex w-full min-w-0 flex-col">
           <PaneTitle title="Alarms" count={items.length} />
           {items.length > 6 ? <PaneSearch value={search} onChange={setSearch} placeholder="Search alarms" /> : null}
           <ScrollArea scrollFade className="min-h-0 flex-1">
@@ -210,7 +210,7 @@ export function AlarmsView({
                   key={i.row.key}
                   onClick={() => setSelectedKey((k) => (k === i.row.key ? null : i.row.key))}
                   data-active={selectedKey === i.row.key ? 'true' : undefined}
-                  className="flex h-[52px] items-center gap-2.5 rounded-[10px] px-2 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)] data-[active=true]:bg-(--paper-3)"
+                  className="flex h-[52px] items-center gap-2.5 rounded-[10px] px-2 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)] data-[active=true]:bg-(--surface-card) data-[active=true]:shadow-[0_0_0_1px_var(--border-subtle),0_2px_6px_-2px_rgba(0,0,0,.08)]"
                 >
                   <span className={cn('h-7 w-[3px] shrink-0 rounded-full', BAR[i.state.severity], i.state.severity === 'normal' && 'opacity-60')} />
                   <span className="min-w-0 flex-1">
@@ -228,7 +228,7 @@ export function AlarmsView({
       </Pane>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[52px] shrink-0 items-center gap-1.5 pr-2 pl-2 text-[13px] text-(--text-muted)">
+        <header className="flex h-12 shrink-0 items-center border-b border-(--border-subtle) gap-1.5 pr-2 pl-2 text-[13px] text-(--text-muted)">
           <PaneToggle side="left" />
           <span>Alarms</span>
           {selected ? (
@@ -240,8 +240,8 @@ export function AlarmsView({
           <span className="flex-1" />
           {selected ? <PaneToggle side="right" /> : null}
         </header>
-        <div className="flex min-h-0 flex-1 gap-[10px] px-3 pb-3">
-          <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+        <div className="flex min-h-0 flex-1">
+          <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-(--surface-card)">
             <div className="flex items-start gap-3 px-[18px] pt-[18px] pb-3">
               <div className="min-w-0 flex-1">
                 <h1 className="m-0 text-[20px] font-medium tracking-[-0.02em]">{active ? `${active} active` : 'All normal'}</h1>
@@ -365,9 +365,9 @@ export function AlarmsView({
           </section>
 
           {selected ? (
-            <Pane side="right" gap={10}>
+            <Pane side="right">
               <ScrollArea scrollFade className="min-h-0 w-full">
-                <aside key={selected.row.key} className="nc-view-in flex w-full min-w-0 flex-col gap-2.5 pb-1">
+                <aside key={selected.row.key} className="nc-view-in flex w-full min-w-0 flex-col gap-2.5 p-3">
                   <AlarmCard item={selected} now={now} onClose={() => setSelectedKey(null)} deviceName={deviceName(selected.row.device)} />
                   <Acknowledge item={selected} canWrite={status.connected} onDone={() => onCheck([selected.row.device], [selected.row])} />
                   <Setup row={selected.row} condition={selected.condition} />

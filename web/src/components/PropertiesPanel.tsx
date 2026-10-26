@@ -122,7 +122,7 @@ export function PropertiesPanel({
     )
 
   return (
-    <aside className="flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+    <aside className="flex w-full min-w-0 flex-col overflow-hidden bg-(--surface-card)">
       <div key={subject.key} className="nc-view-in flex items-start gap-3 px-[18px] pt-4 pb-3">
         <div className="min-w-0 flex-1">
           <div className="truncate text-[11px] text-(--text-faint)">

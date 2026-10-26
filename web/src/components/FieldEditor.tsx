@@ -3,6 +3,8 @@ import { Checkbox } from '../ui/components/checkbox'
 import { Input } from '../ui/components/input'
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '../ui/components/select'
 import { cn } from '../ui/utils'
+import { DateField } from './DateField'
+import { NumberField } from './NumberField'
 
 const isoOf = (d: BDate | undefined) =>
   d && d[0] !== null && d[1] !== null && d[2] !== null && d[1] <= 12 && d[2] <= 31 ? `${d[0]}-${String(d[1]).padStart(2, '0')}-${String(d[2]).padStart(2, '0')}` : ''
@@ -19,13 +21,7 @@ export function FieldEditor({ shape, draft, onChange, disabled, label }: { shape
     case 'real':
     case 'unsigned':
     case 'integer':
-      return (
-        <label className={box}>
-          <Input unstyled nativeInput aria-label={label} type="number" step={shape.kind === 'real' ? 'any' : 1} min={shape.kind === 'unsigned' ? 0 : undefined}
-            className="h-full min-w-0 flex-1 text-[14px] tabular-nums" value={draft as string} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
-          {shape.units ? <span className="text-[13px] text-(--text-muted)">{shape.units}</span> : null}
-        </label>
-      )
+      return <NumberField label={label} integer={shape.kind !== 'real'} units={shape.units} value={String(draft ?? '')} disabled={disabled} onChange={onChange} />
     case 'string':
       return (
         <label className={box}>
@@ -66,7 +62,7 @@ export function FieldEditor({ shape, draft, onChange, disabled, label }: { shape
           {items.map((x, i) => (
             <label key={i} className={cn(box, 'h-8')}>
               <span className="w-5 shrink-0 text-[11px] tabular-nums text-(--text-faint)">{i + 1}</span>
-              <Input unstyled nativeInput aria-label={`${label} ${i + 1}`} type={shape.kind === 'unsigned-array' ? 'number' : 'text'} className="h-full min-w-0 flex-1 text-[13px]"
+              <Input unstyled nativeInput aria-label={`${label} ${i + 1}`} inputMode={shape.kind === 'unsigned-array' ? 'numeric' : undefined} className="h-full min-w-0 flex-1 text-[13px]"
                 value={String(x ?? '')} disabled={disabled} onChange={(e) => onChange(items.map((y, j) => (j === i ? e.target.value : y)))} />
             </label>
           ))}
@@ -85,9 +81,7 @@ export function FieldEditor({ shape, draft, onChange, disabled, label }: { shape
           {v.type === 'null' ? null : v.type === 'boolean' ? (
             <Segmented label={label} options={[{ value: 'true', label: 'True' }, { value: 'false', label: 'False' }]} value={v.value} onChange={(x) => onChange({ ...v, value: x })} disabled={disabled} />
           ) : (
-            <label className={cn(box, 'flex-1')}>
-              <Input unstyled nativeInput aria-label={label} type="number" className="h-full min-w-0 flex-1 text-[14px] tabular-nums" value={v.value} disabled={disabled} onChange={(e) => onChange({ ...v, value: e.target.value })} />
-            </label>
+            <NumberField className="flex-1" label={label} integer={v.type !== 'real'} value={v.value} disabled={disabled} onChange={(x) => onChange({ ...v, value: x })} />
           )}
         </div>
       )
@@ -97,11 +91,11 @@ export function FieldEditor({ shape, draft, onChange, disabled, label }: { shape
       return (
         <div className="grid grid-cols-2 gap-1.5">
           {[a, b].map((d, i) => (
-            <label key={i} className={cn(box, 'flex-col items-start justify-center gap-0 py-1')}>
-              <span className="text-[10.5px] text-(--text-faint)">{i ? 'Until' : 'From'} · blank for any</span>
-              <input aria-label={`${label} ${i ? 'end' : 'start'}`} type="date" className="w-full bg-transparent text-[12.5px] outline-none" value={isoOf(d)} disabled={disabled}
-                onChange={(e) => onChange(i ? [a, dateOf(e.target.value)] : [dateOf(e.target.value), b])} />
-            </label>
+            <span key={i} className="flex min-w-0 flex-col gap-1">
+              <span className="text-[11px] text-(--text-faint)">{i ? 'Until' : 'From'} · blank for any</span>
+              <DateField label={`${label} ${i ? 'end' : 'start'}`} placeholder="Any date" clearable value={isoOf(d)} disabled={disabled}
+                onChange={(iso) => onChange(i ? [a, dateOf(iso)] : [dateOf(iso), b])} />
+            </span>
           ))}
         </div>
       )

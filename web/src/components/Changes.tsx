@@ -88,7 +88,7 @@ export function Changes({
 }: {
   rows: ObjectRow[]
   deviceIds: number[] | null
-  typeFilter: string | null
+  typeFilter: string[] | null
   baseline: Baseline | null
   onBaseline: (b: Baseline | null) => void
   selectedKey: string | null
@@ -101,7 +101,7 @@ export function Changes({
   const [open, setOpen] = useState<Set<string>>(new Set())
 
   const then = useMemo(
-    () => (baseline ? baseline.rows.filter((r) => (!deviceIds || deviceIds.includes(r.device)) && (!typeFilter || r.values['Object type'] === typeFilter)) : []),
+    () => (baseline ? baseline.rows.filter((r) => (!deviceIds || deviceIds.includes(r.device)) && (!typeFilter || typeFilter.includes(r.values['Object type']))) : []),
     [baseline, deviceIds, typeFilter],
   )
   const changes = useMemo(() => (baseline ? compareRows(rows, then, includeLive) : []), [baseline, rows, then, includeLive])

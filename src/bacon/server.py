@@ -596,8 +596,28 @@ async def open_site(request: Request):
 # ---- trends -------------------------------------------------------------------
 
 
+def _group(gid: int):
+    g = trend.groups.get(gid)
+    if g is None:
+        raise HTTPException(404, "That trend group is gone.")
+    return g
+
+
+class TrendGroupBody(BaseModel):
+    name: str = ""
+    interval: float = 60
+    mode: str = "auto"
+    objects: list[dict] = []  # rows to add straight away: {device, typeId, instance, values}
+
+
+class TrendGroupPatch(BaseModel):
+    name: str | None = None
+    interval: float | None = None
+    mode: str | None = None
+
+
 class TrendAdd(BaseModel):
-    objects: list[dict]  # rows: {device, typeId, instance, values}
+    objects: list[dict]
 
 
 @app.get("/api/trends")
@@ -605,10 +625,58 @@ async def trend_status():
     return trend.status()
 
 
-@app.post("/api/trends/points")
-async def trend_add(body: TrendAdd):
-    added = trend.add(body.objects, devices, objects)
-    return {"added": added, **trend.status()}
+@app.post("/api/trends/groups")
+async def trend_group_create(body: TrendGroupBody):
+    g = trend.create_group(body.name, body.interval, body.mode)
+    added = trend.add_to_group(g.id, body.objects, devices, objects) if body.objects else []
+    return {"group": g.id, "added": added, **trend.status()}
+
+
+@app.patch("/api/trends/groups/{gid}")
+async def trend_group_update(gid: int, body: TrendGroupPatch):
+    _group(gid)
+    trend.update_group(gid, body.name, body.interval, body.mode)
+    return trend.status()
+
+
+@app.delete("/api/trends/groups/{gid}")
+async def trend_group_delete(gid: int):
+    _group(gid)
+    await trend.delete_group(gid)
+    return trend.status()
+
+
+@app.post("/api/trends/groups/{gid}/points")
+async def trend_group_add(gid: int, body: TrendAdd):
+    _group(gid)
+    added = trend.add_to_group(gid, body.objects, devices, objects)
+    return {"group": gid, "added": added, **trend.status()}
+
+
+@app.delete("/api/trends/groups/{gid}/points/{point_id}")
+async def trend_group_remove(gid: int, point_id: int):
+    _group(gid)
+    trend.remove_from_group(gid, point_id)
+    return trend.status()
+
+
+@app.post("/api/trends/groups/{gid}/start")
+async def trend_group_start(gid: int):
+    _group(gid)
+    if client.app is None:
+        raise HTTPException(400, "Connect to a network first.")
+    try:
+        await trend.start(gid, devices)
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    return trend.status()
+
+
+@app.post("/api/trends/groups/{gid}/stop")
+async def trend_group_stop(gid: int):
+    _group(gid)
+    await trend.stop(gid)
+    return trend.status()
 
 
 @app.post("/api/trends/points/{point_id}/sync")
@@ -625,53 +693,28 @@ async def trend_sync(point_id: int):
     return trend.status()
 
 
-@app.delete("/api/trends/points/{point_id}")
-async def trend_remove(point_id: int):
-    trend.remove([point_id])
-    return trend.status()
-
-
-class TrendStart(BaseModel):
-    interval: float = 10
-    mode: str = "auto"
-
-
-@app.post("/api/trends/start")
-async def trend_start(body: TrendStart):
-    if client.app is None:
-        raise HTTPException(400, "Connect to a network first.")
-    if not trend.points:
-        raise HTTPException(400, "Add some points to trend first.")
-    await trend.start(body.interval, body.mode)
-    return trend.status()
-
-
-@app.post("/api/trends/stop")
-async def trend_stop():
-    await trend.stop()
-    return trend.status()
-
-
-@app.post("/api/trends/clear")
-async def trend_clear():
-    if trend.running:
-        await trend.stop()
-    trend.clear()
-    return trend.status()
+def _ids(text: str) -> list[int]:
+    return [int(x) for x in text.split(",") if x.strip().isdigit()]
 
 
 @app.get("/api/trends/series")
 async def trend_series(ids: str, since: float = 0, until: float = 0, buckets: int = 400):
-    wanted = [int(x) for x in ids.split(",") if x.strip().isdigit()]
-    return trend.series(wanted, since, until, min(max(buckets, 10), 2000))
+    return trend.series(_ids(ids), since, until, min(max(buckets, 10), 2000))
+
+
+@app.get("/api/trends/stats")
+async def trend_stats(ids: str, since: float = 0, until: float = 0):
+    return trend.stats(_ids(ids), since, until)
 
 
 @app.get("/api/trends/export")
-async def trend_export(kind: str = "xlsx"):
+async def trend_export(kind: str = "xlsx", group: int = 0, since: float = 0):
     import csv
     import datetime
 
-    rows = trend.export_rows()
+    g = _group(group) if group else None
+    ids = [i for i in g.point_ids if i in trend.points] if g else None
+    rows = trend.export_rows(ids, since)
     names = {p.id: p for p in trend.points.values()}
     header = ["Time", "Device", "Device name", "Object type", "Instance", "Object name", "Value", "Units"]
 
@@ -684,7 +727,9 @@ async def trend_export(kind: str = "xlsx"):
 
         return [stamp, str(p.device), p.device_name, object_type_name(p.type_id), str(p.instance), p.name, text, p.units]
 
+    label = re.sub(r"[^\w\- ]+", "", g.name).strip() if g else "all"
     stamp = time.strftime("%Y%m%d-%H%M")
+    filename = f"bacnet-trend-{label or 'group'}-{stamp}"
     if kind == "csv":
         buf = io.StringIO()
         w = csv.writer(buf)
@@ -692,15 +737,16 @@ async def trend_export(kind: str = "xlsx"):
         for r in rows:
             w.writerow(line(*r))
         data = (chr(0xFEFF) + buf.getvalue()).encode("utf-8")  # BOM so Excel opens UTF-8 correctly
-        return StreamingResponse(io.BytesIO(data), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="bacnet-trend-{stamp}.csv"'})
+        return StreamingResponse(io.BytesIO(data), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'})
 
     from openpyxl import Workbook
-    from openpyxl.styles import Font
 
     wb = Workbook(write_only=True)
     ws = wb.create_sheet("Points")
     ws.append(["Device", "Device name", "Object name", "Units", "Method", "Samples", "Min", "Average", "Max", "Last"])
     for p in trend.points.values():
+        if ids is not None and p.id not in ids:
+            continue
         j = p.to_json()
         ws.append([p.device, p.device_name, p.name, p.units, p.method, p.samples, j["min"], j["avg"], j["max"], p.last])
     ws = wb.create_sheet("Samples")
@@ -716,7 +762,7 @@ async def trend_export(kind: str = "xlsx"):
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="bacnet-trend-{stamp}.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}.xlsx"'},
     )
 
 

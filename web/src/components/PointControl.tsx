@@ -230,8 +230,8 @@ export function PointControl({ row, canWrite, reloadSignal, onWritten, onOpenSch
                     unstyled
                     nativeInput
                     aria-label="New value"
-                    type="number"
-                    step="any"
+                    role="spinbutton"
+                    inputMode="decimal"
                     className="h-full min-w-0 flex-1 text-[14px] tabular-nums"
                     placeholder={short(live, live.current, false)}
                     value={draft}

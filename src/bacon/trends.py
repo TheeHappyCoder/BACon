@@ -1,5 +1,8 @@
 """Trend recording: present-value of chosen points, plus the history held in the controllers' own trend logs.
 
+Points are recorded in trend groups the user names (a chiller, an AHU), each with its own interval and mode and its own
+start and stop. Groups, their points and every sample are kept in BACon's data folder for KEEP_DAYS days.
+
 Per point, COV is tried first (the controller pushes changes, almost no traffic). Subscriptions are unconfirmed with a
 5-minute lifetime that bacpypes3 renews, so they expire by themselves if this PC disappears. A point whose controller
 refuses COV is polled instead, batched with ReadPropertyMultiple and one request per controller at a time, so a big
@@ -11,10 +14,11 @@ every LOG_EVERY seconds by sequence number (or by time, for controllers that do 
 """
 
 import asyncio
+import json
 import os
 import sqlite3
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from bacpypes3.apdu import ErrorRejectAbortNack, ReadPropertyMultipleRequest
 from bacpypes3.basetypes import LogMultipleRecord, LogRecord, PropertyReference, ReadAccessSpecification
@@ -23,7 +27,7 @@ from bacpypes3.pdu import Address
 from bacpypes3.primitivedata import ObjectIdentifier
 from bacpypes3.vendor import get_vendor_info
 
-from .paths import clean_old, data_dir
+from .paths import KEEP_DAYS, clean_old, data_dir
 from .client import BACnetError, BacnetClient, error_text
 from .decode import decode_any_raw, decode_value, fmt
 
@@ -68,6 +72,7 @@ class TrendPoint:
     source_type: int | None = None  # for a trend log: the type of the object it logs (binary logs draw as steps)
     channel: int | None = None  # for a trend-log-multiple: which logged property
     log: "LogSource | None" = None
+    next_due: float = 0.0  # when the next timed read is due (wall clock), for the countdown
 
     def to_json(self):
         data = {
@@ -75,7 +80,7 @@ class TrendPoint:
             "deviceName": self.device_name, "units": self.units, "method": self.method, "last": self.last, "lastT": self.last_t,
             "samples": self.samples, "error": self.error, "note": self.note, "min": self.lo, "max": self.hi,
             "avg": (self.total / self.numeric) if self.numeric else None,
-            "sourceType": self.source_type, "channel": self.channel,
+            "sourceType": self.source_type, "channel": self.channel, "nextDue": self.next_due,
         }
         if self.log:
             data["log"] = self.log.to_json()
@@ -147,35 +152,120 @@ def _datum_text(datum, source_type: int | None) -> str | None:
     return None
 
 
+@dataclass
+class TrendGroup:
+    """A trend the user named (a chiller, an AHU): its points, how often it records, and whether it is recording."""
+    id: int
+    name: str
+    interval: float = 60.0
+    mode: str = "auto"  # auto: COV, polled when refused / poll: read on the interval
+    point_ids: list = field(default_factory=list)
+    running: bool = False
+    started_at: float = 0.0
+    stopped_at: float = 0.0
+
+    def to_json(self, points: dict):
+        mine = [points[i] for i in self.point_ids if i in points]
+        due = [p.next_due for p in mine if p.next_due]
+        return {
+            "id": self.id, "name": self.name, "interval": self.interval, "mode": self.mode, "pointIds": [p.id for p in mine],
+            "running": self.running, "startedAt": self.started_at, "stoppedAt": self.stopped_at,
+            "nextRead": min(due) if self.running and due else 0.0,
+            "samples": sum(p.samples for p in mine),
+        }
+
+
 class TrendSession:
+    """Every trend group, the points they record, and one history database shared by all of them. A point in several
+    groups is recorded once: subscribed for COV if any running group records on change, read at the fastest interval
+    of the running groups it is in. Groups and points are kept in a file, so they are there after a restart."""
+
     def __init__(self, client: BacnetClient):
         self.client = client
         self.points: dict[int, TrendPoint] = {}
+        self.groups: dict[int, TrendGroup] = {}
         self.next_id = 1
-        self.running = False
-        self.started_at = 0.0
-        self.stopped_at = 0.0
-        self.interval = 10.0
-        self.next_read = 0.0  # when the next timed read is due (wall clock), so the UI can count down
-        self.mode = "auto"
+        self.next_group = 1
         self.tasks: list[asyncio.Task] = []
         self.log_tasks: set[asyncio.Task] = set()
         self.logs: dict[tuple[int, int, int], LogSource] = {}
         self.queue: list[tuple] = []
         self.earliest = 0.0
-        self._new_db()
+        self.folder = data_dir("trends")
+        self.state_path = os.path.join(self.folder, "groups.json")
+        self._open_db()
+        self._load()
+
+    @property
+    def running(self) -> bool:
+        return any(g.running for g in self.groups.values())
 
     # -- storage -----------------------------------------------------------------
 
-    def _new_db(self):
-        folder = data_dir("trends")
-        clean_old(folder)
-        self.db_path = os.path.join(folder, time.strftime("trend-%Y%m%d-%H%M%S.sqlite"))
+    def _open_db(self):
+        clean_old(self.folder)  # recordings from before groups, and anything else left a month
+        self.db_path = os.path.join(self.folder, "history.sqlite")
         self.db = sqlite3.connect(self.db_path, check_same_thread=False)
         self.db.execute("pragma journal_mode=wal")
         self.db.execute("create table if not exists samples (point integer, t real, v real, text text)")
         self.db.execute("create index if not exists samples_pt on samples (point, t)")
+        self.db.execute("delete from samples where t < ?", (time.time() - KEEP_DAYS * 86400,))
         self.db.commit()
+
+    def _save(self):
+        def point_json(p: TrendPoint):
+            return {
+                "id": p.id, "device": p.device, "address": p.address, "type_id": p.type_id, "instance": p.instance, "name": p.name,
+                "device_name": p.device_name, "units": p.units, "source_type": p.source_type, "channel": p.channel,
+                "log_interval": p.log.interval if p.log else None,
+            }
+
+        data = {
+            "next_id": self.next_id, "next_group": self.next_group,
+            "points": [point_json(p) for p in self.points.values()],
+            "groups": [{"id": g.id, "name": g.name, "interval": g.interval, "mode": g.mode, "points": g.point_ids} for g in self.groups.values()],
+        }
+        tmp = self.state_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, self.state_path)
+
+    def _load(self):
+        try:
+            with open(self.state_path, encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return
+        self.next_id = int(data.get("next_id", 1))
+        self.next_group = int(data.get("next_group", 1))
+        for d in data.get("points", []):
+            p = TrendPoint(
+                id=d["id"], device=d["device"], address=d["address"], type_id=d["type_id"], instance=d["instance"], name=d["name"],
+                device_name=d.get("device_name", ""), units=d.get("units", ""), source_type=d.get("source_type"), channel=d.get("channel"),
+            )
+            if p.type_id in LOG_TYPES:
+                key = (p.device, p.type_id, p.instance)
+                src = self.logs.get(key) or LogSource(device=p.device, address=p.address, type_id=p.type_id, instance=p.instance, interval=d.get("log_interval") or 0.0)
+                self.logs[key] = src
+                p.method, p.log = "log", src
+                src.points[p.channel or 0] = p
+            self.points[p.id] = p
+        for d in data.get("groups", []):
+            self.groups[d["id"]] = TrendGroup(id=d["id"], name=d["name"], interval=float(d.get("interval", 60)), mode=d.get("mode", "auto"), point_ids=list(d.get("points", [])))
+        # what is already recorded: counts and ranges, and where each log's history ends, so reading resumes there
+        for pid, n, lo, hi, total, numeric, first, last_t in self.db.execute(
+            "select point, count(*), min(v), max(v), sum(v), count(v), min(t), max(t) from samples group by point"
+        ):
+            p = self.points.get(pid)
+            if p is None:
+                continue
+            p.samples, p.lo, p.hi, p.total, p.numeric, p.last_t = n, lo, hi, total or 0.0, numeric, last_t
+            p.last = (self.db.execute("select text from samples where point = ? order by t desc limit 1", (pid,)).fetchone() or [""])[0]
+            p.method = p.method if p.log else "stopped"
+            self.earliest = min(self.earliest or first, first)
+            if p.log:
+                p.log.last_t = max(p.log.last_t, last_t)
+                p.log.state = "ready"
 
     def _record(self, p: TrendPoint, text: str, t: float | None = None):
         t = t or time.time()
@@ -197,13 +287,100 @@ class TrendSession:
         self.db.executemany("insert into samples values (?, ?, ?, ?)", batch)
         self.db.commit()
 
+    # -- groups ------------------------------------------------------------------
+
+    def create_group(self, name: str, interval: float, mode: str) -> TrendGroup:
+        g = TrendGroup(id=self.next_group, name=name.strip() or f"Trend {self.next_group}", interval=_clamp(interval), mode=_mode(mode))
+        self.next_group += 1
+        self.groups[g.id] = g
+        self._save()
+        return g
+
+    def update_group(self, gid: int, name: str | None, interval: float | None, mode: str | None) -> TrendGroup:
+        g = self.groups[gid]
+        if name is not None and name.strip():
+            g.name = name.strip()
+        if interval is not None:
+            g.interval = _clamp(interval)
+        if mode is not None:
+            g.mode = _mode(mode)
+        self._save()
+        if g.running:
+            self._restart_workers()  # a new interval or mode applies straight away
+        return g
+
+    async def delete_group(self, gid: int):
+        g = self.groups.pop(gid, None)
+        if g is None:
+            return
+        # points no other group records go, with their history
+        used = {i for other in self.groups.values() for i in other.point_ids}
+        self._drop([i for i in g.point_ids if i not in used])
+        self._save()
+        self._restart_workers()
+
+    def add_to_group(self, gid: int, rows: list[dict], devices: dict, objects: dict | None = None) -> list[int]:
+        """Add object rows to a group. A point another group already records is shared, not read twice."""
+        g = self.groups[gid]
+        ids = self._points_for(rows, devices, objects)
+        added = [i for i in ids if i not in g.point_ids]
+        g.point_ids.extend(added)
+        self._save()
+        if self.running and added:
+            self._restart_workers()
+        return added
+
+    def remove_from_group(self, gid: int, pid: int):
+        g = self.groups[gid]
+        g.point_ids = [i for i in g.point_ids if i != pid]
+        if not any(pid in other.point_ids for other in self.groups.values()):
+            self._drop([pid])
+        self._save()
+        if self.running:
+            self._restart_workers()
+
+    async def start(self, gid: int, devices: dict):
+        if self.client.app is None:
+            raise RuntimeError("Connect to a network first.")
+        g = self.groups[gid]
+        if not g.point_ids:
+            raise RuntimeError("Add some points to this group first.")
+        for p in self.points.values():  # a controller that moved to another address is followed there
+            d = devices.get(p.device)
+            if d is not None:
+                p.address = d.address
+                if p.log:
+                    p.log.address = d.address
+        g.running = True
+        g.started_at = g.started_at or time.time()
+        g.stopped_at = 0.0
+        self._restart_workers()
+
+    async def stop(self, gid: int | None = None):
+        """Stop one group, or every group (on disconnect)."""
+        for g in self.groups.values():
+            if gid is None or g.id == gid:
+                if g.running:
+                    g.running = False
+                    g.stopped_at = time.time()
+        await self._stop_workers()
+        if self.running:
+            self._restart_workers()
+        self.flush()
+        recording = self._wanted()
+        for p in self.points.values():
+            if p.id not in recording and p.method in ("cov", "poll", "waiting"):
+                p.method = "stopped" if p.samples else "waiting"
+                p.next_due = 0.0
+
     # -- points ------------------------------------------------------------------
 
-    def add(self, rows: list[dict], devices: dict, objects: dict | None = None) -> list[int]:
-        """Rows are object rows. A trend log's row carries detail["log-device-object-property"] from the read; the
-        objects it logs are looked up in `objects` for their name, units and type."""
-        added = []
-        existing = {(p.device, p.type_id, p.instance, p.channel) for p in self.points.values()}
+    def _points_for(self, rows: list[dict], devices: dict, objects: dict | None) -> list[int]:
+        """The point ids for these rows, made where there is none yet. A trend log's row carries
+        detail["log-device-object-property"] from the read; the objects it logs are looked up in `objects` for their
+        name, units and type. A trend-log-multiple gives one point per channel."""
+        ids = []
+        existing = {(p.device, p.type_id, p.instance, p.channel): p.id for p in self.points.values()}
         for r in rows:
             dev, type_id, inst = int(r["device"]), int(r["typeId"]), int(r["instance"])
             if dev not in devices:
@@ -212,12 +389,13 @@ class TrendSession:
             name = values.get("object-name", "") or f"{values.get('Object type', type_id)} {inst}"
             common = dict(device=dev, address=devices[dev].address, type_id=type_id, instance=inst, device_name=devices[dev].name)
             if type_id not in LOG_TYPES:
-                if (dev, type_id, inst, None) not in existing:
+                pid = existing.get((dev, type_id, inst, None))
+                if pid is None:
                     p = TrendPoint(id=self.next_id, name=name, units=values.get("units", ""), **common)
                     self.next_id += 1
                     self.points[p.id] = p
-                    existing.add((dev, type_id, inst, None))
-                    added.append(p.id)
+                    pid = existing[(dev, type_id, inst, None)] = p.id
+                ids.append(pid)
                 continue
             key = (dev, type_id, inst)
             src = self.logs.get(key)
@@ -231,7 +409,9 @@ class TrendSession:
             fresh = False
             for channel, ref in enumerate(refs if type_id == 27 else refs[:1]):
                 ch = channel if type_id == 27 else None
-                if (dev, type_id, inst, ch) in existing:
+                pid = existing.get((dev, type_id, inst, ch))
+                if pid is not None:
+                    ids.append(pid)
                     continue
                 target = {}
                 if ref:
@@ -246,16 +426,26 @@ class TrendSession:
                 self.next_id += 1
                 self.points[p.id] = p
                 src.points[ch or 0] = p
-                existing.add((dev, type_id, inst, ch))
-                added.append(p.id)
+                existing[(dev, type_id, inst, ch)] = p.id
+                ids.append(p.id)
                 fresh = True
             if fresh:
                 self.logs[key] = src
                 src.reset()  # a channel added to a log already read: read the whole history again
                 self.fetch_log(src)
-        if self.running and added:
-            self._restart_workers()
-        return added
+        return ids
+
+    def _drop(self, ids: list[int]):
+        for i in ids:
+            p = self.points.pop(i, None)
+            if p and p.log:
+                p.log.points = {c: x for c, x in p.log.points.items() if x.id != i}
+                if not p.log.points:
+                    self.logs.pop((p.log.device, p.log.type_id, p.log.instance), None)
+        if ids:
+            self.flush()
+            self.db.executemany("delete from samples where point = ?", [(i,) for i in ids])
+            self.db.commit()
 
     def fetch_log(self, src: "LogSource"):
         """Read the log's history now, in the background, when connected."""
@@ -265,68 +455,58 @@ class TrendSession:
         self.log_tasks.add(task)
         task.add_done_callback(self.log_tasks.discard)
 
-    def remove(self, ids: list[int]):
-        for i in ids:
-            p = self.points.pop(i, None)
-            if p and p.log:
-                p.log.points = {c: x for c, x in p.log.points.items() if x.id != i}
-                if not p.log.points:
-                    self.logs.pop((p.log.device, p.log.type_id, p.log.instance), None)
-        if self.running:
-            self._restart_workers()
-
     # -- running -----------------------------------------------------------------
 
-    async def start(self, interval: float, mode: str):
-        if self.client.app is None:
-            raise RuntimeError("Connect to a network first.")
-        self.interval = max(1.0, min(interval, MAX_INTERVAL))
-        self.mode = mode if mode in ("auto", "poll") else "auto"
-        self.running = True
-        self.started_at = self.started_at or time.time()
-        self.stopped_at = 0.0
-        self._restart_workers()
+    def _wanted(self) -> dict[int, dict]:
+        """Each point some running group records: COV wanted, its timer, and the timer to fall back to if COV is
+        refused (the fastest of the groups that asked)."""
+        out: dict[int, dict] = {}
+        for g in self.groups.values():
+            if not g.running:
+                continue
+            for pid in g.point_ids:
+                if pid not in self.points:
+                    continue
+                e = out.setdefault(pid, {"cov": False, "every": None, "fallback": None})
+                if g.mode == "auto":
+                    e["cov"] = True
+                    e["fallback"] = min(e["fallback"] or g.interval, g.interval)
+                else:
+                    e["every"] = min(e["every"] or g.interval, g.interval)
+        return out
 
-    async def stop(self):
-        self.running = False
-        self.next_read = 0.0
-        self.stopped_at = time.time()
+    async def _stop_workers(self):
         for t in self.tasks:
             t.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)  # leaving the COV contexts cancels the subscriptions
         self.tasks = []
-        self.flush()
-        for p in self.points.values():
-            if p.method in ("cov", "poll", "waiting"):
-                p.method = "stopped" if p.samples else "waiting"
-
-    def clear(self):
-        for t in self.log_tasks:
-            t.cancel()
-        self.points.clear()
-        self.logs.clear()
-        self.queue.clear()
-        self.started_at = self.stopped_at = self.earliest = 0.0
-        self.db.close()
-        self._new_db()
 
     def _restart_workers(self):
         for t in self.tasks:
             t.cancel()
-        self.tasks = [asyncio.create_task(self._flusher())]
-        by_device: dict[int, list[TrendPoint]] = {}
-        for p in self.points.values():
+        self.tasks = []
+        wanted = self._wanted()
+        if not wanted:
+            return
+        self.tasks.append(asyncio.create_task(self._flusher()))
+        by_device: dict[int, list[tuple[TrendPoint, dict]]] = {}
+        logs = set()
+        for pid, e in wanted.items():
+            p = self.points[pid]
             if p.log is None:
-                by_device.setdefault(p.device, []).append(p)
-        for device, points in by_device.items():
-            self.tasks.append(asyncio.create_task(self._device_worker(points)))
-        if self.logs:
-            self.tasks.append(asyncio.create_task(self._log_worker()))
+                by_device.setdefault(p.device, []).append((p, e))
+            else:
+                logs.add((p.log.device, p.log.type_id, p.log.instance))
+        for entries in by_device.values():
+            self.tasks.append(asyncio.create_task(self._device_worker(entries)))
+        if logs:
+            self.tasks.append(asyncio.create_task(self._log_worker(logs)))
 
-    async def _log_worker(self):
-        while self.running:
-            for src in list(self.logs.values()):
-                if src.state != "unsupported":
+    async def _log_worker(self, keys: set):
+        while True:
+            for key in keys:
+                src = self.logs.get(key)
+                if src is not None and src.state != "unsupported":
                     await self.sync_log(src)
             await asyncio.sleep(LOG_EVERY)
 
@@ -431,36 +611,44 @@ class TrendSession:
         return out
 
     async def _flusher(self):
-        while self.running:
+        while True:
             await asyncio.sleep(1.0)
             self.flush()
 
-    async def _device_worker(self, points: list[TrendPoint]):
-        """COV per point where the controller accepts it; everything else is polled in batches."""
-        polled: list[TrendPoint] = []
+    async def _device_worker(self, entries: list[tuple[TrendPoint, dict]]):
+        """COV per point where a group wants it and the controller accepts it; the rest is read on each point's own
+        timer, due points batched into one ReadPropertyMultiple, one request to the controller at a time."""
+        every: dict[int, float] = {p.id: e["every"] for p, e in entries if e["every"]}
+        by_id = {p.id: p for p, _ in entries}
+        due: dict[int, float] = {}
         cov_tasks = []
-        if self.mode == "auto":
-            for p in points:
-                cov_tasks.append(asyncio.create_task(self._cov(p, polled)))
+
+        def refused(p: TrendPoint, fallback: float):
+            every[p.id] = min(every.get(p.id) or fallback, fallback)
+
+        for p, e in entries:
+            if e["cov"]:
+                cov_tasks.append(asyncio.create_task(self._cov(p, e["fallback"] or 60.0, refused)))
                 await asyncio.sleep(0.05)  # don't fire hundreds of subscribe requests at once
-        else:
-            polled.extend(points)
         try:
-            await asyncio.sleep(2.0)  # let subscriptions settle before polling the rest
-            while self.running:
-                started = time.monotonic()
-                for i in range(0, len(polled), POLL_BATCH):
-                    await self._poll(polled[i : i + POLL_BATCH])
-                delay = max(0.2, self.interval - (time.monotonic() - started))
-                if polled:
-                    self.next_read = time.time() + delay
-                await asyncio.sleep(delay)
+            await asyncio.sleep(2.0 if cov_tasks else 0)  # let subscriptions settle before reading the rest
+            while True:
+                now = time.monotonic()
+                ready = [by_id[i] for i, sec in every.items() if due.get(i, 0) <= now]
+                for i in range(0, len(ready), POLL_BATCH):
+                    await self._poll(ready[i : i + POLL_BATCH])
+                done = time.monotonic()
+                for p in ready:
+                    due[p.id] = done + every[p.id]
+                    p.next_due = time.time() + every[p.id]
+                upcoming = [due.get(i, done) for i in every]
+                await asyncio.sleep(max(0.2, (min(upcoming) if upcoming else done + 1) - time.monotonic()))
         finally:
             for t in cov_tasks:
                 t.cancel()
             await asyncio.gather(*cov_tasks, return_exceptions=True)
 
-    async def _cov(self, p: TrendPoint, polled: list[TrendPoint]):
+    async def _cov(self, p: TrendPoint, fallback: float, refused):
         app = self.client.app
         oid = ObjectIdentifier((p.type_id, p.instance))
         try:
@@ -468,7 +656,7 @@ class TrendSession:
                 p.method = "cov"
                 p.error = ""
                 await self._poll([p])  # COV only reports changes, so take the current value now
-                while self.running:
+                while True:
                     pid, value = await scm.get_value()
                     if int(pid) == PV:
                         try:
@@ -479,12 +667,11 @@ class TrendSession:
         except asyncio.CancelledError:
             raise
         except (Exception, ErrorRejectAbortNack) as e:
-            # the controller refused the subscription: poll this point instead
+            # the controller refused the subscription: read this point on the timer instead
             p.method = "poll"
             p.error = ""
             p.note = error_text(e) if isinstance(e, ErrorRejectAbortNack) else str(e)
-            if p not in polled:
-                polled.append(p)
+            refused(p, fallback)
 
     async def _poll(self, points: list[TrendPoint]):
         if not points or self.client.app is None:
@@ -523,14 +710,9 @@ class TrendSession:
     def status(self):
         return {
             "running": self.running,
-            "startedAt": self.started_at,
-            "stoppedAt": self.stopped_at,
-            "interval": self.interval,
-            "nextRead": self.next_read if self.running else 0.0,
-            "mode": self.mode,
+            "groups": [g.to_json(self.points) for g in self.groups.values()],
             "points": [p.to_json() for p in self.points.values()],
             "samples": sum(p.samples for p in self.points.values()),
-            "file": os.path.basename(self.db_path),
             "earliest": self.earliest,
         }
 
@@ -549,7 +731,57 @@ class TrendSession:
             out[str(i)] = [[r[1], r[2], r[3], r[4], r[5]] for r in rows]
         return out
 
-    def export_rows(self):
-        """Every sample, oldest first: (time, point)."""
+    def stats(self, ids: list[int], since: float, until: float):
+        """Per point over the range: count, min, max, the time-weighted average (a COV point reports only changes, so
+        each value counts for as long as it held), first and last, how often it changed, and how long it spent in
+        each value it took (for on/off and states: runtime and share)."""
         self.flush()
-        return self.db.execute("select t, point, v, text from samples order by t").fetchall()
+        until = until or time.time()
+        out = {}
+        for i in ids:
+            # the value in force when the range opens counts from the start of the range
+            before = self.db.execute("select t, v, text from samples where point = ? and t < ? order by t desc limit 1", (i, since)).fetchone()
+            rows = self.db.execute("select t, v, text from samples where point = ? and t >= ? and t <= ? order by t", (i, since, until)).fetchall()
+            n = len(rows)
+            if before:
+                rows = [(since, before[1], before[2]), *rows]
+            if not rows:
+                out[str(i)] = None
+                continue
+            nums = [r[1] for r in rows if r[1] is not None]
+            weighted = held = 0.0
+            states: dict[str, float] = {}
+            changes = 0
+            for k, (t, v, text) in enumerate(rows):
+                end = rows[k + 1][0] if k + 1 < len(rows) else max(until, t)
+                span = max(0.0, min(end, until) - t)
+                states[text] = states.get(text, 0.0) + span
+                if v is not None:
+                    weighted += v * span
+                    held += span
+                if k and text != rows[k - 1][2]:
+                    changes += 1
+            out[str(i)] = {
+                "count": n, "min": min(nums) if nums else None, "max": max(nums) if nums else None,
+                "avg": (weighted / held) if held else (sum(nums) / len(nums) if nums else None),
+                "first": rows[0][1], "firstText": rows[0][2], "last": rows[-1][1], "lastText": rows[-1][2],
+                "from": rows[0][0], "to": min(until, max(rows[-1][0], until)),
+                "changes": changes, "states": states if len(states) <= 32 else None,
+            }
+        return out
+
+    def export_rows(self, ids: list[int] | None = None, since: float = 0):
+        """Samples oldest first, as (time, point, value, text): of some points, or every point."""
+        self.flush()
+        if ids is None:
+            return self.db.execute("select t, point, v, text from samples where t >= ? order by t", (since,)).fetchall()
+        marks = ",".join("?" * len(ids)) or "null"
+        return self.db.execute(f"select t, point, v, text from samples where point in ({marks}) and t >= ? order by t", (*ids, since)).fetchall()
+
+
+def _clamp(interval: float) -> float:
+    return max(1.0, min(float(interval or 60), MAX_INTERVAL))
+
+
+def _mode(mode: str) -> str:
+    return mode if mode in ("auto", "poll") else "auto"

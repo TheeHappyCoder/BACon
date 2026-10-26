@@ -43,8 +43,7 @@ export function EmptyState({ icon, title, text, action }: { icon?: ReactNode; ti
 /** The left pane's title block, shared by the pages that list things. */
 export function PaneTitle({ title, count }: { title: string; count?: number }) {
   return (
-    <div className="px-4 pt-[18px] pb-2.5">
-      <div className="text-[11px] text-(--text-faint)">BACon</div>
+    <div className="flex h-12 shrink-0 flex-col justify-center px-4">
       <div className="flex items-baseline gap-1.5 text-[16px] font-medium tracking-[-0.01em]">
         {title}
         {count ? <span className="text-[12px] font-normal tabular-nums text-(--text-faint)">{count}</span> : null}

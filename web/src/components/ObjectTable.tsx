@@ -5,6 +5,7 @@ import { isNumericProp } from '../query'
 import { Hugeicons } from '../ui/components/hugeicons'
 import { Skeleton } from '../ui/components/skeleton'
 import { cn } from '../ui/utils'
+import { Tick } from './Tick'
 import { valueMarkers } from '../triage'
 import { ErrorPill, ValueCell, formatValue } from '../value'
 
@@ -13,13 +14,13 @@ const { ArrowUp, Plus, XIcon } = Hugeicons
 export const MAX_RENDERED_ROWS = 2000
 export type Sort = { column: string; dir: 1 | -1 } | null
 
-const FIRST = 240
+const FIRST = 270
 const TYPE = 150
 const INSTANCE = 64
 const DEVICE = 160
 const GAP = 12
 const ADD = 116
-const PAD = 40 // px-5 on both sides of every row
+const PAD = 48 // px-6 on both sides of every row
 const VALUE = 'present-value'
 /** a chosen column is as wide as its longest value in the first rows, within these bounds */
 const SAMPLE = 300
@@ -116,7 +117,15 @@ export function ObjectTable({
   onRemoveColumn,
   held,
   flash,
+  picked,
+  onPick,
+  onPickAll,
 }: {
+  /** rows ticked for a bulk action, by key */
+  picked: Set<string>
+  /** tick or untick one row; range: shift was held, so everything from the last tick to here */
+  onPick: (key: string, how: { range: boolean }) => void
+  onPickAll: (on: boolean) => void
   /** when a live refresh last changed a row's present value, by object key; the value cell lights up once */
   flash?: Map<string, number>
   /** priority slots BACon commanded and has not released, by object key */
@@ -134,6 +143,9 @@ export function ObjectTable({
   loading: boolean
 }) {
   const shown = rows.slice(0, MAX_RENDERED_ROWS)
+  const pickedShown = picked.size ? rows.filter((r) => picked.has(r.key)).length : 0
+  const allPicked = rows.length > 0 && pickedShown === rows.length
+  const somePicked = pickedShown > 0
   // fitted widths: each chosen column as wide as its longest value in the first rows; numbers stay narrow and sit right
   const fit = useMemo(() => {
     const sample = rows.slice(0, SAMPLE)
@@ -184,10 +196,15 @@ export function ObjectTable({
   return (
     <div ref={root} data-scrolled={scrolled ? 'true' : undefined} className="group/table" style={{ minWidth: layout.minWidth }}>
       <div
-        className="sticky top-0 z-[2] grid items-center gap-3 bg-(--surface-card-muted) px-5 py-1 text-[11.5px] text-(--text-muted)"
+        className="sticky top-0 z-[2] grid h-9 items-center gap-3 border-b border-(--border-subtle) bg-(--surface-card) px-6 text-[12px] text-(--text-muted)"
         style={layout}
       >
-        <span className="sticky left-0 z-[1] -my-1 -mr-3 -ml-5 bg-(--surface-card-muted) py-1 pr-3 pl-5 transition-shadow group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)]">
+        <span className="sticky left-0 z-[1] -mr-3 -ml-6 flex h-full items-center gap-3.5 bg-(--surface-card) pr-3 pl-6 transition-shadow group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)]">
+          <Tick
+            state={allPicked ? true : somePicked ? 'some' : false}
+            label={allPicked ? 'Untick every row' : 'Tick every row shown'}
+            onClick={() => onPickAll(!allPicked)}
+          />
           <SortHead label="Object" column="object-name" sort={sort} onSort={onSort} />
         </span>
         <SortHead label="Type" column="Object type" sort={sort} onSort={onSort} />
@@ -199,7 +216,7 @@ export function ObjectTable({
         <button
           onClick={onAddColumn}
           title="Choose the columns for the table and the export"
-          className="inline-flex h-6 items-center gap-1 justify-self-start rounded-full border border-dashed border-(--border-strong) bg-(--surface-card) px-2.5 text-[11.5px] text-(--text-muted) transition-colors hover:border-solid hover:text-(--text-strong)"
+          className="inline-flex h-6 items-center gap-1 justify-self-start rounded-full px-2 text-[12px] text-(--text-faint) transition-colors hover:bg-(--surface-hover) hover:text-(--text-strong)"
         >
           <Plus className="size-3" />
           Add column
@@ -209,8 +226,11 @@ export function ObjectTable({
       <div>
         {loading && shown.length === 0
           ? Array.from({ length: 9 }, (_, i) => (
-              <div key={i} className="grid h-[38px] items-center gap-3 border-t border-(--border-divider) px-5" style={layout}>
-                <Skeleton className="h-3.5 w-40" />
+              <div key={i} className="grid h-10 items-center gap-3 border-b border-(--border-divider) px-6" style={layout}>
+                <span className="flex items-center gap-3.5">
+                  <Skeleton className="size-4 rounded-[5px]" />
+                  <Skeleton className="h-3.5 w-40" />
+                </span>
                 <Skeleton className="h-3 w-24" />
                 <Skeleton className="h-3 w-8 justify-self-end" />
                 {showDevice ? <Skeleton className="h-3 w-24" /> : null}
@@ -227,13 +247,21 @@ export function ObjectTable({
                 role="row"
                 aria-selected={selectedKey === r.key}
                 data-selected={selectedKey === r.key ? 'true' : undefined}
+                data-picked={picked.has(r.key) ? 'true' : undefined}
                 data-flash={flash?.has(r.key) ? 'true' : undefined}
-                onClick={() => onSelect(r.key)}
-                className="bx-row-in group/row relative grid h-[38px] cursor-pointer items-center gap-3 border-t border-(--border-divider) px-5 transition-colors duration-150 hover:bg-(--surface-hover) data-[selected=true]:bg-(--surface-hover)"
+                onClick={(e) => {
+                  // Ctrl/Cmd-click ticks, Shift-click ticks a range; a plain click opens the object
+                  if (e.ctrlKey || e.metaKey || e.shiftKey) onPick(r.key, { range: e.shiftKey })
+                  else onSelect(r.key)
+                }}
+                onMouseDown={(e) => e.shiftKey && e.preventDefault()}
+                className="bx-row-in group/row relative grid h-10 cursor-pointer items-center gap-3 border-b border-(--border-divider) px-6 transition-colors duration-150 hover:bg-(--surface-hover) data-[picked=true]:bg-(--surface-ticked) data-[selected=true]:bg-(--surface-selected)"
                 style={layout}
               >
-                <span className="sticky left-0 z-[1] -mr-3 -ml-5 flex h-full min-w-0 items-center gap-2 bg-(--surface-card) pr-3 pl-5 transition-[background-color,box-shadow] group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)] duration-150 group-hover/row:bg-(--surface-hover) group-data-[selected=true]/row:bg-(--surface-hover)">
-                  <span className="min-w-0 truncate text-[13px] font-medium" title={r.values['object-name'] || undefined}>
+                {selectedKey === r.key ? <span aria-hidden className="absolute inset-y-0 left-0 z-[2] w-[3px] rounded-r-full bg-(--ink)" /> : null}
+                <span className="sticky left-0 z-[1] -mr-3 -ml-6 flex h-full min-w-0 items-center gap-3.5 bg-(--surface-card) pr-3 pl-6 transition-[background-color,box-shadow] group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)] duration-150 group-hover/row:bg-(--surface-hover) group-data-[picked=true]/row:bg-(--surface-ticked) group-data-[selected=true]/row:bg-(--surface-selected)">
+                  <Tick state={picked.has(r.key)} label={`Tick ${r.values['object-name'] || r.key}`} onClick={(e) => onPick(r.key, { range: e.shiftKey })} />
+                  <span className="min-w-0 truncate text-[13.5px] font-medium" title={r.values['object-name'] || undefined}>
                     {r.values['object-name'] || <span className="text-(--text-faint)">Unnamed</span>}
                   </span>
                   <StatusChip status={r.status} />
@@ -263,7 +291,7 @@ export function ObjectTable({
               </div>
             ))}
         {rows.length > MAX_RENDERED_ROWS ? (
-          <div className="border-t border-(--border-divider) px-5 py-3 text-[12px] text-(--text-muted)">
+          <div className="px-6 py-3 text-[12px] text-(--text-muted)">
             The first {MAX_RENDERED_ROWS} rows are shown. Search or filter to narrow it down; exports include every matching row.
           </div>
         ) : null}

@@ -21,7 +21,10 @@ export function ExportDialog({
   onIncludeErrors,
   onChangeColumns,
   onExport,
+  scope,
 }: {
+  /** with rows ticked: export those, or every row shown */
+  scope?: { ticked: number; shown: number; value: 'ticked' | 'shown'; onChange: (v: 'ticked' | 'shown') => void }
   open: boolean
   onOpenChange: (o: boolean) => void
   rowCount: number
@@ -70,6 +73,26 @@ export function ExportDialog({
           </p>
         </DialogHeader>
         <div className="flex flex-col gap-4 border-y border-(--border-subtle) bg-(--surface-card) px-5 py-4">
+          {scope ? (
+            <div role="radiogroup" aria-label="Rows to export" className="grid grid-cols-2 gap-1 rounded-[12px] bg-(--surface-track) p-1">
+              {(
+                [
+                  ['ticked', `${scope.ticked} ticked`],
+                  ['shown', `All ${scope.shown} shown`],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  role="radio"
+                  aria-checked={scope.value === v}
+                  onClick={() => scope.onChange(v)}
+                  className="h-8 rounded-[9px] text-[13px] tabular-nums text-(--text-muted) transition-colors aria-checked:bg-(--surface-card) aria-checked:font-medium aria-checked:text-(--text-strong) aria-checked:shadow-[0_1px_2px_rgba(0,0,0,.08)]"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {chosenCount === 0 ? (
             <div className="flex items-center justify-between gap-3 rounded-[12px] bg-(--status-warn-bg) px-3 py-2.5 text-[12.5px] leading-snug">
               <span>No columns chosen. Choose at least one property to export.</span>
@@ -79,7 +102,7 @@ export function ExportDialog({
             </div>
           ) : (
             <div className="flex items-center justify-between gap-3">
-              <p className="m-0 text-[12.5px] leading-snug text-(--text-muted)">Rows are what the filter shows. Columns are the ones chosen in Columns.</p>
+              <p className="m-0 text-[12.5px] leading-snug text-(--text-muted)">{scope?.value === 'ticked' ? 'Rows are the ones you ticked.' : 'Rows are what the filter shows.'} Columns are the ones chosen in Columns.</p>
               <Button variant="ghost" size="xs" className="shrink-0" onClick={onChangeColumns}>
                 Change columns
               </Button>

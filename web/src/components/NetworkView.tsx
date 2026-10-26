@@ -198,9 +198,8 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
   return (
     <>
       <Pane side="left">
-      <aside className="flex w-full min-w-0 flex-col border-r border-(--border-subtle)">
-        <div className="px-4 pt-[18px] pb-2.5">
-          <div className="text-[11px] text-(--text-faint)">BACon</div>
+      <aside className="flex w-full min-w-0 flex-col">
+        <div className="flex h-12 shrink-0 flex-col justify-center px-4">
           <div className="text-[16px] font-medium tracking-[-0.01em]">Network</div>
         </div>
         <div className="flex h-6 items-center gap-2 px-4 pb-1.5 text-[12px] text-(--text-muted)">
@@ -224,7 +223,7 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
                   onMouseDown={(e) => e.shiftKey && e.preventDefault()}
                   aria-pressed={selected.includes(t.address)}
                   data-active={selected.includes(t.address) ? 'true' : undefined}
-                  className="flex h-[52px] items-center gap-2.5 rounded-[10px] px-2 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)] data-[active=true]:bg-(--paper-3)"
+                  className="flex h-[52px] items-center gap-2.5 rounded-[10px] px-2 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)] data-[active=true]:bg-(--surface-card) data-[active=true]:shadow-[0_0_0_1px_var(--border-subtle),0_2px_6px_-2px_rgba(0,0,0,.08)]"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-medium">{talkerName(t)}</span>
@@ -315,7 +314,7 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
       </Pane>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[52px] shrink-0 items-center gap-1.5 pr-3 pl-2 text-[13px] text-(--text-muted)">
+        <header className="flex h-12 shrink-0 items-center border-b border-(--border-subtle) gap-1.5 pr-3 pl-2 text-[13px] text-(--text-muted)">
           <PaneToggle side="left" />
           <span>Network</span>
           <span className="text-(--ink-4)">›</span>
@@ -323,8 +322,8 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
           <span className="flex-1" />
           {sel ? <PaneToggle side="right" /> : null}
         </header>
-        <div className="flex min-h-0 flex-1 gap-[10px] px-3 pb-3">
-          <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+        <div className="flex min-h-0 flex-1">
+          <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-(--surface-card)">
             <div className="flex items-start gap-4 px-[18px] pt-[18px] pb-3">
               <div className="min-w-0 flex-1">
                 <h1 className="m-0 text-[20px] font-medium tracking-[-0.02em]">BACnet traffic</h1>
@@ -468,8 +467,8 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
           </section>
 
           {sel ? (
-            <Pane side="right" gap={10}>
-            <aside className="nc-view-in flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+            <Pane side="right">
+            <aside className="nc-view-in flex w-full min-w-0 flex-col overflow-hidden bg-(--surface-card)">
               <div className="flex items-start gap-3 px-[18px] pt-4 pb-3">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[11.5px] text-(--text-faint)">{sel.address}</div>

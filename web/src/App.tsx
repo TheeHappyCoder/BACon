@@ -1,5 +1,5 @@
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { api, type Device, type Job, type NetInterface, type ObjectRow, type Status, type TrendPoint, type TrendStatus } from './api'
+import { api, type Device, type Job, type NetInterface, type ObjectRow, type Status, type TrendGroup, type TrendPoint, type TrendStatus } from './api'
 import { ConnectDialog, type NetworkSettings } from './components/ConnectDialog'
 import { AppMark, type MarkStatus } from './components/AppMark'
 import { UpdateDialog, useUpdates } from './components/Updates'
@@ -7,7 +7,7 @@ import { Changes, compareRows, type Baseline } from './components/Changes'
 import { FilterField, type Severity } from './components/FilterBar'
 import { HealthCheck, runChecks, type SavedCheck } from './components/HealthCheck'
 import { evaluate, parse } from './query'
-import { NetworkTree, type Selection } from './components/NetworkTree'
+import { NetworkTree } from './components/NetworkTree'
 import { ObjectTable, type Sort } from './components/ObjectTable'
 import { WritePointsSheet } from './components/WritePointsSheet'
 import { ColumnsSheet } from './components/ColumnsSheet'
@@ -18,25 +18,25 @@ import { WRITABLE_TYPES } from './control'
 import { PropertiesPanel } from './components/PropertiesPanel'
 import { NetworkView } from './components/NetworkView'
 import { LayoutProvider, Pane, PaneToggle, useLayout } from './components/Layout'
-import { Rail, type Place } from './components/Rail'
+import { TopBar, type Place } from './components/TopBar'
+import { SelectionBar } from './components/SelectionBar'
 import { TrendsView } from './components/TrendsView'
+import { TrendTargetDialog } from './components/TrendGroupDialog'
 import { SchedulesView } from './components/SchedulesView'
 import { AlarmsView } from './components/AlarmsView'
 import { isAlarmObject, stateOf, type Live } from './alarms'
 import { ToastProvider, useToast } from './components/Toasts'
 import { DEFAULT_COLUMNS, SYNTHETIC_COLUMNS, exportColumns, exportCsv, exportXlsx } from './exporters'
-import { Badge } from './ui/components/badge'
 import { Button } from './ui/components/button'
 import { Hugeicons } from './ui/components/hugeicons'
-import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from './ui/components/menu'
 import { ScrollArea } from './ui/components/scroll-area'
-import { Skeleton } from './ui/components/skeleton'
 import { Tabs, TabsList, TabsTab } from './ui/components/tabs'
-import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from './ui/components/tooltip'
+import { TooltipProvider } from './ui/components/tooltip'
 import { cn } from './ui/utils'
+import { TypePicker } from './components/TypePicker'
 import { TRIAGE, passesTriage, triageCounts, type TriageId } from './triage'
 
-const { ArrowRight, Columns3, XIcon, CheckIcon, MoreHorizontal, Pencil, Download, FolderOpen } = Hugeicons
+const { ChevronRight, Columns3, Download, Cpu, Layers } = Hugeicons
 
 function useStored<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
@@ -60,6 +60,8 @@ function useClock() {
   return now
 }
 
+const NONE = new Set<string>()
+
 /** Queries offered under the query bar, each only when its property was read in the scope. */
 const EXAMPLES = [
   { prop: 'present-value', text: 'present-value > 25' },
@@ -81,7 +83,6 @@ function Workspace() {
   const control = useControl()
   const toast = useToast()
   const now = useClock()
-  const clock = now.toTimeString().slice(0, 8) // 24-hour HH:MM:SS, as in Novacore's Live pill
 
   const [status, setStatus] = useState<Status>({ connected: false, settings: null, host: '' })
   const [interfaces, setInterfaces] = useState<NetInterface[]>([])
@@ -101,8 +102,11 @@ function Workspace() {
   const [hidden, setHidden] = useState<Set<number>>(new Set())
   const removalTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
 
-  const [selection, setSelection] = useState<Selection>({ kind: 'network' })
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(['net']))
+  // what the table covers (a device, or every device, and perhaps one object type), and the object open beside it
+  const [scope, setScope] = useState<{ device: number | null }>({ device: null })
+  // the object types picked in the Types list; none is every type. Kept from device to device.
+  const [types, setTypes] = useState<string[]>([])
+  const [openKey, setOpenKey] = useState<string | null>(null)
   const [columns, setColumns] = useStored<string[]>('bx.columns.v2', DEFAULT_COLUMNS)
   const [presets, setPresets] = useStored<Record<string, string[]>>('bx.presets', {})
   const [search, setSearch] = useState('')
@@ -118,7 +122,9 @@ function Workspace() {
   const [baseline, setBaseline] = useState<Baseline | null>(null)
   const [booted, setBooted] = useState(false)
   const [place, setPlace] = useState<Place>('objects')
-  const [trends, setTrends] = useState<TrendStatus>({ running: false, startedAt: 0, stoppedAt: 0, interval: 10, nextRead: 0, mode: 'auto', points: [], samples: 0, file: '', earliest: 0 })
+  const [trends, setTrends] = useState<TrendStatus>({ running: false, groups: [], points: [], samples: 0, earliest: 0 })
+  // objects waiting to be put in a trend group: the Trend dialog is open for them
+  const [trendPick, setTrendPick] = useState<ObjectRow[] | null>(null)
   const [netIssues, setNetIssues] = useState(0)
   const [capturing, setCapturing] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -213,34 +219,39 @@ function Workspace() {
     }
   }, [place, trends.running, status.connected])
 
-  const trendRows = async (list: ObjectRow[]) => {
-    try {
-      const points = list.filter((r) => (r.values['present-value'] !== undefined && r.typeId !== 8) || isTrendLog(r))
-      if (!points.length) throw new Error('None of these objects has a present value or a log to trend.')
-      const res = await api.trendAdd(points)
-      setTrends(res)
-      const added = res.added
-      const logs = res.points.filter((p) => added.includes(p.id) && p.log).length
-      const what = added.length ? `Added ${added.length} point${added.length === 1 ? '' : 's'} to Trends` : 'Those points are already in Trends'
-      toast(logs ? `${what}. Reading the history from ${logs === 1 ? 'the trend log' : `${logs} trend logs`}…` : what, {
-        undo: added.length
-          ? async () => {
-              let t = res as TrendStatus
-              for (const id of added) t = await api.trendRemove(id)
-              setTrends(t)
-            }
-          : undefined,
-      })
-    } catch (e) {
-      toast(message(e), { kind: 'error' })
-    }
+  // trending starts with a group: the dialog asks which one, or names a new one
+  const trendable = (list: ObjectRow[]) => list.filter((r) => (r.values['present-value'] !== undefined && r.typeId !== 8) || isTrendLog(r))
+  const trendRows = (list: ObjectRow[]) => {
+    const points = trendable(list)
+    if (!points.length) toast('None of these objects has a present value or a log to trend.', { kind: 'error' })
+    else setTrendPick(points)
+  }
+  const trendedIn = (g: TrendGroup, list: ObjectRow[]) => {
+    const keys = new Set(g.pointIds.map((id) => trends.points.find((p) => p.id === id)).filter(Boolean).map((p) => `${p!.device}:${p!.typeId},${p!.instance}`))
+    return list.filter((r) => keys.has(r.key)).length
+  }
+  const afterTrend = (res: TrendStatus & { group: number; added: number[] }) => {
+    setTrends(res)
+    const g = res.groups.find((x) => x.id === res.group)
+    const logs = res.points.filter((p) => res.added.includes(p.id) && p.log).length
+    const what = res.added.length ? `Added ${res.added.length} point${res.added.length === 1 ? '' : 's'} to ${g?.name ?? 'the group'}` : `Those points are already in ${g?.name ?? 'the group'}`
+    toast(logs ? `${what}. Reading the history from ${logs === 1 ? 'the trend log' : `${logs} trend logs`}…` : what, {
+      undo: res.added.length
+        ? async () => {
+            let t: TrendStatus = res
+            for (const id of res.added) t = await api.trendGroupRemove(res.group, id)
+            setTrends(t)
+          }
+        : undefined,
+    })
   }
 
   const showInObjects = (p: TrendPoint) => showRow({ device: p.device, key: `${p.device}:${p.typeId},${p.instance}` })
   const showRow = (r: { device: number; key: string }) => {
     setPlace('objects')
     setView('objects')
-    select({ kind: 'object', device: r.device, key: r.key })
+    setScope({ device: r.device })
+    openObject(r.key)
   }
 
   /** Read some objects again and resolve once the read has finished (refresh buttons spin until then). */
@@ -293,7 +304,6 @@ function Workspace() {
   // ---- network ----
   const searchDevices = useCallback(async () => {
     setSearching(true)
-    setExpanded((e) => new Set([...e, 'net']))
     try {
       const found = await api.scan(net.low === '' ? undefined : Number(net.low), net.high === '' ? undefined : Number(net.high), Number(net.timeout) || 3)
       await refreshDevices()
@@ -373,7 +383,6 @@ function Workspace() {
       const loaded: Record<number, ObjectRow[]> = {}
       for (const inst of res.loaded) loaded[inst] = await api.objects(inst)
       setRows((r) => ({ ...r, ...loaded }))
-      setExpanded((e) => new Set([...e, 'net']))
       setConnectOpen(false)
       const when = res.savedAt ? new Date(res.savedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'earlier'
       toast(`Opened ${res.loaded.length} device${res.loaded.length === 1 ? '' : 's'} saved ${when}${res.host ? ` on ${res.host}` : ''}`)
@@ -409,7 +418,10 @@ function Workspace() {
   const removeDevice = (inst: number) => {
     const d = devices.find((x) => x.instance === inst)
     setHidden((h) => new Set([...h, inst]))
-    if (selection.kind !== 'network' && selection.device === inst) setSelection({ kind: 'network' })
+    if (scope.device === inst) {
+      setScope({ device: null })
+      setOpenKey(null)
+    }
     const timer = setTimeout(async () => {
       removalTimers.current.delete(inst)
       try {
@@ -436,28 +448,17 @@ function Workspace() {
     })
   }
 
-  // ---- selection: clicking a device reads it if it has not been read yet ----
+  // ---- scope: picking a device reads it if it has not been read yet ----
   const isReading = (inst: number) => jobs.some((j) => j.device === inst && j.state === 'running')
-  const select = (s: Selection) => {
-    setSelection(s)
-    if (s.kind === 'device') {
-      setExpanded((e) => new Set([...e, `dev:${s.device}`]))
-      if (!(rows[s.device] ?? []).length && !isReading(s.device) && status.connected) startRead([s.device])
-    }
-    if (s.kind === 'type') setExpanded((e) => new Set([...e, `dev:${s.device}`]))
-    if (s.kind === 'object') {
-      const row = (rows[s.device] ?? []).find((r) => r.key === s.key)
-      if (row) setExpanded((e) => new Set([...e, `dev:${s.device}`, `type:${s.device}:${row.values['Object type']}`]))
-      setTimeout(() => document.querySelector(`[data-row-key="${CSS.escape(s.key)}"]`)?.scrollIntoView({ block: 'nearest' }), 50)
-    }
+  const selectScope = (device: number | null) => {
+    if (device !== scope.device) setOpenKey(null)
+    setScope({ device })
+    if (device !== null && !(rows[device] ?? []).length && !isReading(device) && status.connected) startRead([device])
   }
-  const toggleExpanded = (id: string) =>
-    setExpanded((e) => {
-      const next = new Set(e)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
+  const openObject = (key: string) => {
+    setOpenKey(key)
+    setTimeout(() => document.querySelector(`[data-row-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'nearest' }), 50)
+  }
 
   // ---- derived ----
   const visibleDevices = useMemo(() => devices.filter((d) => !hidden.has(d.instance)), [devices, hidden])
@@ -473,14 +474,25 @@ function Workspace() {
     }
     return { active, unacked }
   }, [allRows, liveAlarms])
-  const scopeDeviceId = selection.kind === 'network' ? null : selection.device
+  const scopeDeviceId = scope.device
   const scopeDevice = scopeDeviceId === null ? null : visibleDevices.find((d) => d.instance === scopeDeviceId) ?? null
-  const typeFilter = selection.kind === 'type' ? selection.type : selection.kind === 'object' ? selection.type ?? null : null
 
-  const scopeRows = useMemo(() => {
-    const base = scopeDeviceId === null ? visibleDevices.flatMap((d) => rows[d.instance] ?? []) : rows[scopeDeviceId] ?? []
-    return typeFilter ? base.filter((r) => r.values['Object type'] === typeFilter) : base
-  }, [rows, scopeDeviceId, visibleDevices, typeFilter])
+  // the scope before the type chip: every type on the device (or the network), each with its count
+  const deviceRows = useMemo(
+    () => (scopeDeviceId === null ? visibleDevices.flatMap((d) => rows[d.instance] ?? []) : rows[scopeDeviceId] ?? []),
+    [rows, scopeDeviceId, visibleDevices],
+  )
+  const typeCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of deviceRows) counts.set(r.values['Object type'], (counts.get(r.values['Object type']) ?? 0) + 1)
+    return [...counts].sort((a, b) => a[0].localeCompare(b[0]))
+  }, [deviceRows])
+  // types picked on another device that this one lacks are ignored; none left means every type
+  const typeFilter = useMemo(() => {
+    const here = types.filter((t) => typeCounts.some(([x]) => x === t))
+    return here.length ? here : null
+  }, [types, typeCounts])
+  const scopeRows = useMemo(() => (typeFilter ? deviceRows.filter((r) => typeFilter.includes(r.values['Object type'])) : deviceRows), [deviceRows, typeFilter])
 
   const available = useMemo(() => {
     const counts = new Map<string, number>()
@@ -502,13 +514,13 @@ function Workspace() {
   const changeCount = useMemo(() => {
     if (!baseline) return 0
     const then = baseline.rows.filter(
-      (r) => (scopeDeviceId === null || r.device === scopeDeviceId) && (!typeFilter || r.values['Object type'] === typeFilter),
+      (r) => (scopeDeviceId === null || r.device === scopeDeviceId) && (!typeFilter || typeFilter.includes(r.values['Object type'])),
     )
     return compareRows(scopeRows, then, false).length
   }, [baseline, scopeRows, scopeDeviceId, typeFilter])
 
   // the triage chips belong to a scope: another device or type starts with none
-  const scopeKey = `${scopeDeviceId}|${typeFilter ?? ''}`
+  const scopeKey = `${scopeDeviceId}|${typeFilter?.join(',') ?? ''}`
   const [triageState, setTriageState] = useState<{ scope: string; ids: Set<TriageId> }>({ scope: '', ids: new Set() })
   const triage = useMemo(() => (triageState.scope === scopeKey ? triageState.ids : new Set<TriageId>()), [triageState, scopeKey])
   const toggleTriage = (id: TriageId) => {
@@ -561,6 +573,43 @@ function Workspace() {
     }
     return list
   }, [scopeRows, matches, sort])
+
+  // ---- ticked rows: the bulk actions' subject. They belong to a device (or the network); another starts with none ----
+  const tickScope = `${scopeDeviceId}`
+  const [tickState, setTickState] = useState<{ scope: string; keys: Set<string> }>({ scope: '', keys: NONE })
+  const picked = tickState.scope === tickScope ? tickState.keys : NONE
+  const setPicked = (keys: Set<string>) => setTickState({ scope: tickScope, keys })
+  const tickAnchor = useRef<string | null>(null)
+  const pick = (key: string, { range }: { range: boolean }) => {
+    const next = new Set(picked)
+    const order = filtered.map((r) => r.key)
+    const anchor = tickAnchor.current
+    const from = range && anchor ? order.indexOf(anchor) : -1
+    const to = order.indexOf(key)
+    if (anchor && from >= 0 && to >= 0) {
+      // a range takes the anchor's state, as in a file list
+      const on = picked.has(anchor)
+      for (const k of order.slice(Math.min(from, to), Math.max(from, to) + 1)) {
+        if (on) next.add(k)
+        else next.delete(k)
+      }
+    } else {
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      tickAnchor.current = key
+    }
+    setPicked(next)
+  }
+  const pickAll = (on: boolean) => {
+    const shown = new Set(filtered.map((r) => r.key))
+    setPicked(on ? new Set([...picked, ...shown]) : new Set([...picked].filter((k) => !shown.has(k))))
+  }
+  const pickedRows = useMemo(() => (picked.size ? deviceRows.filter((r) => picked.has(r.key)) : []), [picked, deviceRows])
+  const pickedHidden = useMemo(() => {
+    if (!pickedRows.length) return 0
+    const shown = new Set(filtered.map((r) => r.key))
+    return pickedRows.filter((r) => !shown.has(r.key)).length
+  }, [pickedRows, filtered])
 
   // ---- live values: present value and flags for the rows on screen, every few seconds ----
   const [flash, setFlash] = useState<Map<string, number>>(() => new Map())
@@ -637,8 +686,8 @@ function Workspace() {
   }, [polling])
   const liveFresh = polling && !liveError && now.getTime() - liveAt < 5000
 
-  const selectedKey = selection.kind === 'object' ? selection.key : null
-  const selectedRow = selectedKey ? scopeRows.find((r) => r.key === selectedKey) ?? null : null
+  const selectedKey = openKey
+  const selectedRow = selectedKey ? deviceRows.find((r) => r.key === selectedKey) ?? null : null
   // the drawer mounts with a selection; a pane the user collapsed earlier opens again so it is never invisible
   const hasSelectedRow = !!selectedRow
   useEffect(() => {
@@ -661,8 +710,15 @@ function Workspace() {
         ? { status: 'degraded', text: 'Some objects could not be read' }
         : { status: 'healthy', text: `Connected on ${status.settings?.ip}:${status.settings?.port}` }
 
-  // bulk writes act on what the filter shows; a single point is commanded from the drawer
-  const writableShown = view === 'objects' && filtered.length > 0 ? filtered.filter((r) => r.typeId !== 8 && (WRITABLE_TYPES.has(r.typeId) || control.fieldsOf(r).length > 0)).slice(0, 2000) : []
+  // bulk writes act on the ticked rows; a single point is commanded from the drawer
+  const isWritable = (r: ObjectRow) => r.typeId !== 8 && (WRITABLE_TYPES.has(r.typeId) || control.fieldsOf(r).length > 0)
+  const writablePicked = pickedRows.filter(isWritable).slice(0, 2000)
+  const [exportScope, setExportScope] = useState<'ticked' | 'shown'>('shown')
+  const exportRows = exportScope === 'ticked' && pickedRows.length ? pickedRows : filtered
+  const openExport = (from: 'ticked' | 'shown') => {
+    setExportScope(from)
+    setExportOpen(true)
+  }
   // after a write, read just those objects again so the table shows what the controller now reports
   const rereadRows = (targets: ObjectRow[]) => {
     for (const device of new Set(targets.map((r) => r.device))) {
@@ -674,18 +730,16 @@ function Workspace() {
   const doExport = async (kind: 'csv' | 'xlsx') => {
     try {
       const cols = exportColumns(columns, includeIdentity)
-      if (!filtered.length) throw new Error('No rows match the current filters, so there is nothing to export.')
+      if (!exportRows.length) throw new Error('No rows match the current filters, so there is nothing to export.')
       if (!cols.length) throw new Error('Choose at least one property to export.')
-      const name = kind === 'csv' ? exportCsv(filtered, cols, includeErrors) : await exportXlsx(filtered, cols, includeErrors, sheetPerDevice, deviceLabel)
-      toast(`Exported ${filtered.length} rows to ${name}`)
+      const name = kind === 'csv' ? exportCsv(exportRows, cols, includeErrors) : await exportXlsx(exportRows, cols, includeErrors, sheetPerDevice, deviceLabel)
+      toast(`Exported ${exportRows.length} rows to ${name}`)
     } catch (e) {
       toast(message(e), { kind: 'error' })
     }
   }
 
-  // closing the drawer goes back to what the tree had in scope, never further out
-  const closeDrawer = () =>
-    setSelection(scopeDevice ? (typeFilter ? { kind: 'type', device: scopeDevice.instance, type: typeFilter } : { kind: 'device', device: scopeDevice.instance }) : { kind: 'network' })
+  const closeDrawer = () => setOpenKey(null)
   const toggleColumn = (name: string) => {
     const previous = columns
     const on = columns.includes(name)
@@ -703,13 +757,25 @@ function Workspace() {
         searchRef.current?.focus()
         return
       }
-      if (typing) return
-      if (e.key === 'Escape' && selection.kind === 'object') closeDrawer()
+      if (typing || place !== 'objects') return
+      if (e.key === 'Escape') {
+        if (picked.size) setPicked(NONE)
+        else if (openKey) closeDrawer()
+      }
+      if (view !== 'objects') return
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && filtered.length) {
+        e.preventDefault()
+        pickAll(true)
+      }
+      if (e.key === ' ' && selectedKey && filtered.some((r) => r.key === selectedKey)) {
+        e.preventDefault()
+        pick(selectedKey, { range: e.shiftKey })
+      }
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && filtered.length) {
         e.preventDefault()
         const i = filtered.findIndex((r) => r.key === selectedKey)
         const next = e.key === 'ArrowDown' ? Math.min(filtered.length - 1, i + 1) : Math.max(0, i === -1 ? 0 : i - 1)
-        select({ kind: 'object', device: filtered[next].device, key: filtered[next].key, type: typeFilter ?? undefined })
+        openObject(filtered[next].key)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -750,34 +816,42 @@ function Workspace() {
       }
     />
   ) : !scopeDevice && !loading ? (
-    <Empty title="Click a device in the tree to read it" text="Its objects fill this table. Click a row for everything it reports. Columns and Export are above the table." />
+    <Empty title="Pick a device on the left to read it" text="Its objects fill this table. Click a row for everything it reports; tick rows to write, trend or export just those." />
   ) : null
 
   // the scope header: the levels above the scope as crumbs, the scope itself as the title, then what it is
   const scopeName = scopeDevice ? scopeDevice.name || `Device ${scopeDevice.instance}` : ''
   const crumbs: { label: string; go: () => void }[] = []
-  if (scopeDevice) crumbs.push({ label: 'Network', go: () => select({ kind: 'network' }) })
-  if (scopeDevice && typeFilter) crumbs.push({ label: scopeName, go: () => select({ kind: 'device', device: scopeDevice.instance }) })
-  const title = !scopeDevice ? 'All devices' : typeFilter ?? scopeName
+  if (scopeDevice) crumbs.push({ label: 'All devices', go: () => selectScope(null) })
+  const title = !scopeDevice ? 'All devices' : scopeName
   const meta = !scopeDevice
     ? status.connected
       ? `${status.settings?.ip}:${status.settings?.port} · ${plural(visibleDevices.length, 'device')} · ${plural(allRows.length, 'object')}`
       : visibleDevices.length
         ? `Not connected · ${plural(visibleDevices.length, 'device')} from a file`
         : 'Not connected'
-    : typeFilter
-      ? `${plural(scopeRows.length, 'object')} on ${scopeName}`
-      : [`#${scopeDevice.instance}`, scopeDevice.address, scopeDevice.vendorName, scopeDevice.model].filter(Boolean).join(' · ')
+    : [`#${scopeDevice.instance}`, scopeDevice.address, scopeDevice.vendorName, scopeDevice.model].filter(Boolean).join(' · ')
   const examples = EXAMPLES.filter((e) => available.some((p) => p.name === e.prop))
 
+  const viewCount = (n: number, tone?: 'warn' | 'ok') => (
+    <span
+      className={cn(
+        'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] leading-none tabular-nums',
+        tone === 'warn' ? 'bg-(--color-ns-yellow) text-(--ink)' : 'bg-(--surface-track) text-(--text-muted)',
+      )}
+    >
+      {n}
+    </span>
+  )
+
   return (
-    <div className="flex h-screen overflow-hidden bg-(--surface-page) text-(--text-strong)">
+    <div className="flex h-screen flex-col overflow-hidden bg-(--surface-page) text-(--text-strong)">
       {writeRows && <WritePointsSheet rows={writeRows} onClose={() => setWriteRows(null)} onWritten={() => { control.refresh(); rereadRows(writeRows) }} />}
       <ColumnsSheet open={columnsOpen} onOpenChange={setColumnsOpen} allRows={allRows} columns={columns} onColumns={setColumns} presets={presets} onPresets={setPresets} />
       <ExportDialog
         open={exportOpen}
         onOpenChange={setExportOpen}
-        rowCount={filtered.length}
+        rowCount={exportRows.length}
         columnCount={exportColumns(columns, includeIdentity).length}
         chosenCount={columns.length}
         includeIdentity={includeIdentity}
@@ -791,10 +865,50 @@ function Workspace() {
           setColumnsOpen(true)
         }}
         onExport={doExport}
+        scope={pickedRows.length ? { ticked: pickedRows.length, shown: filtered.length, value: exportScope, onChange: setExportScope } : undefined}
       />
-      <Rail
+      <input
+        ref={siteFileRef}
+        type="file"
+        accept=".bxsite"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) openSite(file)
+          e.target.value = ''
+        }}
+      />
+      {trendPick ? (
+        <TrendTargetDialog
+          count={trendPick.length}
+          groups={trends.groups}
+          pointsOf={(g) => trendedIn(g, trendPick)}
+          onOpenChange={(o) => !o && setTrendPick(null)}
+          onAdd={async (g) => {
+            try {
+              afterTrend(await api.trendGroupAdd(g.id, trendPick))
+            } catch (e) {
+              toast(message(e), { kind: 'error' })
+              throw e
+            }
+          }}
+          onCreate={async (v) => {
+            try {
+              afterTrend(await api.trendGroupCreate(v.name, v.interval, v.mode, trendPick))
+            } catch (e) {
+              toast(message(e), { kind: 'error' })
+              throw e
+            }
+          }}
+        />
+      ) : null}
+      <TopBar
+        host={status.host}
         status={booted ? mark.status : 'busy'}
         statusText={booted ? mark.text : 'Starting…'}
+        connected={status.connected}
+        address={status.settings ? `${status.settings.ip}:${status.settings.port}` : ''}
+        live={liveFresh}
         place={place}
         onPlace={setPlace}
         recording={trends.running}
@@ -806,7 +920,11 @@ function Workspace() {
         onNetwork={() => setConnectOpen(true)}
         update={update}
         onUpdates={() => setUpdateOpen(true)}
+        onSaveSite={saveSite}
+        onOpenSite={() => siteFileRef.current?.click()}
+        canSave={visibleDevices.some((d) => d.objectCount)}
       />
+      <div className="bx-stage flex min-h-0 flex-1">
       {place === 'trends' ? (
         <TrendsView
           status={status}
@@ -816,7 +934,6 @@ function Workspace() {
           onGoToObjects={() => setPlace('objects')}
           allRows={allRows}
           devices={visibleDevices}
-          onAddRows={trendRows}
         />
       ) : place === 'schedules' ? (
         <SchedulesView
@@ -851,329 +968,283 @@ function Workspace() {
       ) : (
       <>
       <Pane side="left">
-      <NetworkTree
-        status={status}
-        devices={visibleDevices}
-        jobs={jobs}
-        rows={rows}
-        selection={selection}
-        onSelect={select}
-        expanded={expanded}
-        onToggle={toggleExpanded}
-        searching={searching}
-        onConnect={() => setConnectOpen(true)}
-        onSearch={searchDevices}
-        onAddByIp={addByIp}
-        onRead={(inst, retry) => startRead([inst], retry)}
-        onReadAll={() => startRead(visibleDevices.map((d) => d.instance))}
-        onCancel={cancelJob}
-        onRemove={removeDevice}
-        onSaveSite={saveSite}
-        onOpenSite={openSite}
-        booting={!booted}
-        matchCounts={matchCounts}
-        deviceTriage={deviceTriage}
-      />
+        <NetworkTree
+          status={status}
+          devices={visibleDevices}
+          jobs={jobs}
+          selection={scopeDeviceId === null ? { kind: 'network' } : { kind: 'device', device: scopeDeviceId }}
+          onSelect={(s) => selectScope(s.kind === 'network' ? null : s.device)}
+          searching={searching}
+          onConnect={() => setConnectOpen(true)}
+          onSearch={searchDevices}
+          onAddByIp={addByIp}
+          onRead={(inst, retry) => startRead([inst], retry)}
+          onReadAll={() => startRead(visibleDevices.map((d) => d.instance))}
+          onCancel={cancelJob}
+          onRemove={removeDevice}
+          booting={!booted}
+          matchCounts={matchCounts}
+          deviceTriage={deviceTriage}
+          totalObjects={allRows.length}
+        />
       </Pane>
 
-      <main className="flex min-w-0 flex-1 flex-col p-3">
-        <div className="flex min-h-0 flex-1 gap-[10px]">
-          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
-            <div key={`${scopeDeviceId}`} className="nc-view-in flex min-h-0 flex-1 flex-col">
-              {/* row 1: where you are, as one line, and the clock */}
-              <header className="flex h-12 shrink-0 items-center gap-2 px-5">
-                <span className="-ml-1.5 flex">
-                  <PaneToggle side="left" />
-                </span>
-                <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
-                  {crumbs.map((c, i) => (
-                    <span key={i} className="flex min-w-0 items-center gap-1.5 text-[13px] text-(--text-muted)">
-                      <button className="truncate hover:text-(--text-strong)" onClick={c.go}>
+      <main className="relative flex min-w-0 flex-1 flex-col">
+        <div key={`${scopeDeviceId}`} className="nc-view-in flex min-h-0 flex-1 flex-col">
+          {/* the page: where you are, what it is, and the two things you do with all of it */}
+          <header className="flex shrink-0 items-center gap-3.5 px-6 pt-5 pb-4">
+            <span className="-ml-2.5 -mr-1">
+              <PaneToggle side="left" />
+            </span>
+            {/* who this is: an ink tile, with the device's health as a lime or coral light */}
+            <span className="relative inline-flex size-12 shrink-0 items-center justify-center rounded-[14px] bg-(--ink) text-(--color-ns-green) shadow-[0_6px_16px_-8px_rgba(0,0,0,.5),inset_0_1px_0_rgba(255,255,255,.08)] [&_svg]:size-[22px]">
+              {scopeDevice ? <Cpu /> : <Layers />}
+              <span
+                className={cn(
+                  'absolute -right-1 -bottom-1 size-3.5 rounded-full border-[2.5px] border-(--surface-card)',
+                  !status.connected ? 'bg-(--ink-4)' : (scopeDevice ? deviceTriage[scopeDevice.instance]?.fault || deviceTriage[scopeDevice.instance]?.alarm : anyProblems) ? 'bg-(--status-alarm-strong)' : 'bg-(--color-ns-green)',
+                )}
+              />
+            </span>
+            <div className="min-w-0 flex-1">
+              <nav aria-label="Breadcrumb" className="flex h-[18px] min-w-0 items-center gap-1 text-[12.5px] whitespace-nowrap text-(--text-faint)">
+                {crumbs.length ? (
+                  crumbs.map((c, i) => (
+                    <span key={i} className="flex min-w-0 items-center gap-1">
+                      <button className="truncate transition-colors hover:text-(--text-strong)" onClick={c.go}>
                         {c.label}
                       </button>
-                      <ArrowRight className="size-3 shrink-0 text-(--ink-4)" />
+                      <ChevronRight className="size-3 shrink-0" />
                     </span>
-                  ))}
-                  <h1 className="m-0 truncate text-[16px] leading-6 font-medium tracking-[-0.01em]">{title}</h1>
-                  {typeFilter && scopeDevice ? (
-                    <button
-                      aria-label="Show every object type"
-                      title="Show every object type"
-                      onClick={() => select({ kind: 'device', device: scopeDevice.instance })}
-                      className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full text-(--text-muted) hover:bg-(--surface-track) hover:text-(--text-strong)"
-                    >
-                      <XIcon className="size-3" />
-                    </button>
-                  ) : null}
-                </nav>
-                {booted ? (
-                  <>
-                    <span className="mx-1 h-4 w-px shrink-0 bg-(--border-subtle)" />
-                    <span className="min-w-0 truncate text-[12px] text-(--text-muted)">{meta}</span>
-                  </>
+                  ))
                 ) : (
-                  <Skeleton className="h-3.5 w-56 rounded-full" />
+                  <span>Network</span>
                 )}
-                <div className="flex-1" />
-                {!booted ? (
-                  <Skeleton className="h-8 w-[140px] rounded-full" />
-                ) : (
-                  // Novacore's Live pill: hours and minutes in ink, seconds quieter, then the connection as a tinted badge
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <span className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-(--border-subtle) bg-(--surface-card) pr-[4px] pl-3 text-[12.5px] tracking-[-0.005em] whitespace-nowrap shadow-(--shadow-pill)" />
-                      }
-                    >
-                      <span className="tabular-nums">
-                        <span className="font-medium text-(--text-strong)">{clock.slice(0, 5)}</span>
-                        <span className="text-(--text-faint)">{clock.slice(5)}</span>
-                      </span>
-                      <Badge className={`h-[22px] gap-1.5 px-2 text-[11px] lowercase text-(--ink) ${status.connected ? 'bg-(--status-ok)' : 'bg-(--status-alarm)'}`} tone={status.connected ? 'success' : 'danger'}>
-                        {status.connected ? (
-                          <span className="relative inline-flex size-1.5 shrink-0" data-live={liveFresh ? 'true' : undefined}>
-                            {liveFresh ? <span className="nc-ping absolute inset-0 rounded-full bg-(--status-ok-strong)" /> : null}
-                            <span className="relative inline-flex size-1.5 rounded-full bg-(--status-ok-strong)" />
-                          </span>
-                        ) : null}
-                        {status.connected ? 'live' : 'offline'}
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipPopup side="bottom">
-                      {polling ? 'Values refresh every 3 s for the rows on screen' : 'Snapshot from the last read'}
-                      {polling && liveError ? <div className="text-(--text-muted)">The last refresh failed: {liveError}</div> : null}
-                    </TooltipPopup>
-                  </Tooltip>
-                )}
+              </nav>
+              <h1 className="m-0 mt-0.5 truncate text-[22px] leading-7 font-medium tracking-[-0.02em]">{title}</h1>
+              <div className="mt-0.5 truncate text-[12.5px] text-(--text-muted)">{booted ? meta : ' '}</div>
+            </div>
+            {scopeRows.length > 0 || typeFilter ? (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button size="sm" variant="ghost" onClick={() => setColumnsOpen(true)} disabled={!allRows.length}>
+                  <Columns3 />
+                  Columns
+                  <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{columns.length}</span>
+                </Button>
+                <Button size="sm" variant="secondary" disabled={!scopeRows.length} onClick={() => openExport(pickedRows.length ? 'ticked' : 'shown')}>
+                  <Download />
+                  Export
+                </Button>
                 {selectedRow ? <PaneToggle side="right" /> : null}
-              </header>
+              </div>
+            ) : selectedRow ? (
+              <span>
+                <PaneToggle side="right" />
+              </span>
+            ) : null}
+          </header>
 
-              {scopeRows.length > 0 ? (
-                <>
-                  {/* row 2: the query, with the actions beside it */}
-                  <div className="flex shrink-0 items-start gap-2 px-5">
-                    <div className="min-w-0 flex-1">
-                      <FilterField
-                        ref={searchRef}
-                        rows={scopeRows}
-                        props={filterable}
-                        query={query}
-                        onQuery={setQuery}
-                        search={search}
-                        onSearch={setSearch}
-                        matchCount={filtered.length}
-                        totalCount={scopeRows.length}
-                        forceCount={triage.size > 0}
-                        onTrend={() => trendRows(filtered)}
-                        onSaveCheck={(name: string, severity: Severity, q: string) => {
-                          setSavedChecks((c) => [...c, { id: `${Date.now()}`, name, severity, query: q }])
-                          toast(`Saved "${name}". It runs in Health check from now on.`)
-                        }}
-                      />
-                    </div>
-                    <div className="flex h-10 shrink-0 items-center gap-2">
-                      <Menu>
-                        <MenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" />}>
-                          <MoreHorizontal />
-                        </MenuTrigger>
-                        <MenuPopup align="end" className="w-56">
-                          <MenuItem
-                            disabled={!status.connected || writableShown.length === 0}
-                            title={status.connected ? undefined : 'Connect to the network to write'}
-                            onClick={() => setWriteRows(writableShown)}
-                          >
-                            <Pencil />
-                            Write {writableShown.length} shown
-                          </MenuItem>
-                          <MenuSeparator />
-                          <MenuItem onClick={saveSite}>
-                            <Download />
-                            Save site…
-                          </MenuItem>
-                          <MenuItem onClick={() => siteFileRef.current?.click()}>
-                            <FolderOpen />
-                            Open site…
-                          </MenuItem>
-                        </MenuPopup>
-                      </Menu>
-                      <input
-                        ref={siteFileRef}
-                        type="file"
-                        accept=".bxsite"
-                        hidden
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) openSite(file)
-                          e.target.value = ''
-                        }}
-                      />
-                      <Button size="sm" variant="secondary" onClick={() => setColumnsOpen(true)} disabled={!allRows.length}>
-                        <Columns3 />
-                        Columns
-                        <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{columns.length}</span>
-                      </Button>
-                      <Button size="sm" disabled={!scopeRows.length} onClick={() => setExportOpen(true)}>
-                        Export
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* row 3: the views, and on the right what in this scope needs a look */}
-                  <div className="mt-1.5 flex shrink-0 items-end justify-between gap-3 border-b border-(--border-subtle) px-5">
-                    <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
-                      <TabsList variant="underline" className="w-auto gap-6 border-b-0">
-                        <TabsTab value="objects">
-                          Objects
-                          <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{scopeRows.length}</span>
-                        </TabsTab>
-                        <TabsTab value="health">
-                          Health check
-                          {healthIssues ? (
-                            <span className="rounded-full bg-(--color-ns-yellow) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--ink)">{healthIssues}</span>
-                          ) : (
-                            <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-(--color-ns-green-light)">
-                              <CheckIcon className="size-3 text-(--ink)" />
-                            </span>
-                          )}
-                        </TabsTab>
-                        <TabsTab value="changes">
-                          Changes
-                          {baseline ? (
-                            <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{changeCount}</span>
-                          ) : null}
-                        </TabsTab>
-                      </TabsList>
-                    </Tabs>
-                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 pb-2" aria-label="What needs a look">
-                      {narrowing ? (
-                        <span className="mr-1 text-[12px] tabular-nums text-(--text-muted)">
-                          {filtered.length} of {scopeRows.length} match
-                        </span>
-                      ) : null}
-                      {TRIAGE.some((t) => triageCount[t.id] > 0 || triage.has(t.id)) ? (
-                        TRIAGE.filter((t) => triageCount[t.id] > 0 || triage.has(t.id)).map((t) => (
-                          <button
-                            key={t.id}
-                            aria-pressed={triage.has(t.id)}
-                            onClick={() => toggleTriage(t.id)}
-                            className={cn(
-                              'inline-flex h-6 items-center gap-1 rounded-full pr-2.5 pl-2 text-[12px] transition-[background-color,box-shadow] duration-150 hover:shadow-[inset_0_0_0_1px_var(--border-strong)]',
-                              triage.has(t.id) ? 'bg-(--ink) text-(--surface-card)' : TONE[t.tone],
-                            )}
-                          >
-                            <span className="font-medium tabular-nums">{triageCount[t.id]}</span>
-                            {t.label}
-                          </button>
-                        ))
-                      ) : narrowing || !examples.length ? (
-                        <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-(--surface-track) pr-2.5 pl-2 text-[12px] text-(--text-muted)">
-                          <span className="size-1.5 rounded-full bg-(--status-ok-strong)" />
-                          Nothing flagged
-                        </span>
-                      ) : (
-                        <>
-                          <span className="inline-flex h-6 items-center gap-1.5 pr-1 text-[12px] text-(--text-muted)">
-                            <span className="size-1.5 rounded-full bg-(--status-ok-strong)" />
-                            Nothing flagged · try
-                          </span>
-                          {examples.map((e) => (
-                            <button key={e.text} onClick={() => setQuery(e.text)} className="h-6 rounded-full bg-(--surface-track) px-2.5 text-[12px] tabular-nums text-(--text-strong) transition-colors hover:bg-(--paper-3)">
-                              {e.text}
-                            </button>
-                          ))}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </>
-              ) : null}
-
-              <ScrollArea scrollFade scrollFadeSides={{ left: false, top: false }} clampContentMinWidth={view !== 'objects'} className="min-h-0 flex-1">
-                {view === 'changes' && scopeRows.length > 0 ? (
-                  <Changes
+          {deviceRows.length > 0 ? (
+            <>
+              {/* the query, and the view of what it finds */}
+              <div className="flex shrink-0 items-start gap-3 px-6">
+                <div className="min-w-0 flex-1">
+                  <FilterField
+                    ref={searchRef}
                     rows={scopeRows}
-                    deviceIds={scopeDeviceId === null ? null : [scopeDeviceId]}
-                    typeFilter={typeFilter}
-                    baseline={baseline}
-                    onBaseline={setBaseline}
-                    selectedKey={selectedKey}
-                    onSelect={(r) => setSelection({ kind: 'object', device: r.device, key: r.key })}
-                  />
-                ) : view === 'health' && scopeRows.length > 0 ? (
-                  <HealthCheck
-                    rows={scopeRows}
-                    selectedKey={selectedKey}
-                    onSelect={(r) => setSelection({ kind: 'object', device: r.device, key: r.key })}
-                    scopeLabel={scopeDevice ? scopeDevice.name || `device ${scopeDevice.instance}` : 'every device'}
-                    saved={savedChecks}
-                    onDeleteCheck={(id) => {
-                      const previous = savedChecks
-                      setSavedChecks((c) => c.filter((x) => x.id !== id))
-                      toast('Deleted the check', { undo: () => setSavedChecks(previous) })
+                    props={filterable}
+                    query={query}
+                    onQuery={setQuery}
+                    search={search}
+                    onSearch={setSearch}
+                    matchCount={filtered.length}
+                    totalCount={scopeRows.length}
+                    forceCount={triage.size > 0}
+                    onTrend={() => trendRows(filtered)}
+                    onSaveCheck={(name: string, severity: Severity, q: string) => {
+                      setSavedChecks((c) => [...c, { id: `${Date.now()}`, name, severity, query: q }])
+                      toast(`Saved "${name}". It runs in Health check from now on.`)
                     }}
                   />
-                ) : scopeRows.length > 0 || (loading && scopeDevice) ? (
-                  filtered.length === 0 && !loading ? (
-                    <Empty title="No objects match" text="Try a shorter search, or turn off a chip above the query." />
-                  ) : (
-                    <ObjectTable
-                      held={control.heldByKey}
-                      flash={flash}
-                      rows={filtered}
-                      columns={columns}
-                      sort={sort}
-                      onSort={(c) => setSort((s) => (s?.column !== c ? { column: c, dir: 1 } : s.dir === 1 ? { column: c, dir: -1 } : null))}
-                      selectedKey={selectedKey}
-                      onSelect={(k) => {
-                        const r = scopeRows.find((x) => x.key === k)
-                        if (!r) return
-                        if (k === selectedKey) closeDrawer()
-                        else select({ kind: 'object', device: r.device, key: k, type: typeFilter ?? undefined })
-                      }}
-                      showDevice={!scopeDevice && visibleDevices.length > 1}
-                      loading={!!loading}
-                      onAddColumn={() => setColumnsOpen(true)}
-                      onRemoveColumn={(c) => setColumns(columns.filter((x) => x !== c))}
-                    />
-                  )
-                ) : (
-                  emptyState
-                )}
-              </ScrollArea>
-            </div>
-          </section>
+                </div>
+                <Tabs value={view} onValueChange={(v) => setView(v as typeof view)} className="shrink-0">
+                  <TabsList className="h-10">
+                    <TabsTab value="objects" className="gap-1.5 px-3">
+                      Objects
+                    </TabsTab>
+                    <TabsTab value="health" className="gap-1.5 px-3">
+                      Health
+                      {healthIssues ? viewCount(healthIssues, 'warn') : null}
+                    </TabsTab>
+                    <TabsTab value="changes" className="gap-1.5 px-3">
+                      Changes
+                      {baseline ? viewCount(changeCount) : null}
+                    </TabsTab>
+                  </TabsList>
+                </Tabs>
+              </div>
 
-          {selectedRow ? (
-            <Pane side="right" gap={10}>
-              <PropertiesPanel
-                subject={selectedRow}
-                columns={columns}
-                onToggleColumn={toggleColumn}
-                onClearSubject={closeDrawer}
-                canRead={status.connected}
-                onReread={() => startRead([selectedRow.device], false, [[selectedRow.typeId, selectedRow.instance]])}
-                onTrend={
-                  isTrendLog(selectedRow)
-                    ? async () => {
-                        // a log's history is the point: add it if needed, then go to the chart
-                        if (!trends.points.some((p) => p.device === selectedRow.device && p.typeId === selectedRow.typeId && p.instance === selectedRow.instance)) await trendRows([selectedRow])
-                        setPlace('trends')
-                      }
-                    : selectedRow.values['present-value'] !== undefined && selectedRow.typeId !== 8
-                      ? () => trendRows([selectedRow])
-                      : undefined
-                }
-                trendLabel={isTrendLog(selectedRow) ? 'Show history' : undefined}
-                trended={!isTrendLog(selectedRow) && trends.points.some((p) => p.device === selectedRow.device && p.typeId === selectedRow.typeId && p.instance === selectedRow.instance)}
-                onWritten={() => rereadRows([selectedRow])}
-                onOpenSchedules={() => setPlace('schedules')}
+              {/* what kinds of object there are, and what needs a look */}
+              <div className="flex shrink-0 items-center gap-4 px-6 pt-3 pb-3.5">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <TypePicker counts={typeCounts} value={typeFilter ?? []} onChange={setTypes} />
+                  {typeFilter && typeFilter.length > 1 ? (
+                    <span className="min-w-0 truncate text-[12px] text-(--text-muted)" title={typeFilter.join(', ')}>
+                      {typeFilter.join(', ')}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5" aria-label="What needs a look">
+                  {narrowing ? (
+                    <span className="mr-1 text-[12px] tabular-nums text-(--text-muted)">
+                      {filtered.length} of {scopeRows.length} match
+                    </span>
+                  ) : null}
+                  {TRIAGE.some((t) => triageCount[t.id] > 0 || triage.has(t.id)) ? (
+                    TRIAGE.filter((t) => triageCount[t.id] > 0 || triage.has(t.id)).map((t) => (
+                      <button
+                        key={t.id}
+                        aria-pressed={triage.has(t.id)}
+                        onClick={() => toggleTriage(t.id)}
+                        className={cn(
+                          'inline-flex h-7 items-center gap-1.5 rounded-full pr-3 pl-2.5 text-[12.5px] transition-[background-color,box-shadow] duration-150 hover:shadow-[inset_0_0_0_1px_var(--border-strong)]',
+                          triage.has(t.id) ? 'bg-(--ink) text-(--surface-card)' : TONE[t.tone],
+                        )}
+                      >
+                        <span className="font-medium tabular-nums">{triageCount[t.id]}</span>
+                        {t.label}
+                      </button>
+                    ))
+                  ) : narrowing || !examples.length ? (
+                    <span className="inline-flex h-7 items-center gap-1.5 px-1 text-[12.5px] text-(--text-muted)">
+                      <span className="size-1.5 rounded-full bg-(--status-ok-strong)" />
+                      Nothing flagged
+                    </span>
+                  ) : (
+                    <>
+                      <span className="inline-flex h-7 items-center gap-1.5 pr-1 text-[12.5px] text-(--text-muted)">
+                        <span className="size-1.5 rounded-full bg-(--status-ok-strong)" />
+                        Nothing flagged · try
+                      </span>
+                      {examples.map((e) => (
+                        <button key={e.text} onClick={() => setQuery(e.text)} className="h-7 rounded-full bg-(--surface-track) px-3 text-[12.5px] tabular-nums text-(--text-strong) transition-colors hover:bg-(--paper-3)">
+                          {e.text}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          <ScrollArea
+            scrollFade
+            scrollFadeSides={{ left: false, top: false }}
+            clampContentMinWidth={view !== 'objects'}
+            className={cn('min-h-0 flex-1', deviceRows.length > 0 && 'border-t border-(--border-subtle)')}
+          >
+            {view === 'changes' && scopeRows.length > 0 ? (
+              <Changes
+                rows={scopeRows}
+                deviceIds={scopeDeviceId === null ? null : [scopeDeviceId]}
+                typeFilter={typeFilter}
+                baseline={baseline}
+                onBaseline={setBaseline}
+                selectedKey={selectedKey}
+                onSelect={(r) => setOpenKey(r.key)}
               />
-            </Pane>
+            ) : view === 'health' && scopeRows.length > 0 ? (
+              <HealthCheck
+                rows={scopeRows}
+                selectedKey={selectedKey}
+                onSelect={(r) => setOpenKey(r.key)}
+                scopeLabel={scopeDevice ? scopeDevice.name || `device ${scopeDevice.instance}` : 'every device'}
+                saved={savedChecks}
+                onDeleteCheck={(id) => {
+                  const previous = savedChecks
+                  setSavedChecks((c) => c.filter((x) => x.id !== id))
+                  toast('Deleted the check', { undo: () => setSavedChecks(previous) })
+                }}
+              />
+            ) : scopeRows.length > 0 || (loading && scopeDevice) ? (
+              filtered.length === 0 && !loading ? (
+                <Empty title="No objects match" text="Try a shorter search, or turn off a chip above the table." />
+              ) : (
+                <div className={picked.size ? 'pb-20' : undefined}>
+                  <ObjectTable
+                    held={control.heldByKey}
+                    flash={flash}
+                    rows={filtered}
+                    columns={columns}
+                    sort={sort}
+                    onSort={(c) => setSort((s) => (s?.column !== c ? { column: c, dir: 1 } : s.dir === 1 ? { column: c, dir: -1 } : null))}
+                    selectedKey={selectedKey}
+                    onSelect={(k) => (k === selectedKey ? closeDrawer() : openObject(k))}
+                    picked={picked}
+                    onPick={pick}
+                    onPickAll={pickAll}
+                    showDevice={!scopeDevice && visibleDevices.length > 1}
+                    loading={!!loading}
+                    onAddColumn={() => setColumnsOpen(true)}
+                    onRemoveColumn={(c) => setColumns(columns.filter((x) => x !== c))}
+                  />
+                </div>
+              )
+            ) : (
+              emptyState
+            )}
+          </ScrollArea>
+
+          {view === 'objects' ? (
+            <SelectionBar
+              count={pickedRows.length}
+              hidden={pickedHidden}
+              writable={writablePicked.length}
+              canWrite={status.connected}
+              onWrite={() => setWriteRows(writablePicked)}
+              onTrend={() => trendRows(pickedRows)}
+              onReread={() => {
+                rereadRows(pickedRows)
+                toast(`Reading ${plural(pickedRows.length, 'object')} again`)
+              }}
+              onExport={() => openExport('ticked')}
+              onClear={() => setPicked(NONE)}
+            />
           ) : null}
         </div>
       </main>
+
+      {selectedRow ? (
+        <Pane side="right">
+          <PropertiesPanel
+            subject={selectedRow}
+            columns={columns}
+            onToggleColumn={toggleColumn}
+            onClearSubject={closeDrawer}
+            canRead={status.connected}
+            onReread={() => startRead([selectedRow.device], false, [[selectedRow.typeId, selectedRow.instance]])}
+            onTrend={
+              isTrendLog(selectedRow)
+                ? async () => {
+                    // a log's history is the point: add it if needed, then go to the chart
+                    if (!trends.points.some((p) => p.device === selectedRow.device && p.typeId === selectedRow.typeId && p.instance === selectedRow.instance)) trendRows([selectedRow])
+                    else setPlace('trends')
+                  }
+                : selectedRow.values['present-value'] !== undefined && selectedRow.typeId !== 8
+                  ? () => trendRows([selectedRow])
+                  : undefined
+            }
+            trendLabel={isTrendLog(selectedRow) ? 'Show history' : undefined}
+            trended={!isTrendLog(selectedRow) && trends.points.some((p) => p.device === selectedRow.device && p.typeId === selectedRow.typeId && p.instance === selectedRow.instance)}
+            onWritten={() => rereadRows([selectedRow])}
+            onOpenSchedules={() => setPlace('schedules')}
+          />
+        </Pane>
+      ) : null}
       </>
       )}
+      </div>
 
       <UpdateDialog
         app="BACon"

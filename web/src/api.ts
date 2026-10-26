@@ -118,21 +118,46 @@ export type TrendPoint = {
   sourceType: number | null
   channel: number | null
   log?: { state: 'waiting' | 'loading' | 'ready' | 'error' | 'unsupported'; loaded: number; total: number; error: string; interval: number; fetchedAt: number }
+  nextDue: number
 }
-export type TrendStatus = {
+/** A trend the user named: its points, how often it records, and whether it is recording. */
+export type TrendGroup = {
+  id: number
+  name: string
+  interval: number
+  mode: 'auto' | 'poll'
+  pointIds: number[]
   running: boolean
   startedAt: number
   stoppedAt: number
-  interval: number
-  /** when the next timed read is due (epoch seconds), 0 when nothing is polled */
+  /** when the group's next timed read is due (epoch seconds), 0 when nothing is polled */
   nextRead: number
-  mode: 'auto' | 'poll'
+  samples: number
+}
+export type TrendStatus = {
+  /** any group recording */
+  running: boolean
+  groups: TrendGroup[]
   points: TrendPoint[]
   samples: number
-  file: string
   /** the oldest sample, including history read from trend logs */
   earliest: number
 }
+/** A point over a time range: the average is weighted by how long each value held; states is seconds per value. */
+export type TrendStats = {
+  count: number
+  min: number | null
+  max: number | null
+  avg: number | null
+  first: number | null
+  firstText: string
+  last: number | null
+  lastText: string
+  from: number
+  to: number
+  changes: number
+  states: Record<string, number> | null
+} | null
 /** [time, avg, min, max, last text] per bucket */
 export type Bucket = [number, number | null, number | null, number | null, string]
 
@@ -243,13 +268,17 @@ export const api = {
   openSite: (file: File) =>
     call<{ loaded: number[]; savedAt: string; host: string }>('POST', '/api/site/open', file),
   trends: () => call<TrendStatus>('GET', '/api/trends'),
-  trendAdd: (objects: ObjectRow[]) => call<TrendStatus & { added: number[] }>('POST', '/api/trends/points', { objects }),
+  trendGroupCreate: (name: string, interval: number, mode: string, objects: ObjectRow[] = []) =>
+    call<TrendStatus & { group: number; added: number[] }>('POST', '/api/trends/groups', { name, interval, mode, objects }),
+  trendGroupUpdate: (id: number, change: { name?: string; interval?: number; mode?: string }) => call<TrendStatus>('PATCH', `/api/trends/groups/${id}`, change),
+  trendGroupDelete: (id: number) => call<TrendStatus>('DELETE', `/api/trends/groups/${id}`),
+  trendGroupAdd: (id: number, objects: ObjectRow[]) => call<TrendStatus & { group: number; added: number[] }>('POST', `/api/trends/groups/${id}/points`, { objects }),
+  trendGroupRemove: (id: number, point: number) => call<TrendStatus>('DELETE', `/api/trends/groups/${id}/points/${point}`),
+  trendGroupStart: (id: number) => call<TrendStatus>('POST', `/api/trends/groups/${id}/start`),
+  trendGroupStop: (id: number) => call<TrendStatus>('POST', `/api/trends/groups/${id}/stop`),
   trendSync: (id: number) => call<TrendStatus>('POST', `/api/trends/points/${id}/sync`),
   events: (instance: number) => call<DeviceEvents>('GET', `/api/devices/${instance}/events`),
-  trendRemove: (id: number) => call<TrendStatus>('DELETE', `/api/trends/points/${id}`),
-  trendStart: (interval: number, mode: string) => call<TrendStatus>('POST', '/api/trends/start', { interval, mode }),
-  trendStop: () => call<TrendStatus>('POST', '/api/trends/stop'),
-  trendClear: () => call<TrendStatus>('POST', '/api/trends/clear'),
+  trendStats: (ids: number[], since: number) => call<Record<string, TrendStats>>('GET', `/api/trends/stats?ids=${ids.join(',')}&since=${since}`),
   trendSeries: (ids: number[], since: number, buckets: number) =>
     call<Record<string, Bucket[]>>('GET', `/api/trends/series?ids=${ids.join(',')}&since=${since}&buckets=${buckets}`),
   network: (history = 300) => call<NetStatus>('GET', `/api/network?history=${history}`),

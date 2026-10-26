@@ -22,6 +22,15 @@ from bacnet import isolated, http, free_udp
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
+
+def write_shown(page):
+    """Bulk writes act on ticked rows: untick what is left from before, tick every row shown, then Write."""
+    bar = page.get_by_role('toolbar', name='Ticked rows')
+    if bar.count():
+        bar.get_by_role('button', name='Untick every row').click()
+    page.get_by_role('checkbox', name='Tick every row shown').click()
+    bar.get_by_role('button', name=re.compile('^Write')).click()
+
 BASE = 'http://127.0.0.1:8067'
 OUT = ROOT / 'tests' / 'out'
 
@@ -153,16 +162,15 @@ def run():
 
                     # ---- bulk: every operating mode into Standby, by label ----
                     page.get_by_role('button', name='Objects', exact=True).click()
-                    page.locator('header button', has_text=re.compile('^Network$')).click()  # every device, not just the one picked
+                    page.locator('header button', has_text=re.compile('^All devices$')).click()  # every device, not just the one picked
                     search.fill('Operating mode')
                     search.press('Enter')
-                    page.get_by_role('button', name='More actions').click()  # bulk writes live in the … menu above the table
-                    page.get_by_role('menuitem', name=re.compile(r'^Write \d+ shown$')).click()
+                    write_shown(page)  # tick every row shown, then Write in the bar over the table
                     expect(page.get_by_text('groups that take the same value', exact=False)).to_be_visible(timeout=30000)
                     sheet = page.get_by_role('dialog')
                     sections = sheet.locator('section')
                     for i in range(sections.count()):
-                        sections.nth(i).get_by_role('checkbox').first.click()
+                        sections.nth(i).get_by_role('switch').click()
                         sections.nth(i).get_by_role('radio', name='Standby').click()
                     page.screenshot(path=str(OUT / 'site-5-bulk-modes.png'))
                     page.get_by_role('button', name='Review', exact=True).click()
@@ -174,13 +182,12 @@ def run():
                     # ---- bulk: a property, the default of every setpoint ----
                     search.fill('setpoint')
                     search.press('Enter')
-                    page.get_by_role('button', name='More actions').click()  # bulk writes live in the … menu above the table
-                    page.get_by_role('menuitem', name=re.compile(r'^Write \d+ shown$')).click()
+                    write_shown(page)  # tick every row shown, then Write in the bar over the table
                     page.get_by_role('combobox', name='Property to write').click()
                     page.get_by_role('option', name=re.compile('^Relinquish default')).click()
                     expect(page.get_by_text('groups that take the same value', exact=False)).to_be_visible(timeout=30000)
                     section = sheet.locator('section').first
-                    section.get_by_role('checkbox').first.click()
+                    section.get_by_role('switch').click()
                     section.get_by_role('spinbutton').fill('21.5')
                     page.screenshot(path=str(OUT / 'site-6-bulk-defaults.png'))
                     page.get_by_role('button', name='Review', exact=True).click()

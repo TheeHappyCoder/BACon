@@ -139,7 +139,7 @@ export function SchedulesView({
     return (
       <>
         <Pane side="left">
-          <aside className="flex w-full min-w-0 flex-col border-r border-(--border-subtle)">
+          <aside className="flex w-full min-w-0 flex-col">
             <PaneTitle title="Schedules" />
             <div className="mx-3 mt-1 rounded-[12px] border border-dashed border-(--border-default) px-3.5 py-3 text-[12.5px] leading-snug text-(--text-muted)">
               Schedule objects show up here once their device is read.
@@ -147,12 +147,12 @@ export function SchedulesView({
           </aside>
         </Pane>
         <main className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-[52px] shrink-0 items-center gap-1.5 pr-3 pl-2 text-[13px] text-(--text-muted)">
+          <header className="flex h-12 shrink-0 items-center border-b border-(--border-subtle) gap-1.5 pr-3 pl-2 text-[13px] text-(--text-muted)">
             <PaneToggle side="left" />
             <span>Schedules</span>
           </header>
-          <div className="flex min-h-0 flex-1 px-3 pb-3">
-            <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+          <div className="flex min-h-0 flex-1">
+            <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-(--surface-card)">
               <EmptyState
                 icon={<CalendarClock className="size-5" />}
                 title="No schedules yet"
@@ -212,7 +212,7 @@ export function SchedulesView({
   return (
     <>
       <Pane side="left">
-        <aside className="flex w-full min-w-0 flex-col border-r border-(--border-subtle)">
+        <aside className="flex w-full min-w-0 flex-col">
           <PaneTitle title="Schedules" count={schedules.length} />
           {schedules.length > 6 ? <PaneSearch value={search} onChange={setSearch} placeholder="Search schedules" /> : null}
           <ScrollArea scrollFade className="min-h-0 flex-1">
@@ -232,7 +232,7 @@ export function SchedulesView({
                         key={r.key}
                         onClick={() => pick(r.key)}
                         data-active={selected?.s.row.key === r.key ? 'true' : undefined}
-                        className="flex h-[52px] items-center gap-2.5 rounded-[10px] px-2 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)] data-[active=true]:bg-(--paper-3)"
+                        className="flex h-[52px] items-center gap-2.5 rounded-[10px] px-2 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)] data-[active=true]:bg-(--surface-card) data-[active=true]:shadow-[0_0_0_1px_var(--border-subtle),0_2px_6px_-2px_rgba(0,0,0,.08)]"
                       >
                         <span
                           className="size-2.5 shrink-0 rounded-[3px] border border-[rgba(41,41,41,0.08)]"
@@ -257,7 +257,7 @@ export function SchedulesView({
       </Pane>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[52px] shrink-0 items-center gap-1.5 pr-2 pl-2 text-[13px] text-(--text-muted)">
+        <header className="flex h-12 shrink-0 items-center border-b border-(--border-subtle) gap-1.5 pr-2 pl-2 text-[13px] text-(--text-muted)">
           <PaneToggle side="left" />
           <span>Schedules</span>
           <ArrowRight className="size-3 text-(--ink-4)" />
@@ -265,8 +265,8 @@ export function SchedulesView({
           <span className="flex-1" />
           <PaneToggle side="right" />
         </header>
-        <div className="flex min-h-0 flex-1 gap-[10px] px-3 pb-3">
-          <section key={row.key} className="nc-view-in flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+        <div className="flex min-h-0 flex-1">
+          <section key={row.key} className="nc-view-in flex min-w-0 flex-1 flex-col overflow-hidden bg-(--surface-card)">
             <div className="flex items-start gap-3 px-[18px] pt-[18px] pb-3">
               <div className="min-w-0 flex-1">
                 <h1 className="m-0 truncate text-[20px] font-medium tracking-[-0.02em]">{p.name}</h1>
@@ -404,9 +404,9 @@ export function SchedulesView({
             )}
           </section>
 
-          <Pane side="right" gap={10}>
+          <Pane side="right">
             <ScrollArea scrollFade className="min-h-0 w-full">
-              <aside key={row.key} className="nc-view-in flex w-full min-w-0 flex-col gap-2.5 pb-1">
+              <aside key={row.key} className="nc-view-in flex w-full min-w-0 flex-col gap-2.5 p-3">
                 <NowCard p={p} current={current} next={next} now={now} calendars={calendars} />
                 <Group label="Behaviour">
                   <dl className="m-0">

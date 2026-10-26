@@ -16,6 +16,15 @@ from bacnet import isolated, http, free_udp
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
+
+def write_shown(page):
+    """Bulk writes act on ticked rows: untick what is left from before, tick every row shown, then Write."""
+    bar = page.get_by_role('toolbar', name='Ticked rows')
+    if bar.count():
+        bar.get_by_role('button', name='Untick every row').click()
+    page.get_by_role('checkbox', name='Tick every row shown').click()
+    bar.get_by_role('button', name=re.compile('^Write')).click()
+
 BASE = 'http://127.0.0.1:8067'
 
 
@@ -119,8 +128,7 @@ def run():
                     # Bulk writes act on the rows the filter shows, from the … menu above the table.
                     page.get_by_role('button', name='Close this object').click()
                     expect(page.get_by_role('button', name='Close this object')).to_have_count(0)
-                    page.get_by_role('button', name='More actions').click()
-                    page.get_by_role('menuitem', name=re.compile(r'^Write \d+ shown$')).click()
+                    write_shown(page)  # tick every row shown, then Write in the bar over the table
                     expect(page.get_by_text('groups that take the same value', exact=False)).to_be_visible(timeout=60000)
                     page.screenshot(path=str(out / 'control-groups.png'))
                     # The layout at a laptop size: every device, one device, a query, then one of its rows in the drawer.

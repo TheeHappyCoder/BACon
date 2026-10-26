@@ -79,6 +79,8 @@ export function Pane({ side, children, className, gap = 0 }: { side: Side; child
   return (
     <div
       className={cn('relative flex shrink-0', className)}
+      data-pane={side}
+      data-open={collapsed ? undefined : ''}
       style={{
         width: collapsed ? 0 : width,
         [side === 'left' ? 'marginRight' : 'marginLeft']: collapsed ? -gap : 0,

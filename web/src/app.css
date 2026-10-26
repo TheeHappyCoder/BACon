@@ -59,3 +59,53 @@ kbd, code, pre, samp { font-family: inherit; }
   --rail-active: var(--paper-2);
   --rail-bar: var(--ink);
 }
+
+/* The shell: one white surface split by hairlines. The side panes sit a breath darker than the page; the row open in
+   the drawer is tinted with the action blue, ticked rows with the cyan row tint. */
+:root {
+  --shell-sidebar: #fafafa;
+  --surface-selected: color-mix(in srgb, var(--action-primary) 7%, #ffffff);
+}
+.dark {
+  --shell-sidebar: #080808;
+  --surface-selected: rgb(41 111 240 / 0.14);
+}
+
+/* The stage: under the ink bar, the side lists sit on the grey stage and each page is one white sheet. The drawer
+   joins the sheet on its right, a shade darker, so page and drawer read as one surface with a fold. */
+.bx-stage { background: var(--surface-page); padding: 0 8px 8px 0; }
+.bx-stage > main {
+  margin-top: 8px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -18px rgb(0 0 0 / 0.12);
+  overflow: hidden;
+}
+.bx-stage > main:first-child { margin-left: 8px; }
+.bx-stage > main:has(+ [data-pane='right'][data-open]) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.bx-stage > [data-pane='right'][data-open] {
+  margin-top: 8px;
+  background: var(--shell-sidebar);
+  border: 1px solid var(--border-subtle);
+  border-left: 0;
+  border-radius: 0 16px 16px 0;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -18px rgb(0 0 0 / 0.12);
+}
+.bx-stage > [data-pane='right'] > div:first-child { border-radius: inherit; }
+.bx-stage > [data-pane='right'][data-open]::before {
+  content: ''; position: absolute; inset: 0 auto 0 0; width: 1px; background: var(--border-subtle); z-index: 1;
+}
+:root {
+  --shell-sidebar: #fbfbfb;
+  --surface-ticked: color-mix(in srgb, var(--color-ns-green) 26%, #ffffff);
+  --surface-selected: color-mix(in srgb, var(--ink) 5%, #ffffff);
+}
+.dark {
+  --surface-ticked: rgb(198 245 111 / 0.12);
+  --surface-selected: rgb(237 237 237 / 0.06);
+}
+
+/* Trend lanes: a deep olive line over the lime area, so the trace reads as one colour family, not ink on paint. */
+:root { --trend-line: #4d7c0f; }
+.dark { --trend-line: #a3e635; }

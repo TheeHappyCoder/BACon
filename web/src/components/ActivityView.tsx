@@ -3,6 +3,7 @@ import { api, type ControlAction, type Device, type ObjectRow, type Status } fro
 import { actionValue, propertyLabel, releaseSlot, undoAction, weekChange } from '../actions'
 import { PRIORITY_NAMES } from '../control'
 import { Button } from '../ui/components/button'
+import { Input } from '../ui/components/input'
 import { Hugeicons } from '../ui/components/hugeicons'
 import { ScrollArea } from '../ui/components/scroll-area'
 import { cn } from '../ui/utils'
@@ -138,11 +139,11 @@ export function ActivityView({ status, rows, devices, onShowInObjects, onReread 
 
   return (
     <main className="flex min-w-0 flex-1 flex-col">
-      <header className="flex h-[52px] shrink-0 items-center gap-1.5 pr-2 pl-4 text-[13px] text-(--text-muted)">
+      <header className="flex h-12 shrink-0 items-center border-b border-(--border-subtle) gap-1.5 pr-2 pl-4 text-[13px] text-(--text-muted)">
         <span>Activity</span>
       </header>
-      <div className="flex min-h-0 flex-1 gap-[10px] px-3 pb-3">
-        <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+      <div className="flex min-h-0 flex-1">
+        <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-(--surface-card)">
           <div className="flex items-start gap-3 px-[18px] pt-[18px] pb-3">
             <div className="min-w-0 flex-1">
               <h1 className="m-0 text-[20px] font-medium tracking-[-0.02em]">What BACon did</h1>
@@ -216,7 +217,7 @@ export function ActivityView({ status, rows, devices, onShowInObjects, onReread 
                 <span className="flex-1" />
                 <label className="flex h-7 w-[220px] items-center gap-2 rounded-full border border-(--border-default) bg-(--surface-input) px-2.5">
                   <Search className="size-3.5 shrink-0 text-(--text-faint)" />
-                  <input aria-label="Search actions" className="min-w-0 flex-1 bg-transparent text-[12px] outline-none" placeholder="Object, device or property" value={search} onChange={(e) => setSearch(e.target.value)} />
+                  <Input unstyled nativeInput aria-label="Search actions" className="min-w-0 flex-1 bg-transparent text-[12px] outline-none" placeholder="Object, device or property" value={search} onChange={(e) => setSearch(e.target.value)} />
                   {search ? <button aria-label="Clear search" onClick={() => setSearch('')}><XIcon className="size-3 text-(--text-faint)" /></button> : null}
                 </label>
               </div>
