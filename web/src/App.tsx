@@ -32,7 +32,9 @@ import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from './ui/comp
 import { ScrollArea } from './ui/components/scroll-area'
 import { Skeleton } from './ui/components/skeleton'
 import { Tabs, TabsList, TabsTab } from './ui/components/tabs'
-import { TooltipProvider } from './ui/components/tooltip'
+import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from './ui/components/tooltip'
+import { cn } from './ui/utils'
+import { TRIAGE, passesTriage, triageCounts, type TriageId } from './triage'
 
 const { ArrowRight, Columns3, XIcon, CheckIcon, MoreHorizontal, Pencil, Download, FolderOpen } = Hugeicons
 
@@ -55,8 +57,20 @@ function useClock() {
     const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
-  return now.toTimeString().slice(0, 8) // 24-hour HH:MM:SS, as in Novacore's Live pill
+  return now
 }
+
+/** Queries offered under the query bar, each only when its property was read in the scope. */
+const EXAMPLES = [
+  { prop: 'present-value', text: 'present-value > 25' },
+  { prop: 'status-flags', text: 'status-flags has fault' },
+  { prop: 'event-state', text: 'event-state != normal' },
+]
+const TONE = { alarm: 'bg-(--status-alarm-bg)', warn: 'bg-(--status-warn-bg)', info: 'bg-(--status-info-bg)' } as const
+/** live refresh: how often, and how many of the rows on screen */
+const LIVE_EVERY = 3000
+const LIVE_ROWS = 300
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 /** Trend logs and trend-log-multiples: their history can be shown in Trends. */
@@ -66,7 +80,8 @@ function Workspace() {
   const [writeRows, setWriteRows] = useState<ObjectRow[] | null>(null)
   const control = useControl()
   const toast = useToast()
-  const clock = useClock()
+  const now = useClock()
+  const clock = now.toTimeString().slice(0, 8) // 24-hour HH:MM:SS, as in Novacore's Live pill
 
   const [status, setStatus] = useState<Status>({ connected: false, settings: null, host: '' })
   const [interfaces, setInterfaces] = useState<NetInterface[]>([])
@@ -492,14 +507,49 @@ function Workspace() {
     return compareRows(scopeRows, then, false).length
   }, [baseline, scopeRows, scopeDeviceId, typeFilter])
 
-  const filtered = useMemo(() => {
+  // the triage chips belong to a scope: another device or type starts with none
+  const scopeKey = `${scopeDeviceId}|${typeFilter ?? ''}`
+  const [triageState, setTriageState] = useState<{ scope: string; ids: Set<TriageId> }>({ scope: '', ids: new Set() })
+  const triage = useMemo(() => (triageState.scope === scopeKey ? triageState.ids : new Set<TriageId>()), [triageState, scopeKey])
+  const toggleTriage = (id: TriageId) => {
+    const ids = new Set(triage)
+    if (ids.has(id)) ids.delete(id)
+    else ids.add(id)
+    setTriageState({ scope: scopeKey, ids })
+  }
+  // counted over the scope, not the filtered list, so a chip's number stays put when it is clicked
+  const triageCount = useMemo(() => triageCounts(scopeRows), [scopeRows])
+  const deviceTriage = useMemo(() => {
+    const out: Record<number, { fault: number; alarm: number }> = {}
+    for (const d of visibleDevices) {
+      const { fault, alarm } = triageCounts(rows[d.instance] ?? [])
+      out[d.instance] = { fault, alarm }
+    }
+    return out
+  }, [visibleDevices, rows])
+  const narrowing = !!query.trim() || !!search.trim() || triage.size > 0
+
+  /** The table's filter, scope aside: triage chips, then the query, then the search. */
+  const matches = useMemo(() => {
     const q = search.trim().toLowerCase()
     const searchCols = ['object-name', 'Object type', 'Instance', ...columns]
-    let list = scopeRows.filter((r) => {
+    return (r: ObjectRow) => {
+      if (triage.size && !passesTriage(r, triage)) return false
       if (queryNode && !evaluate(queryNode, r)) return false
       if (q && !searchCols.some((c) => (r.values[c] ?? r.errors[c] ?? '').toLowerCase().includes(q))) return false
       return true
-    })
+    }
+  }, [triage, queryNode, search, columns])
+  // every device shows how many of its objects match, so the tree says where else to look
+  const matchCounts = useMemo(() => {
+    if (!narrowing) return null
+    const out: Record<number, number> = {}
+    for (const r of allRows) if (matches(r)) out[r.device] = (out[r.device] ?? 0) + 1
+    return out
+  }, [narrowing, allRows, matches])
+
+  const filtered = useMemo(() => {
+    let list = scopeRows.filter(matches)
     if (sort) {
       const { column, dir } = sort
       list = [...list].sort((a, b) => {
@@ -510,7 +560,82 @@ function Workspace() {
       })
     }
     return list
-  }, [scopeRows, queryNode, search, columns, sort])
+  }, [scopeRows, matches, sort])
+
+  // ---- live values: present value and flags for the rows on screen, every few seconds ----
+  const [flash, setFlash] = useState<Map<string, number>>(() => new Map())
+  const [liveAt, setLiveAt] = useState(0)
+  const [liveError, setLiveError] = useState('')
+  const [docHidden, setDocHidden] = useState(() => document.hidden)
+  useEffect(() => {
+    const onVisibility = () => setDocHidden(document.hidden)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
+  const polling = booted && place === 'objects' && view === 'objects' && status.connected && !docHidden
+  const liveRef = useRef({ filtered, jobs, rows })
+  useEffect(() => {
+    liveRef.current = { filtered, jobs, rows }
+  })
+  useEffect(() => {
+    if (!polling) return
+    let stop = false
+    let busy = false // one request in flight at a time
+    const timers = new Set<ReturnType<typeof setTimeout>>()
+    const tick = async () => {
+      if (busy) return
+      const batch = liveRef.current.filtered.slice(0, LIVE_ROWS).filter((r) => r.values['present-value'] !== undefined || r.errors['present-value'] !== undefined)
+      const devs = new Set(batch.map((r) => r.device))
+      // a read in progress owns the device: its rows are about to be replaced anyway
+      if (!batch.length || liveRef.current.jobs.some((j) => j.state === 'running' && devs.has(j.device))) return
+      busy = true
+      try {
+        const res = await api.live(batch)
+        if (stop) return
+        const changed = new Map<string, { value: string; flags: string | null }>()
+        for (const d of devs)
+          for (const r of liveRef.current.rows[d] ?? []) {
+            const v = res.values[r.key]
+            if (!v || v.value === null) continue
+            if (v.value !== r.values['present-value'] || (v.flags !== null && v.flags !== r.values['status-flags'])) changed.set(r.key, { value: v.value, flags: v.flags })
+          }
+        if (changed.size) {
+          setRows((prev) => {
+            const next = { ...prev }
+            for (const d of devs) {
+              if (!prev[d]) continue
+              next[d] = prev[d].map((r) => {
+                const c = changed.get(r.key)
+                return c ? { ...r, values: { ...r.values, 'present-value': c.value, ...(c.flags !== null ? { 'status-flags': c.flags } : {}) } } : r
+              })
+            }
+            return next
+          })
+          const at = Date.now()
+          setFlash((f) => new Map([...f, ...[...changed.keys()].map((k) => [k, at] as const)]))
+          const t = setTimeout(() => {
+            timers.delete(t)
+            setFlash((f) => new Map([...f].filter(([, v]) => v !== at)))
+          }, 1500)
+          timers.add(t)
+        }
+        setLiveAt(res.at * 1000)
+        setLiveError('')
+      } catch (e) {
+        if (!stop) setLiveError(message(e)) // no toast every 3 s: the Live pill stops pulsing instead
+      } finally {
+        busy = false
+      }
+    }
+    void tick()
+    const timer = setInterval(tick, LIVE_EVERY)
+    return () => {
+      stop = true
+      clearInterval(timer)
+      for (const t of timers) clearTimeout(t)
+    }
+  }, [polling])
+  const liveFresh = polling && !liveError && now.getTime() - liveAt < 5000
 
   const selectedKey = selection.kind === 'object' ? selection.key : null
   const selectedRow = selectedKey ? scopeRows.find((r) => r.key === selectedKey) ?? null : null
@@ -628,10 +753,22 @@ function Workspace() {
     <Empty title="Click a device in the tree to read it" text="Its objects fill this table. Click a row for everything it reports. Columns and Export are above the table." />
   ) : null
 
-  const crumbs: { label: string; go?: () => void; clear?: () => void }[] = [{ label: 'Network', go: () => select({ kind: 'network' }) }]
-  if (scopeDevice) crumbs.push({ label: scopeDevice.name || `Device ${scopeDevice.instance}`, go: () => select({ kind: 'device', device: scopeDevice.instance }) })
-  if (typeFilter && scopeDevice) crumbs.push({ label: typeFilter, clear: () => select({ kind: 'device', device: scopeDevice.instance }) })
-  if (selectedRow) crumbs.push({ label: selectedRow.values['object-name'] || selectedRow.key })
+  // the scope header: the levels above the scope as crumbs, the scope itself as the title, then what it is
+  const scopeName = scopeDevice ? scopeDevice.name || `Device ${scopeDevice.instance}` : ''
+  const crumbs: { label: string; go: () => void }[] = []
+  if (scopeDevice) crumbs.push({ label: 'Network', go: () => select({ kind: 'network' }) })
+  if (scopeDevice && typeFilter) crumbs.push({ label: scopeName, go: () => select({ kind: 'device', device: scopeDevice.instance }) })
+  const title = !scopeDevice ? 'All devices' : typeFilter ?? scopeName
+  const meta = !scopeDevice
+    ? status.connected
+      ? `${status.settings?.ip}:${status.settings?.port} · ${plural(visibleDevices.length, 'device')} · ${plural(allRows.length, 'object')}`
+      : visibleDevices.length
+        ? `Not connected · ${plural(visibleDevices.length, 'device')} from a file`
+        : 'Not connected'
+    : typeFilter
+      ? `${plural(scopeRows.length, 'object')} on ${scopeName}`
+      : [`#${scopeDevice.instance}`, scopeDevice.address, scopeDevice.vendorName, scopeDevice.model].filter(Boolean).join(' · ')
+  const examples = EXAMPLES.filter((e) => available.some((p) => p.name === e.prop))
 
   return (
     <div className="flex h-screen overflow-hidden bg-(--surface-page) text-(--text-strong)">
@@ -734,167 +871,221 @@ function Workspace() {
         onSaveSite={saveSite}
         onOpenSite={openSite}
         booting={!booted}
+        matchCounts={matchCounts}
+        deviceTriage={deviceTriage}
       />
       </Pane>
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[52px] shrink-0 items-center gap-2 pr-2 pl-2">
-          <PaneToggle side="left" />
-          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px] whitespace-nowrap text-(--text-muted)">
-            {crumbs.map((c, i) => {
-              const last = i === crumbs.length - 1
-              return (
-                <span key={i} className="flex min-w-0 items-center gap-1.5">
-                  {i > 0 ? <ArrowRight className="size-3 shrink-0 text-(--ink-4)" /> : null}
-                  {last || !c.go ? (
-                    <span className={last ? 'truncate text-[15px] font-medium tracking-[-0.01em] text-(--text-strong)' : 'truncate'}>{c.label}</span>
-                  ) : (
-                    <button className="truncate hover:text-(--text-strong)" onClick={c.go}>
-                      {c.label}
-                    </button>
-                  )}
-                  {c.clear ? (
+      <main className="flex min-w-0 flex-1 flex-col p-3">
+        <div className="flex min-h-0 flex-1 gap-[10px]">
+          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
+            <div key={`${scopeDeviceId}`} className="nc-view-in flex min-h-0 flex-1 flex-col">
+              {/* row 1: where you are, as one line, and the clock */}
+              <header className="flex h-12 shrink-0 items-center gap-2 px-5">
+                <span className="-ml-1.5 flex">
+                  <PaneToggle side="left" />
+                </span>
+                <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+                  {crumbs.map((c, i) => (
+                    <span key={i} className="flex min-w-0 items-center gap-1.5 text-[13px] text-(--text-muted)">
+                      <button className="truncate hover:text-(--text-strong)" onClick={c.go}>
+                        {c.label}
+                      </button>
+                      <ArrowRight className="size-3 shrink-0 text-(--ink-4)" />
+                    </span>
+                  ))}
+                  <h1 className="m-0 truncate text-[16px] leading-6 font-medium tracking-[-0.01em]">{title}</h1>
+                  {typeFilter && scopeDevice ? (
                     <button
                       aria-label="Show every object type"
                       title="Show every object type"
-                      onClick={c.clear}
-                      className="-ml-0.5 inline-flex size-[18px] shrink-0 items-center justify-center rounded-full text-(--text-muted) hover:bg-(--surface-track) hover:text-(--text-strong)"
+                      onClick={() => select({ kind: 'device', device: scopeDevice.instance })}
+                      className="inline-flex size-[18px] shrink-0 items-center justify-center rounded-full text-(--text-muted) hover:bg-(--surface-track) hover:text-(--text-strong)"
                     >
                       <XIcon className="size-3" />
                     </button>
                   ) : null}
-                </span>
-              )
-            })}
-          </nav>
-          {scopeDevice ? (
-            <>
-              <span aria-hidden className="mx-2 h-4 w-px shrink-0 bg-(--border-subtle)" />
-              <span className="min-w-0 truncate text-[12px] text-(--text-muted)">
-                #{scopeDevice.instance} · {scopeDevice.address}
-                {scopeDevice.vendorName ? ` · ${scopeDevice.vendorName}` : ''}
-                {scopeDevice.model ? ` · ${scopeDevice.model}` : ''}
-              </span>
-            </>
-          ) : null}
-          <div className="flex-1" />
-
-          {!booted ? (
-            <Skeleton className="h-[34px] w-[150px] rounded-full" />
-          ) : (
-          // Novacore's Live pill: hours and minutes in ink, seconds quieter, then the connection as a tinted badge
-          <span className="inline-flex h-[34px] shrink-0 items-center gap-2.5 rounded-full border border-(--border-subtle) bg-(--surface-card) pr-[5px] pl-3.5 text-[13px] tracking-[-0.005em] whitespace-nowrap shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-            <span className="tabular-nums">
-              <span className="font-medium text-(--text-strong)">{clock.slice(0, 5)}</span>
-              <span className="text-(--text-faint)">{clock.slice(5)}</span>
-            </span>
-            <Badge className={`h-6 px-2.5 text-[11.5px] lowercase text-(--ink) ${status.connected ? 'bg-(--status-ok)' : 'bg-(--status-alarm)'}`} tone={status.connected ? 'success' : 'danger'}>
-              {status.connected ? 'live' : 'offline'}
-            </Badge>
-          </span>
-          )}
-          {selectedRow ? <PaneToggle side="right" /> : null}
-        </header>
-
-        <div className="flex min-h-0 flex-1 gap-[10px] px-3 pb-3">
-          <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
-            <div key={`${scopeDeviceId}`} className="nc-view-in flex min-h-0 flex-1 flex-col">
-              {scopeRows.length > 0 ? (
-                <div className="flex items-center justify-between gap-3 border-b border-(--border-subtle) px-[18px] pt-2">
-                  <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
-                    <TabsList variant="underline" className="w-auto gap-6 border-b-0">
-                      <TabsTab value="objects">
-                        Objects
-                        <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{scopeRows.length}</span>
-                      </TabsTab>
-                      <TabsTab value="health">
-                        Health check
-                        {healthIssues ? (
-                          <span className="rounded-full bg-(--color-ns-yellow) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--ink)">{healthIssues}</span>
-                        ) : (
-                          <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-(--color-ns-green-light)">
-                            <CheckIcon className="size-3 text-(--ink)" />
+                </nav>
+                {booted ? (
+                  <>
+                    <span className="mx-1 h-4 w-px shrink-0 bg-(--border-subtle)" />
+                    <span className="min-w-0 truncate text-[12px] text-(--text-muted)">{meta}</span>
+                  </>
+                ) : (
+                  <Skeleton className="h-3.5 w-56 rounded-full" />
+                )}
+                <div className="flex-1" />
+                {!booted ? (
+                  <Skeleton className="h-8 w-[140px] rounded-full" />
+                ) : (
+                  // Novacore's Live pill: hours and minutes in ink, seconds quieter, then the connection as a tinted badge
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-(--border-subtle) bg-(--surface-card) pr-[4px] pl-3 text-[12.5px] tracking-[-0.005em] whitespace-nowrap shadow-(--shadow-pill)" />
+                      }
+                    >
+                      <span className="tabular-nums">
+                        <span className="font-medium text-(--text-strong)">{clock.slice(0, 5)}</span>
+                        <span className="text-(--text-faint)">{clock.slice(5)}</span>
+                      </span>
+                      <Badge className={`h-[22px] gap-1.5 px-2 text-[11px] lowercase text-(--ink) ${status.connected ? 'bg-(--status-ok)' : 'bg-(--status-alarm)'}`} tone={status.connected ? 'success' : 'danger'}>
+                        {status.connected ? (
+                          <span className="relative inline-flex size-1.5 shrink-0" data-live={liveFresh ? 'true' : undefined}>
+                            {liveFresh ? <span className="nc-ping absolute inset-0 rounded-full bg-(--status-ok-strong)" /> : null}
+                            <span className="relative inline-flex size-1.5 rounded-full bg-(--status-ok-strong)" />
                           </span>
-                        )}
-                      </TabsTab>
-                      <TabsTab value="changes">
-                        Changes
-                        {baseline ? (
-                          <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{changeCount}</span>
                         ) : null}
-                      </TabsTab>
-                    </TabsList>
-                  </Tabs>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <Menu>
-                      <MenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" />}>
-                        <MoreHorizontal />
-                      </MenuTrigger>
-                      <MenuPopup align="end" className="w-56">
-                        <MenuItem
-                          disabled={!status.connected || writableShown.length === 0}
-                          title={status.connected ? undefined : 'Connect to the network to write'}
-                          onClick={() => setWriteRows(writableShown)}
-                        >
-                          <Pencil />
-                          Write {writableShown.length} shown
-                        </MenuItem>
-                        <MenuSeparator />
-                        <MenuItem onClick={saveSite}>
-                          <Download />
-                          Save site…
-                        </MenuItem>
-                        <MenuItem onClick={() => siteFileRef.current?.click()}>
-                          <FolderOpen />
-                          Open site…
-                        </MenuItem>
-                      </MenuPopup>
-                    </Menu>
-                    <input
-                      ref={siteFileRef}
-                      type="file"
-                      accept=".bxsite"
-                      hidden
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) openSite(file)
-                        e.target.value = ''
-                      }}
-                    />
-                    <Button size="sm" variant="secondary" onClick={() => setColumnsOpen(true)} disabled={!allRows.length}>
-                      <Columns3 />
-                      Columns
-                      <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{columns.length}</span>
-                    </Button>
-                    <Button size="sm" disabled={!scopeRows.length} onClick={() => setExportOpen(true)}>
-                      Export
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
+                        {status.connected ? 'live' : 'offline'}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipPopup side="bottom">
+                      {polling ? 'Values refresh every 3 s for the rows on screen' : 'Snapshot from the last read'}
+                      {polling && liveError ? <div className="text-(--text-muted)">The last refresh failed: {liveError}</div> : null}
+                    </TooltipPopup>
+                  </Tooltip>
+                )}
+                {selectedRow ? <PaneToggle side="right" /> : null}
+              </header>
 
-              {/* objects: the search field is the header row of the table, boxed like the packet log */}
-              <div className={view === 'objects' && scopeRows.length > 0 ? 'mx-[18px] mt-3.5 mb-[18px] flex min-h-0 flex-1 flex-col overflow-hidden rounded-[14px] border border-(--border-subtle)' : 'contents'}>
-              {view === 'objects' && scopeRows.length > 0 ? (
-                  <FilterField
-                    embedded
-                    ref={searchRef}
-                    rows={scopeRows}
-                    props={filterable}
-                    query={query}
-                    onQuery={setQuery}
-                    search={search}
-                    onSearch={setSearch}
-                    matchCount={filtered.length}
-                    totalCount={scopeRows.length}
-                    onTrend={() => trendRows(filtered)}
-                    onSaveCheck={(name: string, severity: Severity, q: string) => {
-                      setSavedChecks((c) => [...c, { id: `${Date.now()}`, name, severity, query: q }])
-                      toast(`Saved "${name}". It runs in Health check from now on.`)
-                    }}
-                  />
-              ) : scopeRows.length > 0 ? (
-                <div className="h-3.5 shrink-0" />
+              {scopeRows.length > 0 ? (
+                <>
+                  {/* row 2: the query, with the actions beside it */}
+                  <div className="flex shrink-0 items-start gap-2 px-5">
+                    <div className="min-w-0 flex-1">
+                      <FilterField
+                        ref={searchRef}
+                        rows={scopeRows}
+                        props={filterable}
+                        query={query}
+                        onQuery={setQuery}
+                        search={search}
+                        onSearch={setSearch}
+                        matchCount={filtered.length}
+                        totalCount={scopeRows.length}
+                        forceCount={triage.size > 0}
+                        onTrend={() => trendRows(filtered)}
+                        onSaveCheck={(name: string, severity: Severity, q: string) => {
+                          setSavedChecks((c) => [...c, { id: `${Date.now()}`, name, severity, query: q }])
+                          toast(`Saved "${name}". It runs in Health check from now on.`)
+                        }}
+                      />
+                    </div>
+                    <div className="flex h-10 shrink-0 items-center gap-2">
+                      <Menu>
+                        <MenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" />}>
+                          <MoreHorizontal />
+                        </MenuTrigger>
+                        <MenuPopup align="end" className="w-56">
+                          <MenuItem
+                            disabled={!status.connected || writableShown.length === 0}
+                            title={status.connected ? undefined : 'Connect to the network to write'}
+                            onClick={() => setWriteRows(writableShown)}
+                          >
+                            <Pencil />
+                            Write {writableShown.length} shown
+                          </MenuItem>
+                          <MenuSeparator />
+                          <MenuItem onClick={saveSite}>
+                            <Download />
+                            Save site…
+                          </MenuItem>
+                          <MenuItem onClick={() => siteFileRef.current?.click()}>
+                            <FolderOpen />
+                            Open site…
+                          </MenuItem>
+                        </MenuPopup>
+                      </Menu>
+                      <input
+                        ref={siteFileRef}
+                        type="file"
+                        accept=".bxsite"
+                        hidden
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) openSite(file)
+                          e.target.value = ''
+                        }}
+                      />
+                      <Button size="sm" variant="secondary" onClick={() => setColumnsOpen(true)} disabled={!allRows.length}>
+                        <Columns3 />
+                        Columns
+                        <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{columns.length}</span>
+                      </Button>
+                      <Button size="sm" disabled={!scopeRows.length} onClick={() => setExportOpen(true)}>
+                        Export
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* row 3: the views, and on the right what in this scope needs a look */}
+                  <div className="mt-1.5 flex shrink-0 items-end justify-between gap-3 border-b border-(--border-subtle) px-5">
+                    <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
+                      <TabsList variant="underline" className="w-auto gap-6 border-b-0">
+                        <TabsTab value="objects">
+                          Objects
+                          <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{scopeRows.length}</span>
+                        </TabsTab>
+                        <TabsTab value="health">
+                          Health check
+                          {healthIssues ? (
+                            <span className="rounded-full bg-(--color-ns-yellow) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--ink)">{healthIssues}</span>
+                          ) : (
+                            <span className="inline-flex size-[18px] items-center justify-center rounded-full bg-(--color-ns-green-light)">
+                              <CheckIcon className="size-3 text-(--ink)" />
+                            </span>
+                          )}
+                        </TabsTab>
+                        <TabsTab value="changes">
+                          Changes
+                          {baseline ? (
+                            <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{changeCount}</span>
+                          ) : null}
+                        </TabsTab>
+                      </TabsList>
+                    </Tabs>
+                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 pb-2" aria-label="What needs a look">
+                      {narrowing ? (
+                        <span className="mr-1 text-[12px] tabular-nums text-(--text-muted)">
+                          {filtered.length} of {scopeRows.length} match
+                        </span>
+                      ) : null}
+                      {TRIAGE.some((t) => triageCount[t.id] > 0 || triage.has(t.id)) ? (
+                        TRIAGE.filter((t) => triageCount[t.id] > 0 || triage.has(t.id)).map((t) => (
+                          <button
+                            key={t.id}
+                            aria-pressed={triage.has(t.id)}
+                            onClick={() => toggleTriage(t.id)}
+                            className={cn(
+                              'inline-flex h-6 items-center gap-1 rounded-full pr-2.5 pl-2 text-[12px] transition-[background-color,box-shadow] duration-150 hover:shadow-[inset_0_0_0_1px_var(--border-strong)]',
+                              triage.has(t.id) ? 'bg-(--ink) text-(--surface-card)' : TONE[t.tone],
+                            )}
+                          >
+                            <span className="font-medium tabular-nums">{triageCount[t.id]}</span>
+                            {t.label}
+                          </button>
+                        ))
+                      ) : narrowing || !examples.length ? (
+                        <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-(--surface-track) pr-2.5 pl-2 text-[12px] text-(--text-muted)">
+                          <span className="size-1.5 rounded-full bg-(--status-ok-strong)" />
+                          Nothing flagged
+                        </span>
+                      ) : (
+                        <>
+                          <span className="inline-flex h-6 items-center gap-1.5 pr-1 text-[12px] text-(--text-muted)">
+                            <span className="size-1.5 rounded-full bg-(--status-ok-strong)" />
+                            Nothing flagged · try
+                          </span>
+                          {examples.map((e) => (
+                            <button key={e.text} onClick={() => setQuery(e.text)} className="h-6 rounded-full bg-(--surface-track) px-2.5 text-[12px] tabular-nums text-(--text-strong) transition-colors hover:bg-(--paper-3)">
+                              {e.text}
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </>
               ) : null}
 
               <ScrollArea scrollFade scrollFadeSides={{ left: false, top: false }} clampContentMinWidth={view !== 'objects'} className="min-h-0 flex-1">
@@ -923,10 +1114,11 @@ function Workspace() {
                   />
                 ) : scopeRows.length > 0 || (loading && scopeDevice) ? (
                   filtered.length === 0 && !loading ? (
-                    <Empty title="No objects match" text="Try a shorter search, or switch the filter to All." />
+                    <Empty title="No objects match" text="Try a shorter search, or turn off a chip above the query." />
                   ) : (
                     <ObjectTable
                       held={control.heldByKey}
+                      flash={flash}
                       rows={filtered}
                       columns={columns}
                       sort={sort}
@@ -948,7 +1140,6 @@ function Workspace() {
                   emptyState
                 )}
               </ScrollArea>
-              </div>
             </div>
           </section>
 

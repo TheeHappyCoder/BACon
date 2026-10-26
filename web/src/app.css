@@ -24,6 +24,11 @@
 .bx-row-in { animation: bx-row-in 0.3s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .bx-row-in { animation: none; } }
 
+/* A live refresh changed the value: the cell lights once and fades. The cell is keyed on the change, so the next
+   change plays it again. */
+@keyframes bx-flash { from { background-color: var(--status-info-bg); } to { background-color: transparent; } }
+.bx-flash { animation: bx-flash 1.2s ease-out; }
+
 /* Refresh icons turn while their action runs; components/spin.ts keeps the turn length in step (700ms). They spin
    under reduced motion too: it is the only sign the click went through. */
 @keyframes bx-spin { to { transform: rotate(360deg); } }

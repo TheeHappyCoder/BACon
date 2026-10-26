@@ -27,7 +27,7 @@ export type ControlAction = {
   state: 'sending' | 'verified' | 'rejected' | 'unknown'; message?: string; current?: unknown; transition?: number
 }
 export type ControlLog = { actions: ControlAction[]; held: ControlAction[] }
-type Target = Pick<ObjectRow, 'device' | 'typeId' | 'instance' | 'key'>
+export type Target = Pick<ObjectRow, 'device' | 'typeId' | 'instance' | 'key'>
 export type NetInterface = { name: string; ip: string; prefix: number; up: boolean }
 
 export type Status = {
@@ -228,6 +228,11 @@ export const api = {
   objects: (instance: number) => call<ObjectRow[]>('GET', `/api/devices/${instance}/objects`),
   read: (devices: number[], retryFailed = false, objects?: [number, number][]) =>
     call<Job[]>('POST', '/api/read', { devices, retryFailed, objects }),
+  /** present-value and status-flags again for the rows on screen, decoded as a full read stores them */
+  live: (targets: Target[]) =>
+    call<{ at: number; values: Record<string, { value: string | null; flags: string | null; error: string | null }> }>('POST', '/api/live', {
+      targets: targets.map(({ device, typeId, instance, key }) => ({ device, typeId, instance, key })),
+    }),
   jobs: () => call<Job[]>('GET', '/api/jobs'),
   cancelJob: (id: string) => call<Job>('POST', `/api/jobs/${id}/cancel`),
   async saveSite(name: string): Promise<Blob> {

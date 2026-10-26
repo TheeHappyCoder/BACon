@@ -38,9 +38,9 @@ function typeIcon(type: string) {
 const PAD = 4
 const INDENT = 18
 
-function Count({ children }: { children: ReactNode }) {
+function Count({ children, className, title }: { children: ReactNode; className?: string; title?: string }) {
   return (
-    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-(--surface-track) px-1.5 text-[11.5px] tabular-nums text-(--text-strong)">
+    <span title={title} className={cn('inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-(--surface-track) px-1.5 text-[11.5px] tabular-nums text-(--text-strong)', className)}>
       {children}
     </span>
   )
@@ -60,10 +60,13 @@ function Row({
   menu,
   children,
   strong,
+  sub,
 }: {
   depth: number
   icon: ReactNode
   label: ReactNode
+  /** a second, quieter line under the label; the row grows to 48px and the rest lines up with the first line */
+  sub?: ReactNode
   title?: string
   active?: boolean
   expandable?: boolean
@@ -93,14 +96,15 @@ function Row({
           if (expandable && e.key === 'ArrowLeft' && expanded) onToggle?.()
         }}
         className={cn(
-          'relative flex h-[34px] cursor-pointer items-center gap-2 rounded-[9px] pr-2 text-[14px] text-(--text-strong) outline-none transition-colors duration-150 select-none hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)] hover:text-(--text-strong) focus-visible:ring-2 focus-visible:ring-ring/50',
+          'relative flex cursor-pointer gap-2 rounded-[9px] pr-2 text-[14px] text-(--text-strong) outline-none transition-colors duration-150 select-none hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)] hover:text-(--text-strong) focus-visible:ring-2 focus-visible:ring-ring/50',
+          sub ? 'h-[48px] items-start py-1.5' : 'h-[34px] items-center',
           strong && 'font-medium',
           active && 'bg-(--paper-3) text-(--text-strong) hover:bg-(--paper-3)',
         )}
         style={{ paddingLeft: PAD + depth * INDENT }}
       >
         <span
-          className={cn('inline-flex size-4 shrink-0 items-center justify-center rounded text-(--text-muted) hover:text-(--text-strong)', !expandable && 'invisible')}
+          className={cn('inline-flex size-4 shrink-0 items-center justify-center rounded text-(--text-muted) hover:text-(--text-strong)', sub && 'mt-0.5', !expandable && 'invisible')}
           onClick={(e) => {
             e.stopPropagation()
             onToggle?.()
@@ -108,11 +112,22 @@ function Row({
         >
           <ChevronRight strokeWidth={2} className={cn('size-4 transition-transform duration-150', expanded && 'rotate-90')} />
         </span>
-        {icon ? <span className={cn('shrink-0 text-(--text-muted) [&_svg]:size-4 [&_svg]:[stroke-width:1.7]', active && 'text-(--text-strong)')}>{icon}</span> : null}
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className={cn('flex shrink-0 items-center gap-1.5', menu && 'group-hover/row:opacity-0 group-focus-within/row:opacity-0')}>{trailing}</span>
+        {icon ? <span className={cn('flex shrink-0 text-(--text-muted) [&_svg]:size-4 [&_svg]:[stroke-width:1.7]', sub && 'h-5 items-center', active && 'text-(--text-strong)')}>{icon}</span> : null}
+        {sub ? (
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate leading-5">{label}</span>
+            <span className="truncate text-[11.5px] leading-4 font-normal text-(--text-muted)">{sub}</span>
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+        )}
+        <span className={cn('flex shrink-0 items-center gap-1.5', sub && 'h-5', menu && 'group-hover/row:opacity-0 group-focus-within/row:opacity-0')}>{trailing}</span>
       </div>
-      {menu ? <div className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 has-data-popup-open:opacity-100">{menu}</div> : null}
+      {menu ? (
+        <div className={cn('absolute right-1 opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 has-data-popup-open:opacity-100', sub ? 'top-1' : 'top-1/2 -translate-y-1/2')}>
+          {menu}
+        </div>
+      ) : null}
       {children}
     </div>
   )
@@ -151,8 +166,14 @@ export function NetworkTree({
   onSaveSite,
   onOpenSite,
   booting,
+  matchCounts,
+  deviceTriage,
 }: {
   booting?: boolean
+  /** while a query, search or triage chip is active: how many of each device's objects match, by device instance */
+  matchCounts?: Record<number, number> | null
+  /** objects in fault and in alarm, by device instance */
+  deviceTriage?: Record<number, { fault: number; alarm: number }>
   onSaveSite: () => void
   onOpenSite: (file: File) => void
   status: Status
@@ -339,6 +360,8 @@ export function NetworkTree({
                 const job = latestJob(d.instance)
                 const reading = job?.state === 'running'
                 const problems = d.failedCount + d.partialCount
+                const flagged = deviceTriage?.[d.instance]
+                const matched = matchCounts && d.objectCount ? matchCounts[d.instance] ?? 0 : null
                 return (
                   <div key={d.instance} className="flex flex-col gap-px">
                     <Row
@@ -346,6 +369,16 @@ export function NetworkTree({
                       strong
                       icon={<Cpu />}
                       label={d.name || `Device ${d.instance}`}
+                      sub={
+                        <>
+                          {[d.model || d.vendorName, d.objectCount ? `${d.objectCount} objects` : 'not read'].filter(Boolean).join(' · ')}
+                          {flagged?.fault ? (
+                            <span className="text-(--status-alarm-strong)"> · {flagged.fault} in fault</span>
+                          ) : flagged?.alarm ? (
+                            <span className="text-(--status-alarm-strong)"> · {flagged.alarm} in alarm</span>
+                          ) : null}
+                        </>
+                      }
                       title={`#${d.instance} · ${d.address}${d.vendorName ? ` · ${d.vendorName}` : ''}${d.savedAt ? ` · from a file saved ${d.savedAt.replace('T', ' ')}` : ''}`}
                       active={is({ kind: 'device', device: d.instance })}
                       expandable={(rows[d.instance] ?? []).length > 0}
@@ -361,7 +394,15 @@ export function NetworkTree({
                         ) : (
                           <>
                             {problems > 0 ? <span className="size-1.5 rounded-full bg-(--status-alarm-strong)" aria-label={`${problems} objects with problems`} /> : null}
-                            {d.objectCount ? <Count>{d.objectCount}</Count> : <span className="text-[12px] text-(--text-muted)">not read</span>}
+                            {matched !== null ? (
+                              <Count className={matched ? 'bg-(--ink) text-(--surface-card)' : 'text-(--text-muted)'} title={`${matched} of ${d.objectCount} match`}>
+                                {matched}
+                              </Count>
+                            ) : d.objectCount ? (
+                              <Count>{d.objectCount}</Count>
+                            ) : (
+                              <span className="text-[12px] text-(--text-muted)">not read</span>
+                            )}
                           </>
                         )
                       }

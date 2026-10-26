@@ -3,7 +3,7 @@ import { api, type ObjectRow } from './api'
 /** The columns that say which object a row is. Shown in the table's first cell; optionally prepended to exports. */
 export const IDENTITY_COLUMNS = ['Device', 'Device name', 'Object type', 'Instance', 'object-name']
 export const SYNTHETIC_COLUMNS = ['Device', 'Device name', 'Object type', 'Instance', 'Read status']
-export const DEFAULT_COLUMNS = ['description', 'present-value', 'units']
+export const DEFAULT_COLUMNS = ['description', 'present-value']
 
 export type CellState = { kind: 'value'; text: string } | { kind: 'error'; text: string } | { kind: 'missing' }
 

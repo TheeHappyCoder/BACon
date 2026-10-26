@@ -4,8 +4,9 @@ import { cell } from '../exporters'
 import { isNumericProp } from '../query'
 import { Hugeicons } from '../ui/components/hugeicons'
 import { Skeleton } from '../ui/components/skeleton'
-import { Tooltip, TooltipPopup, TooltipTrigger } from '../ui/components/tooltip'
 import { cn } from '../ui/utils'
+import { valueMarkers } from '../triage'
+import { ErrorPill, ValueCell, formatValue } from '../value'
 
 const { ArrowUp, Plus, XIcon } = Hugeicons
 
@@ -18,10 +19,14 @@ const INSTANCE = 64
 const DEVICE = 160
 const GAP = 12
 const ADD = 116
-const PAD = 32 // px-4 on both sides of every row
+const PAD = 40 // px-5 on both sides of every row
+const VALUE = 'present-value'
 /** a chosen column is as wide as its longest value in the first rows, within these bounds */
 const SAMPLE = 300
 const CHAR = 7.2
+/** a marker beside a value: its margin and padding, and its 10.5px characters */
+const MARK = 18
+const MARK_CHAR = 5.8
 const clamp = (min: number, v: number, max: number) => Math.round(Math.min(max, Math.max(min, v)))
 
 /** Only the Object column is fluid: when the chosen columns fit, it takes the rest and nothing scrolls sideways. */
@@ -78,16 +83,7 @@ const Cell = memo(function Cell({ row, column }: { row: ObjectRow; column: strin
   if (c.kind === 'missing') {
     return <span className="text-(--ink-4)" title="This object does not have this property">–</span>
   }
-  if (c.kind === 'error') {
-    return (
-      <Tooltip>
-        <TooltipTrigger render={<span className="inline-flex max-w-full items-center rounded-full bg-(--status-alarm-bg) px-2 py-px text-[11.5px]" />}>
-          <span className="truncate">unreadable</span>
-        </TooltipTrigger>
-        <TooltipPopup>{c.text}</TooltipPopup>
-      </Tooltip>
-    )
-  }
+  if (c.kind === 'error') return <ErrorPill text={c.text} />
   return (
     <span className="block truncate tabular-nums" title={c.text.length > 24 ? c.text : undefined}>
       {c.text || <span className="text-(--ink-4)">–</span>}
@@ -119,7 +115,10 @@ export function ObjectTable({
   onAddColumn,
   onRemoveColumn,
   held,
+  flash,
 }: {
+  /** when a live refresh last changed a row's present value, by object key; the value cell lights up once */
+  flash?: Map<string, number>
   /** priority slots BACon commanded and has not released, by object key */
   held?: Map<string, { priority: number | null }[]>
   /** opens Columns, where the table's (and the export's) columns are chosen */
@@ -140,6 +139,17 @@ export function ObjectTable({
     const sample = rows.slice(0, SAMPLE)
     return columns.map((c) => {
       let chars = c.length
+      if (c === VALUE) {
+        // the value as it reads, with its unit or state number, then its markers; past the cap the value truncates first
+        let px = c.length * CHAR
+        for (const r of sample) {
+          const f = formatValue(r)
+          const extra = f.kind === 'binary' ? 12 : f.kind === 'state' ? (String(f.number).length + 1) * CHAR : f.unit ? (f.unit.length + 1) * CHAR : 0
+          const marks = valueMarkers(r, held?.get(r.key)).reduce((a, m) => a + MARK + m.label.length * MARK_CHAR, 0)
+          px = Math.max(px, f.text.length * CHAR + extra + marks)
+        }
+        return { column: c, numeric: true, width: clamp(140, px + 28, 260) }
+      }
       for (const r of sample) {
         const v = cell(r, c)
         // an unreadable value shows as a short chip, not its error text
@@ -149,8 +159,15 @@ export function ObjectTable({
       const numeric = isNumericProp(rows, c)
       return { column: c, numeric, width: numeric ? clamp(88, chars * CHAR + 28, 160) : clamp(96, chars * CHAR + 28, 340) }
     })
-  }, [rows, columns])
-  const layout = grid([TYPE, INSTANCE, ...(showDevice ? [DEVICE] : []), ...fit.map((f) => f.width)])
+  }, [rows, columns, held])
+  // the device column is as wide as its names, up to DEVICE
+  const device = useMemo(() => {
+    if (!showDevice) return 0
+    let chars = 6
+    for (const r of rows.slice(0, SAMPLE)) chars = Math.max(chars, (r.values['Device name'] || String(r.device)).length)
+    return clamp(96, chars * CHAR + 28, DEVICE)
+  }, [rows, showDevice])
+  const layout = grid([TYPE, INSTANCE, ...(showDevice ? [device] : []), ...fit.map((f) => f.width)])
 
   // once the table is scrolled sideways the pinned Object column gets an edge, so it reads as sitting on top
   const root = useRef<HTMLDivElement>(null)
@@ -167,10 +184,10 @@ export function ObjectTable({
   return (
     <div ref={root} data-scrolled={scrolled ? 'true' : undefined} className="group/table" style={{ minWidth: layout.minWidth }}>
       <div
-        className="sticky top-0 z-[2] grid items-center gap-3 border-t border-(--border-divider) bg-(--surface-card-muted) px-4 py-1 text-[11.5px] text-(--text-muted)"
+        className="sticky top-0 z-[2] grid items-center gap-3 bg-(--surface-card-muted) px-5 py-1 text-[11.5px] text-(--text-muted)"
         style={layout}
       >
-        <span className="sticky left-0 z-[1] -my-1 -mr-3 -ml-4 bg-(--surface-card-muted) py-1 pr-3 pl-4 transition-shadow group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)]">
+        <span className="sticky left-0 z-[1] -my-1 -mr-3 -ml-5 bg-(--surface-card-muted) py-1 pr-3 pl-5 transition-shadow group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)]">
           <SortHead label="Object" column="object-name" sort={sort} onSort={onSort} />
         </span>
         <SortHead label="Type" column="Object type" sort={sort} onSort={onSort} />
@@ -192,7 +209,7 @@ export function ObjectTable({
       <div>
         {loading && shown.length === 0
           ? Array.from({ length: 9 }, (_, i) => (
-              <div key={i} className="grid h-[38px] items-center gap-3 border-t border-(--border-divider) px-4" style={layout}>
+              <div key={i} className="grid h-[38px] items-center gap-3 border-t border-(--border-divider) px-5" style={layout}>
                 <Skeleton className="h-3.5 w-40" />
                 <Skeleton className="h-3 w-24" />
                 <Skeleton className="h-3 w-8 justify-self-end" />
@@ -210,20 +227,16 @@ export function ObjectTable({
                 role="row"
                 aria-selected={selectedKey === r.key}
                 data-selected={selectedKey === r.key ? 'true' : undefined}
+                data-flash={flash?.has(r.key) ? 'true' : undefined}
                 onClick={() => onSelect(r.key)}
-                className="bx-row-in group/row relative grid h-[38px] cursor-pointer items-center gap-3 border-t border-(--border-divider) px-4 transition-colors duration-150 hover:bg-(--surface-hover) data-[selected=true]:bg-(--surface-hover)"
+                className="bx-row-in group/row relative grid h-[38px] cursor-pointer items-center gap-3 border-t border-(--border-divider) px-5 transition-colors duration-150 hover:bg-(--surface-hover) data-[selected=true]:bg-(--surface-hover)"
                 style={layout}
               >
-                <span className="sticky left-0 z-[1] -mr-3 -ml-4 flex h-full min-w-0 items-center gap-2 bg-(--surface-card) pr-3 pl-4 transition-[background-color,box-shadow] group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)] duration-150 group-hover/row:bg-(--surface-hover) group-data-[selected=true]/row:bg-(--surface-hover)">
+                <span className="sticky left-0 z-[1] -mr-3 -ml-5 flex h-full min-w-0 items-center gap-2 bg-(--surface-card) pr-3 pl-5 transition-[background-color,box-shadow] group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)] duration-150 group-hover/row:bg-(--surface-hover) group-data-[selected=true]/row:bg-(--surface-hover)">
                   <span className="min-w-0 truncate text-[13px] font-medium" title={r.values['object-name'] || undefined}>
                     {r.values['object-name'] || <span className="text-(--text-faint)">Unnamed</span>}
                   </span>
                   <StatusChip status={r.status} />
-                  {held?.has(r.key) ? (
-                    <span title="BACon commanded this point and has not released it" className="inline-flex h-[18px] shrink-0 items-center rounded-full bg-(--status-info-bg) px-1.5 text-[10.5px] leading-none text-(--text-strong)">
-                      BACon P{held.get(r.key)!.map((h) => h.priority).join(', P')}
-                    </span>
-                  ) : null}
                 </span>
                 <span className="min-w-0 truncate text-[12px] text-(--text-muted)" title={r.values['Object type']}>
                   {r.values['Object type']}
@@ -234,16 +247,23 @@ export function ObjectTable({
                     {r.values['Device name'] || r.device}
                   </span>
                 ) : null}
-                {fit.map((f) => (
-                  <span key={f.column} className={cn('min-w-0 text-[12.5px]', f.numeric && 'max-w-full justify-self-end text-right')}>
-                    <Cell row={r} column={f.column} />
-                  </span>
-                ))}
+                {fit.map((f) =>
+                  f.column === VALUE ? (
+                    // keyed on the change, so a second change plays the flash again
+                    <span key={`${f.column}:${flash?.get(r.key) ?? ''}`} className={cn('-mx-1.5 min-w-0 justify-self-stretch rounded-[6px] px-1.5 py-0.5', flash?.has(r.key) && 'bx-flash')}>
+                      <ValueCell row={r} held={held?.get(r.key)} />
+                    </span>
+                  ) : (
+                    <span key={f.column} className={cn('min-w-0 text-[12.5px]', f.numeric && 'max-w-full justify-self-end text-right')}>
+                      <Cell row={r} column={f.column} />
+                    </span>
+                  ),
+                )}
                 <span />
               </div>
             ))}
         {rows.length > MAX_RENDERED_ROWS ? (
-          <div className="border-t border-(--border-divider) px-4 py-3 text-[12px] text-(--text-muted)">
+          <div className="border-t border-(--border-divider) px-5 py-3 text-[12px] text-(--text-muted)">
             The first {MAX_RENDERED_ROWS} rows are shown. Search or filter to narrow it down; exports include every matching row.
           </div>
         ) : null}

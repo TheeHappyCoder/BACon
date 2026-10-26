@@ -103,8 +103,8 @@ def run():
                     page.get_by_role('button', name='Write', exact=True).click()
                     page.get_by_role('button', name='Send', exact=True).click()
                     expect(page.get_by_text('Applied and verified.', exact=False).first).to_be_visible(timeout=30000)
-                    expect(page.get_by_text('BACon P8', exact=False).first).to_be_visible(timeout=15000)
-                    step('drawer: Comfort setpoint commanded to 22.5 at P8; the table marks it BACon P8')
+                    expect(page.locator('[title="BACon commanded this point and has not released it"]', has_text='P8').first).to_be_visible(timeout=15000)
+                    step('drawer: Comfort setpoint commanded to 22.5 at P8; the value cell marks it P8')
                     page.get_by_role('button', name='Edit Relinquish default').click()
                     page.get_by_role('spinbutton', name='Relinquish default').fill('20.5')
                     page.get_by_role('button', name='Review', exact=True).click()
@@ -156,7 +156,8 @@ def run():
                     page.locator('header button', has_text=re.compile('^Network$')).click()  # every device, not just the one picked
                     search.fill('Operating mode')
                     search.press('Enter')
-                    page.get_by_role('button', name=re.compile(r'^Write \d+ shown$')).click()
+                    page.get_by_role('button', name='More actions').click()  # bulk writes live in the … menu above the table
+                    page.get_by_role('menuitem', name=re.compile(r'^Write \d+ shown$')).click()
                     expect(page.get_by_text('groups that take the same value', exact=False)).to_be_visible(timeout=30000)
                     sheet = page.get_by_role('dialog')
                     sections = sheet.locator('section')
@@ -173,7 +174,8 @@ def run():
                     # ---- bulk: a property, the default of every setpoint ----
                     search.fill('setpoint')
                     search.press('Enter')
-                    page.get_by_role('button', name=re.compile(r'^Write \d+ shown$')).click()
+                    page.get_by_role('button', name='More actions').click()  # bulk writes live in the … menu above the table
+                    page.get_by_role('menuitem', name=re.compile(r'^Write \d+ shown$')).click()
                     page.get_by_role('combobox', name='Property to write').click()
                     page.get_by_role('option', name=re.compile('^Relinquish default')).click()
                     expect(page.get_by_text('groups that take the same value', exact=False)).to_be_visible(timeout=30000)

@@ -428,6 +428,95 @@ async def _run_read(job_id: str, device: Device, only):
         job_tasks.pop(job_id, None)
 
 
+# ---- live values: present value and status flags for the rows on screen ---------------
+
+LIVE_LIMIT = 400
+LIVE_PIDS = [85, 111]  # present-value, status-flags
+LIVE_FIELDS = {85: "value", 111: "flags"}
+
+
+class LiveTarget(BaseModel):
+    device: int
+    typeId: int
+    instance: int
+    key: str
+
+
+class LiveBody(BaseModel):
+    targets: list[LiveTarget]
+
+
+@app.post("/api/live")
+async def live(body: LiveBody):
+    """Read present-value and status-flags again for a few hundred objects. Each value is decoded the way a full read
+    decodes it, so it can be compared with the stored row as it is; the stored row keeps up too."""
+    if len(body.targets) > LIVE_LIMIT:
+        raise HTTPException(400, f"At most {LIVE_LIMIT} objects at a time.")
+    if client.app is None:
+        raise HTTPException(400, "Connect to a network first.")
+    from bacpypes3.primitivedata import ObjectIdentifier
+    from bacpypes3.vendor import get_vendor_info
+
+    from .decode import decode_value
+    from .names import property_label
+
+    values: dict[str, dict] = {}
+
+    def blank(error):
+        return {"value": None, "flags": None, "error": error}
+
+    by_device: dict[int, list[LiveTarget]] = {}
+    for t in body.targets:
+        by_device.setdefault(t.device, []).append(t)
+    reading = {j["device"] for j in jobs.values() if j["state"] == "running"}
+
+    async def batch(inst: int, targets: list[LiveTarget]):
+        d = devices.get(inst)
+        skip = "unknown device" if d is None else "saved" if d.saved_at else "reading" if inst in reading else None
+        if skip:
+            for t in targets:
+                values[t.key] = blank(skip)
+            return
+        sem = asyncio.Semaphore(6)
+        store = objects.get(inst, {})
+
+        async def one(t: LiveTarget):
+            async with sem:
+                oid = ObjectIdentifier((t.typeId, t.instance))
+                try:
+                    # a controller without ReadPropertyMultiple was found out by the full read
+                    res = await (client.read_props(d, oid, LIVE_PIDS) if d.no_rpm else client.rpm(d.address, oid, LIVE_PIDS))
+                except BACnetError as e:
+                    values[t.key] = blank(error_text(e))
+                    return
+            obj_class = get_vendor_info(0).get_object_class(t.typeId) if t.typeId < 128 else None
+            entry = blank(None)
+            row = store.get(t.key)
+            for pid, field in LIVE_FIELDS.items():
+                kind, val = res.get(pid, ("err", "missing"))
+                if kind != "ok":
+                    if val not in ("unknown-property", "unknownProperty"):  # the object does not have it: not an error
+                        entry["error"] = entry["error"] or val
+                    continue
+                try:
+                    entry[field] = decode_value(obj_class, pid, val)
+                except Exception as e:
+                    entry["error"] = entry["error"] or f"decode failed: {e}"
+                    continue
+                if row is not None and row["typeId"] == t.typeId and row["instance"] == t.instance:
+                    row["values"][property_label(pid, d.vendor_id)] = entry[field]  # the snapshot and the site file keep up
+            values[t.key] = entry
+
+        try:
+            await asyncio.wait_for(asyncio.gather(*(one(t) for t in targets)), 8.0)
+        except asyncio.TimeoutError:
+            for t in targets:
+                values.setdefault(t.key, blank("timeout"))
+
+    await asyncio.gather(*(batch(inst, targets) for inst, targets in by_device.items()))
+    return {"at": time.time(), "values": values}
+
+
 @app.get("/api/jobs")
 async def list_jobs():
     return list(jobs.values())

@@ -197,8 +197,10 @@ export const FilterField = forwardRef<
     onTrend: () => void
     /** sits as the header row of a table: no border of its own */
     embedded?: boolean
+    /** show the match count even with no query or search typed: another filter (a triage chip) is narrowing the rows */
+    forceCount?: boolean
   }
->(function FilterField({ rows, props, query, onQuery, search, onSearch, matchCount, totalCount, onSaveCheck, onTrend, embedded }, ref) {
+>(function FilterField({ rows, props, query, onQuery, search, onSearch, matchCount, totalCount, onSaveCheck, onTrend, embedded, forceCount }, ref) {
   const names = useMemo(() => props.map((p) => p.name), [props])
   const node = useMemo(() => {
     try {
@@ -273,7 +275,7 @@ export const FilterField = forwardRef<
           'flex min-h-10 items-start gap-2 py-1 transition-colors',
           embedded
             ? 'pr-2 pl-4'
-            : 'rounded-[12px] border border-(--border-default) bg-(--surface-input) pr-1 pl-3 shadow-[0_1px_2px_rgba(0,0,0,.05)] focus-within:border-(--ring) hover:border-(--border-strong)',
+            : 'min-h-10 rounded-[12px] border border-(--border-default) bg-(--surface-input) py-1 pr-1 pl-3 shadow-[0_1px_2px_rgba(0,0,0,.05)] focus-within:border-(--ring) hover:border-(--border-strong)',
         )}
       >
         <span className="flex h-8 shrink-0 items-center">
@@ -350,7 +352,7 @@ export const FilterField = forwardRef<
         </div>
 
         <span className="flex h-8 shrink-0 items-center gap-0.5">
-          {active ? (
+          {active || forceCount ? (
             <span className="mr-1.5 text-[12px] tabular-nums text-(--text-muted)">
               {matchCount} of {totalCount}
             </span>
