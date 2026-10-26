@@ -50,7 +50,7 @@ Release), the 16-level priority array with BACon's own slots marked, every other
 on the point, and what BACon did to it. Each setting is read live when you edit it, shown as before → after,
 then written and read back.
 
-**Many points.** Filter the table (`setpoint`, `Operating mode`, a query), then **Write N shown**. Choose present
+**Many points.** Filter the table (`setpoint`, `Operating mode`, a query), then **Write N shown** from the … menu above the table. Choose present
 value or any property they share. BACon groups points that take the same value the same way, so one choice of
 "Standby" writes each controller's own state number. Review, send, and every result is listed.
 

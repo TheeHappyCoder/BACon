@@ -17,7 +17,7 @@ import { ControlProvider, useControl } from './components/ControlState'
 import { WRITABLE_TYPES } from './control'
 import { PropertiesPanel } from './components/PropertiesPanel'
 import { NetworkView } from './components/NetworkView'
-import { LayoutProvider, Pane, PaneToggle } from './components/Layout'
+import { LayoutProvider, Pane, PaneToggle, useLayout } from './components/Layout'
 import { Rail, type Place } from './components/Rail'
 import { TrendsView } from './components/TrendsView'
 import { SchedulesView } from './components/SchedulesView'
@@ -28,12 +28,13 @@ import { DEFAULT_COLUMNS, SYNTHETIC_COLUMNS, exportColumns, exportCsv, exportXls
 import { Badge } from './ui/components/badge'
 import { Button } from './ui/components/button'
 import { Hugeicons } from './ui/components/hugeicons'
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from './ui/components/menu'
 import { ScrollArea } from './ui/components/scroll-area'
 import { Skeleton } from './ui/components/skeleton'
 import { Tabs, TabsList, TabsTab } from './ui/components/tabs'
 import { TooltipProvider } from './ui/components/tooltip'
 
-const { ArrowRight, Columns3, XIcon, CheckIcon } = Hugeicons
+const { ArrowRight, Columns3, XIcon, CheckIcon, MoreHorizontal, Pencil, Download, FolderOpen } = Hugeicons
 
 function useStored<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => {
@@ -106,6 +107,8 @@ function Workspace() {
   const [netIssues, setNetIssues] = useState(0)
   const [capturing, setCapturing] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const siteFileRef = useRef<HTMLInputElement>(null)
+  const { setCollapsed } = useLayout()
 
   const refreshInterfaces = useCallback(async () => {
     const list = await api.interfaces()
@@ -511,9 +514,11 @@ function Workspace() {
 
   const selectedKey = selection.kind === 'object' ? selection.key : null
   const selectedRow = selectedKey ? scopeRows.find((r) => r.key === selectedKey) ?? null : null
-  // a device's own properties are its device object's properties
-  const subject =
-    selectedRow ?? (selection.kind === 'device' ? (rows[selection.device] ?? []).find((r) => r.typeId === 8 && r.instance === selection.device) ?? null : null)
+  // the drawer mounts with a selection; a pane the user collapsed earlier opens again so it is never invisible
+  const hasSelectedRow = !!selectedRow
+  useEffect(() => {
+    if (hasSelectedRow) setCollapsed('right', false)
+  }, [hasSelectedRow, setCollapsed])
   const scopeJob = scopeDevice ? [...jobs].reverse().find((j) => j.device === scopeDevice.instance) : undefined
   const running = jobs.filter((j) => j.state === 'running' && !hidden.has(j.device))
   const loading = scopeDevice ? scopeJob?.state === 'running' : running.length > 0
@@ -586,8 +591,6 @@ function Workspace() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const title = scopeDevice ? scopeDevice.name || `Device ${scopeDevice.instance}` : 'All devices'
-
   // what the middle shows when there is no table yet: one sentence and the one thing to do
   const emptyState = !booted ? null : !status.connected ? (
     <Empty
@@ -622,12 +625,12 @@ function Workspace() {
       }
     />
   ) : !scopeDevice && !loading ? (
-    <Empty title="Click a device in the tree to read it" text="Its objects fill this table. Choose columns with the Columns button, then export." />
+    <Empty title="Click a device in the tree to read it" text="Its objects fill this table. Click a row for everything it reports. Columns and Export are above the table." />
   ) : null
 
-  const crumbs: { label: string; go?: () => void }[] = [{ label: 'Network', go: () => select({ kind: 'network' }) }]
+  const crumbs: { label: string; go?: () => void; clear?: () => void }[] = [{ label: 'Network', go: () => select({ kind: 'network' }) }]
   if (scopeDevice) crumbs.push({ label: scopeDevice.name || `Device ${scopeDevice.instance}`, go: () => select({ kind: 'device', device: scopeDevice.instance }) })
-  if (typeFilter && scopeDevice) crumbs.push({ label: typeFilter })
+  if (typeFilter && scopeDevice) crumbs.push({ label: typeFilter, clear: () => select({ kind: 'device', device: scopeDevice.instance }) })
   if (selectedRow) crumbs.push({ label: selectedRow.values['object-name'] || selectedRow.key })
 
   return (
@@ -738,19 +741,42 @@ function Workspace() {
         <header className="flex h-[52px] shrink-0 items-center gap-2 pr-2 pl-2">
           <PaneToggle side="left" />
           <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-[13px] whitespace-nowrap text-(--text-muted)">
-            {crumbs.map((c, i) => (
-              <span key={i} className="flex min-w-0 items-center gap-1.5">
-                {i > 0 ? <ArrowRight className="size-3 shrink-0 text-(--ink-4)" /> : null}
-                {i === crumbs.length - 1 || !c.go ? (
-                  <span className={i === crumbs.length - 1 ? 'truncate font-medium text-(--text-strong)' : 'truncate'}>{c.label}</span>
-                ) : (
-                  <button className="truncate hover:text-(--text-strong)" onClick={c.go}>
-                    {c.label}
-                  </button>
-                )}
-              </span>
-            ))}
+            {crumbs.map((c, i) => {
+              const last = i === crumbs.length - 1
+              return (
+                <span key={i} className="flex min-w-0 items-center gap-1.5">
+                  {i > 0 ? <ArrowRight className="size-3 shrink-0 text-(--ink-4)" /> : null}
+                  {last || !c.go ? (
+                    <span className={last ? 'truncate text-[15px] font-medium tracking-[-0.01em] text-(--text-strong)' : 'truncate'}>{c.label}</span>
+                  ) : (
+                    <button className="truncate hover:text-(--text-strong)" onClick={c.go}>
+                      {c.label}
+                    </button>
+                  )}
+                  {c.clear ? (
+                    <button
+                      aria-label="Show every object type"
+                      title="Show every object type"
+                      onClick={c.clear}
+                      className="-ml-0.5 inline-flex size-[18px] shrink-0 items-center justify-center rounded-full text-(--text-muted) hover:bg-(--surface-track) hover:text-(--text-strong)"
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  ) : null}
+                </span>
+              )
+            })}
           </nav>
+          {scopeDevice ? (
+            <>
+              <span aria-hidden className="mx-2 h-4 w-px shrink-0 bg-(--border-subtle)" />
+              <span className="min-w-0 truncate text-[12px] text-(--text-muted)">
+                #{scopeDevice.instance} · {scopeDevice.address}
+                {scopeDevice.vendorName ? ` · ${scopeDevice.vendorName}` : ''}
+                {scopeDevice.model ? ` · ${scopeDevice.model}` : ''}
+              </span>
+            </>
+          ) : null}
           <div className="flex-1" />
 
           {!booted ? (
@@ -767,54 +793,14 @@ function Workspace() {
             </Badge>
           </span>
           )}
-          <PaneToggle side="right" />
+          {selectedRow ? <PaneToggle side="right" /> : null}
         </header>
 
         <div className="flex min-h-0 flex-1 gap-[10px] px-3 pb-3">
           <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
             <div key={`${scopeDeviceId}`} className="nc-view-in flex min-h-0 flex-1 flex-col">
-              <div className="flex items-start gap-4 px-[18px] pt-[18px] pb-3">
-                <div className="min-w-0 flex-1">
-                  <h1 className="m-0 truncate text-[20px] font-medium tracking-[-0.02em]">{title}</h1>
-                  {scopeDevice ? (
-                    <div className="mt-1 flex min-w-0 items-center gap-2 text-[12px] text-(--text-muted)">
-                      <span className="truncate">
-                        #{scopeDevice.instance} · {scopeDevice.address}
-                        {scopeDevice.vendorName ? ` · ${scopeDevice.vendorName}` : ''}
-                        {scopeDevice.model ? ` · ${scopeDevice.model}` : ''}
-                      </span>
-                      {typeFilter ? (
-                        <span className="inline-flex h-[22px] shrink-0 items-center gap-1 rounded-full bg-(--surface-track) pr-0.5 pl-2.5 text-(--text-strong)">
-                          {typeFilter} only
-                          <button
-                            aria-label="Show every object type"
-                            onClick={() => select({ kind: 'device', device: scopeDevice.instance })}
-                            className="inline-flex size-[18px] items-center justify-center rounded-full text-(--text-muted) hover:bg-(--surface-card) hover:text-(--text-strong)"
-                          >
-                            <XIcon className="size-3" />
-                          </button>
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-                {writableShown.length > 0 ? (
-                  <Button size="sm" variant="secondary" disabled={!status.connected} title={status.connected ? undefined : 'Connect to the network to write'} onClick={() => setWriteRows(writableShown)}>
-                    Write {writableShown.length} shown
-                  </Button>
-                ) : null}
-                <Button size="sm" variant="secondary" onClick={() => setColumnsOpen(true)} disabled={!allRows.length}>
-                  <Columns3 />
-                  Columns
-                  <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{columns.length}</span>
-                </Button>
-                <Button size="sm" disabled={!scopeRows.length} onClick={() => setExportOpen(true)}>
-                  Export
-                </Button>
-              </div>
-
               {scopeRows.length > 0 ? (
-                <div className="border-b border-(--border-subtle) px-[18px]">
+                <div className="flex items-center justify-between gap-3 border-b border-(--border-subtle) px-[18px] pt-2">
                   <Tabs value={view} onValueChange={(v) => setView(v as typeof view)}>
                     <TabsList variant="underline" className="w-auto gap-6 border-b-0">
                       <TabsTab value="objects">
@@ -839,6 +825,51 @@ function Workspace() {
                       </TabsTab>
                     </TabsList>
                   </Tabs>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Menu>
+                      <MenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="More actions" />}>
+                        <MoreHorizontal />
+                      </MenuTrigger>
+                      <MenuPopup align="end" className="w-56">
+                        <MenuItem
+                          disabled={!status.connected || writableShown.length === 0}
+                          title={status.connected ? undefined : 'Connect to the network to write'}
+                          onClick={() => setWriteRows(writableShown)}
+                        >
+                          <Pencil />
+                          Write {writableShown.length} shown
+                        </MenuItem>
+                        <MenuSeparator />
+                        <MenuItem onClick={saveSite}>
+                          <Download />
+                          Save site…
+                        </MenuItem>
+                        <MenuItem onClick={() => siteFileRef.current?.click()}>
+                          <FolderOpen />
+                          Open site…
+                        </MenuItem>
+                      </MenuPopup>
+                    </Menu>
+                    <input
+                      ref={siteFileRef}
+                      type="file"
+                      accept=".bxsite"
+                      hidden
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) openSite(file)
+                        e.target.value = ''
+                      }}
+                    />
+                    <Button size="sm" variant="secondary" onClick={() => setColumnsOpen(true)} disabled={!allRows.length}>
+                      <Columns3 />
+                      Columns
+                      <span className="rounded-full bg-(--surface-track) px-1.5 text-[11px] leading-[18px] tabular-nums text-(--text-muted)">{columns.length}</span>
+                    </Button>
+                    <Button size="sm" disabled={!scopeRows.length} onClick={() => setExportOpen(true)}>
+                      Export
+                    </Button>
+                  </div>
                 </div>
               ) : null}
 
@@ -921,33 +952,33 @@ function Workspace() {
             </div>
           </section>
 
-          <Pane side="right" gap={10}>
-          <PropertiesPanel
-            subject={subject}
-            hasRows={allRows.length > 0}
-            columns={columns}
-            onToggleColumn={toggleColumn}
-            onOpenColumns={() => setColumnsOpen(true)}
-            onClearSubject={closeDrawer}
-            canRead={status.connected}
-            onReread={() => subject && startRead([subject.device], false, [[subject.typeId, subject.instance]])}
-            onTrend={
-              subject && isTrendLog(subject)
-                ? async () => {
-                    // a log's history is the point: add it if needed, then go to the chart
-                    if (!trends.points.some((p) => p.device === subject.device && p.typeId === subject.typeId && p.instance === subject.instance)) await trendRows([subject])
-                    setPlace('trends')
-                  }
-                : subject && subject.values['present-value'] !== undefined && subject.typeId !== 8
-                  ? () => trendRows([subject])
-                  : undefined
-            }
-            trendLabel={subject && isTrendLog(subject) ? 'Show history' : undefined}
-            trended={!!subject && !isTrendLog(subject) && trends.points.some((p) => p.device === subject.device && p.typeId === subject.typeId && p.instance === subject.instance)}
-            onWritten={() => subject && rereadRows([subject])}
-            onOpenSchedules={() => setPlace('schedules')}
-          />
-          </Pane>
+          {selectedRow ? (
+            <Pane side="right" gap={10}>
+              <PropertiesPanel
+                subject={selectedRow}
+                columns={columns}
+                onToggleColumn={toggleColumn}
+                onClearSubject={closeDrawer}
+                canRead={status.connected}
+                onReread={() => startRead([selectedRow.device], false, [[selectedRow.typeId, selectedRow.instance]])}
+                onTrend={
+                  isTrendLog(selectedRow)
+                    ? async () => {
+                        // a log's history is the point: add it if needed, then go to the chart
+                        if (!trends.points.some((p) => p.device === selectedRow.device && p.typeId === selectedRow.typeId && p.instance === selectedRow.instance)) await trendRows([selectedRow])
+                        setPlace('trends')
+                      }
+                    : selectedRow.values['present-value'] !== undefined && selectedRow.typeId !== 8
+                      ? () => trendRows([selectedRow])
+                      : undefined
+                }
+                trendLabel={isTrendLog(selectedRow) ? 'Show history' : undefined}
+                trended={!isTrendLog(selectedRow) && trends.points.some((p) => p.device === selectedRow.device && p.typeId === selectedRow.typeId && p.instance === selectedRow.instance)}
+                onWritten={() => rereadRows([selectedRow])}
+                onOpenSchedules={() => setPlace('schedules')}
+              />
+            </Pane>
+          ) : null}
         </div>
       </main>
       </>

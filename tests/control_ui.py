@@ -53,8 +53,12 @@ def run():
                     page.goto(BASE)
                     out = ROOT / 'tests' / 'out'
                     out.mkdir(exist_ok=True)
+                    # The drawer opens only for an object: nothing is in it until a row is clicked.
+                    expect(page.get_by_text('Comfort setpoint', exact=True).first).to_be_visible(timeout=30000)
+                    expect(page.get_by_role('button', name='Close this object')).to_have_count(0)
                     # A single point is commanded from the drawer: live value, command box and priority array.
                     page.get_by_text('Comfort setpoint', exact=True).first.click()
+                    expect(page.get_by_role('button', name='Close this object')).to_be_visible()
                     expect(page.get_by_text('Priority array', exact=True)).to_be_visible(timeout=30000)
                     page.get_by_role('spinbutton', name='New value').fill('22')
                     page.get_by_role('button', name='Write', exact=True).click()
@@ -68,14 +72,31 @@ def run():
                     page.get_by_role('button', name='Release', exact=True).click()
                     expect(page.get_by_text('Released and verified.', exact=False)).to_be_visible(timeout=30000)
                     page.screenshot(path=str(out / 'control-result.png'))
-                    # Bulk writes act on the rows the filter shows.
+                    # Bulk writes act on the rows the filter shows, from the … menu above the table.
                     page.get_by_role('button', name='Close this object').click()
-                    page.get_by_role('button', name=re.compile(r'^Write \d+ shown$')).click()
+                    expect(page.get_by_role('button', name='Close this object')).to_have_count(0)
+                    page.get_by_role('button', name='More actions').click()
+                    page.get_by_role('menuitem', name=re.compile(r'^Write \d+ shown$')).click()
                     expect(page.get_by_text('groups that take the same value', exact=False)).to_be_visible(timeout=60000)
                     page.screenshot(path=str(out / 'control-groups.png'))
+                    # The layout at a laptop size: one device read, then one of its rows in the drawer.
+                    layout = browser.new_page(viewport={'width': 1600, 'height': 900})
+                    layout.on('pageerror', lambda error: errors.append(str(error)))
+                    layout.goto(BASE)
+                    layout.locator(f'[role=treeitem][title^="#{first["instance"]} ·"]').click()
+                    expect(layout.get_by_text('Comfort setpoint', exact=True).first).to_be_visible(timeout=30000)
+                    expect(layout.get_by_role('button', name='Close this object')).to_have_count(0)
+                    layout.mouse.move(0, 0)
+                    layout.wait_for_timeout(600)  # the card fades in when the scope changes
+                    layout.screenshot(path=str(out / 'layout-table.png'))
+                    layout.get_by_text('Comfort setpoint', exact=True).first.click()
+                    expect(layout.get_by_text('Priority array', exact=True)).to_be_visible(timeout=30000)
+                    layout.mouse.move(0, 0)
+                    layout.wait_for_timeout(400)  # the pane's open transition
+                    layout.screenshot(path=str(out / 'layout-drawer.png'))
                     assert not errors, errors
                     browser.close()
-                print('PASS: drawer command, confirmation, live write, verification, release, bulk grouping, cross-origin rejection; no browser errors')
+                print('PASS: drawer only with a row, drawer command, confirmation, live write, verification, release, bulk grouping from the menu, cross-origin rejection, layout screenshots; no browser errors')
             finally:
                 server.terminate()
                 server.wait(10)

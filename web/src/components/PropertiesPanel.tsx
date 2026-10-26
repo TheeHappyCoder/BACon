@@ -18,10 +18,8 @@ const { Plus, XIcon, LineChart } = Hugeicons
  */
 export function PropertiesPanel({
   subject,
-  hasRows,
   columns,
   onToggleColumn,
-  onOpenColumns,
   onClearSubject,
   onReread,
   canRead,
@@ -35,13 +33,10 @@ export function PropertiesPanel({
   /** the button's words, when it is not "Trend" (a trend log shows its history) */
   trendLabel?: string
   trended?: boolean
-  subject: ObjectRow | null
-  /** at least one device has been read */
-  hasRows: boolean
+  subject: ObjectRow
   columns: string[]
   /** add or remove one property as a table/export column */
   onToggleColumn: (name: string) => void
-  onOpenColumns: () => void
   onClearSubject: () => void
   onReread: () => void
   canRead: boolean
@@ -54,22 +49,21 @@ export function PropertiesPanel({
   const [tab, setTab] = useState<'overview' | 'properties'>('overview')
   const [reloadSignal, setReloadSignal] = useState(0)
   // a point, or anything else with settings BACon can write (not the device itself), gets the Overview tab
-  const isPoint = !!subject && subject.typeId !== 8 && (subject.values['present-value'] !== undefined || control.fieldsOf(subject).length > 0)
+  const isPoint = subject.typeId !== 8 && (subject.values['present-value'] !== undefined || control.fieldsOf(subject).length > 0)
   const showing = isPoint ? tab : 'properties'
 
   const isColumn = useMemo(() => new Set(columns), [columns])
   const names = useMemo(
-    () => (subject ? [...new Set([...Object.keys(subject.values), ...Object.keys(subject.errors)])].filter((n) => !SYNTHETIC_COLUMNS.includes(n)) : []),
+    () => [...new Set([...Object.keys(subject.values), ...Object.keys(subject.errors)])].filter((n) => !SYNTHETIC_COLUMNS.includes(n)),
     [subject],
   )
 
   const q = query.trim().toLowerCase()
-  const list = names.filter((name) => !q || name.toLowerCase().includes(q) || (subject?.values[name] ?? '').toLowerCase().includes(q))
+  const list = names.filter((name) => !q || name.toLowerCase().includes(q) || (subject.values[name] ?? '').toLowerCase().includes(q))
   const vendor = list.filter((name) => name.includes('[')).sort((a, b) => a.localeCompare(b))
   const standard = list.filter((name) => !name.includes('[')).sort((a, b) => a.localeCompare(b))
 
   const value = (name: string) => {
-    if (!subject) return null
     const err = subject.errors[name]
     if (err !== undefined)
       return (
@@ -125,35 +119,6 @@ export function PropertiesPanel({
         </div>
         {children}
       </section>
-    )
-
-  if (!subject)
-    return (
-      <aside className="flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-(--border-subtle) bg-(--surface-card) shadow-(--shadow-sheet)">
-        <div className="px-[18px] pt-4 pb-3">
-          <div className="truncate text-[17px] font-medium tracking-[-0.01em]">Properties</div>
-        </div>
-        <div className="nc-view-in mx-auto flex max-w-[380px] flex-col items-center px-5 py-16 text-center">
-          {hasRows ? (
-            <>
-              <div className="text-[15px] font-medium">Pick an object</div>
-              <div className="mt-1 text-[13px] leading-normal text-(--text-muted)">
-                Click a row to see every property it reports. Columns for the table and the export are chosen with the Columns button.
-              </div>
-              <div className="mt-4">
-                <Button size="sm" variant="secondary" onClick={onOpenColumns}>
-                  Choose columns
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="text-[15px] font-medium">Nothing read yet</div>
-              <div className="mt-1 text-[13px] leading-normal text-(--text-muted)">Click a device in the tree. Once it is read, its objects fill the table.</div>
-            </>
-          )}
-        </div>
-      </aside>
     )
 
   return (
