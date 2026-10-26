@@ -5,16 +5,24 @@ import type { Control, Point } from '../../api'
 import { useClock } from '../../components/controls'
 import type { FcuRunning } from '.'
 
-const { Minus, Plus, Flame, Snowflake, Users, Wind, Sun, Moon, Clock } = Hugeicons
+const { Minus, Plus, Flame, Snowflake, Users, Wind, Sun, Moon, Clock, ArrowLeftRight, Fan, CircleOffIcon } = Hugeicons
 
 const MODE_ICON: Record<string, typeof Sun> = { Comfort: Sun, Standby: Clock, Economy: Moon, 'Frost protection': Snowflake }
+/** The mode key steps through these; the fan key through FANS. Both are written at priority 16, like the - and +. */
+const SYSTEMS = ['Auto', 'Heat', 'Cool', 'Fan only', 'Off'] as const
+const FANS = ['Auto', 'Low', 'Medium', 'High'] as const
+type System = (typeof SYSTEMS)[number]
+type FanMode = (typeof FANS)[number]
+const SYSTEM_ICON: Record<System, typeof Sun> = { Auto: ArrowLeftRight, Heat: Flame, Cool: Snowflake, 'Fan only': Fan, Off: CircleOffIcon }
+const SYSTEM_TONE: Record<System, string> = { Auto: '#f4f4f2', Heat: '#ff9c5b', Cool: '#6fb4ff', 'Fan only': '#f4f4f2', Off: 'rgb(244 244 242 / 0.5)' }
+const SYSTEM_NOTE: Record<System, string> = { Auto: 'Heats or cools as needed', Heat: 'Heating only', Cool: 'Cooling only', 'Fan only': 'Air only, no heating or cooling', Off: 'Frost protection only' }
 
-function FanGlyph({ speed }: { speed: number }) {
+function FanGlyph({ speed, auto, big }: { speed: number; auto?: boolean; big?: boolean }) {
   // blades turn faster at higher speeds; bars beside it show the step
   const period = [0, 1.6, 0.9, 0.45][speed] ?? 0
   return (
     <span className="inline-flex items-center gap-1">
-      <svg viewBox="0 0 24 24" className="size-[15px]" aria-hidden>
+      <svg viewBox="0 0 24 24" className={big ? 'size-[40px]' : 'size-[15px]'} aria-hidden>
         <g className="rs-fan" data-speed={speed} style={{ ['--rs-fan' as string]: `${period}s` }}>
           {[0, 120, 240].map((r) => (
             <path key={r} d="M12 12c0-4 1.2-7 3.4-7S18 7.6 15 10.2 12 12 12 12z" fill="currentColor" transform={`rotate(${r} 12 12)`} />
@@ -24,16 +32,32 @@ function FanGlyph({ speed }: { speed: number }) {
       </svg>
       <span className="flex items-end gap-[2px]" aria-hidden>
         {[1, 2, 3].map((i) => (
-          <span key={i} className="w-[3px] rounded-[1px]" style={{ height: 3 + i * 3, background: i <= speed ? 'currentColor' : 'rgb(244 244 242 / 0.18)' }} />
+          <span key={i} className={big ? 'w-[6px] rounded-[2px]' : 'w-[3px] rounded-[1px]'} style={{ height: (3 + i * 3) * (big ? 2.4 : 1), background: i <= speed ? 'currentColor' : 'rgb(244 244 242 / 0.18)' }} />
         ))}
       </span>
+      {auto ? <span className={big ? 'ml-1 text-[13px] tracking-[0.12em] rs-glass-faint' : 'text-[9px] leading-none font-medium tracking-[0.08em] rs-glass-faint'}>AUTO</span> : null}
     </span>
   )
 }
 
 const co2Tone = (ppm: number) => (ppm >= 1200 ? '#ff6a5f' : ppm >= 900 ? '#ffc04a' : '#7ddc7a')
 
-/** RC-1 on the wall: the display, - and + for the setpoint offset, and Here for comfort now (priority 8). */
+/** A key under the display with its name beneath it, as printed on the unit. */
+function Key({ label, aria, onClick, disabled, children }: { label: string; aria: string; onClick: () => void; disabled: boolean; children: React.ReactNode }) {
+  return (
+    <span className="flex flex-col items-center gap-1">
+      <button className="rs-key size-10" aria-label={aria} onClick={onClick} disabled={disabled}>
+        {children}
+      </button>
+      <span className="text-[9px] font-medium tracking-[0.12em] text-[#8a8a8e] uppercase">{label}</span>
+    </span>
+  )
+}
+
+/**
+ * RC-1 on the wall: the display, - and + for the setpoint offset, Mode for auto, heat, cool, fan only or off, Fan for
+ * the speed, and Here for comfort now (priority 8). A key press shows what it chose, large, for a moment.
+ */
 export function Faceplate({ s, control, leds }: { s: FcuRunning; control: (c: Control) => void; leds: React.ReactNode }) {
   const pt = (k: string) => s.points.find((p) => p.key === k) as Point
   const temp = pt('analog-input,1')
@@ -52,17 +76,37 @@ export function Faceplate({ s, control, leds }: { s: FcuRunning; control: (c: Co
   const cooling = s.room.cool > 0.5
   const localMode = mode.activePriority === 8
 
-  // after a key press the setpoint stands out for a moment, like a real unit
-  const [touched, setTouched] = useState(0)
+  // after a key press what it changed stands out for a moment, like a real unit; until the controller answers, the
+  // display shows the choice already made
+  const [touched, setTouched] = useState<{ what: 'sp' | 'mode' | 'fan'; at: number } | null>(null)
+  const [pending, setPending] = useState<{ system?: System; fan?: FanMode }>({})
   useEffect(() => {
     if (!touched) return
-    const t = setTimeout(() => setTouched(0), 2200)
+    const t = setTimeout(() => {
+      setTouched(null)
+      setPending({})
+    }, 2200)
     return () => clearTimeout(t)
   }, [touched])
+  const system: System = pending.system ?? s.room.system ?? 'Auto'
+  const fanMode: FanMode = pending.fan ?? s.room.fanMode ?? 'Auto'
   const press = (d: number) => {
     control({ action: 'offset', value: Math.max(-3, Math.min(3, offset + d)) })
-    setTouched(Date.now())
+    setTouched({ what: 'sp', at: Date.now() })
   }
+  const pressMode = () => {
+    const next = SYSTEMS[(SYSTEMS.indexOf(system) + 1) % SYSTEMS.length]
+    setPending((p) => ({ ...p, system: next }))
+    control({ action: 'system', value: next })
+    setTouched({ what: 'mode', at: Date.now() })
+  }
+  const pressFan = () => {
+    const next = FANS[(FANS.indexOf(fanMode) + 1) % FANS.length]
+    setPending((p) => ({ ...p, fan: next }))
+    control({ action: 'fan', value: next })
+    setTouched({ what: 'fan', at: Date.now() })
+  }
+  const SystemIcon = SYSTEM_ICON[system]
   const onPresence = () =>
     localMode ? control({ action: 'release', key: 'multi-state-value,1', priority: 8 }) : control({ action: 'write', key: 'multi-state-value,1', value: 1, priority: 8 })
 
@@ -96,7 +140,23 @@ export function Faceplate({ s, control, leds }: { s: FcuRunning; control: (c: Co
           {/* the temperature */}
           <div className="flex flex-1 flex-col items-center justify-center">
             <AnimatePresence mode="wait" initial={false}>
-              {touched ? (
+              {touched?.what === 'mode' ? (
+                <motion.div key="mode" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }} className="flex flex-col items-center">
+                  <span className="text-[11px] tracking-[0.14em] uppercase rs-glass-faint">Mode</span>
+                  <SystemIcon className="mt-2 size-[40px]" style={{ color: SYSTEM_TONE[system] }} />
+                  <span className="mt-2 text-[26px] leading-none font-light tracking-[-0.02em]">{system}</span>
+                  <span className="mt-1.5 text-[12px] rs-glass-faint">{SYSTEM_NOTE[system]}</span>
+                </motion.div>
+              ) : touched?.what === 'fan' ? (
+                <motion.div key="fan" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }} className="flex flex-col items-center">
+                  <span className="text-[11px] tracking-[0.14em] uppercase rs-glass-faint">Fan</span>
+                  <span className="mt-2">
+                    <FanGlyph big speed={fanMode === 'Auto' ? fanSpeed : FANS.indexOf(fanMode)} auto={fanMode === 'Auto'} />
+                  </span>
+                  <span className="mt-2 text-[26px] leading-none font-light tracking-[-0.02em]">{fanMode}</span>
+                  <span className="mt-1.5 text-[12px] rs-glass-faint">{fanMode === 'Auto' ? 'The controller picks the speed' : system === 'Off' ? 'Runs when the unit is on' : 'Fixed speed'}</span>
+                </motion.div>
+              ) : touched ? (
                 <motion.div key="sp" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.16 }} className="flex flex-col items-center">
                   <span className="text-[11px] tracking-[0.14em] uppercase rs-glass-faint">Setpoint</span>
                   <span className="text-[58px] leading-none font-light tracking-[-0.04em] tabular-nums">
@@ -142,27 +202,39 @@ export function Faceplate({ s, control, leds }: { s: FcuRunning; control: (c: Co
               {s.room.people > 0 ? <Users className="size-[14px]" aria-label="Someone in the room" /> : null}
               {heating ? <Flame className="size-[14px] text-[#ff9c5b]" aria-label="Heating" /> : null}
               {cooling ? <Snowflake className="size-[14px] text-[#6fb4ff]" aria-label="Cooling" /> : null}
-              <FanGlyph speed={fanSpeed} />
+              {system !== 'Auto' ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-1.5 text-[10px] leading-4" style={{ color: SYSTEM_TONE[system] }} aria-label={`Mode ${system}`}>
+                  <SystemIcon className="size-[11px]" />
+                  {system}
+                </span>
+              ) : null}
+              <FanGlyph speed={fanSpeed} auto={fanMode === 'Auto'} />
             </span>
           </div>
         </div>
       </div>
 
       {/* touch keys and the LED */}
-      <div className="mt-3 flex items-center justify-between px-1">
-        <button className="rs-key size-12" aria-label="Lower the setpoint" onClick={() => press(-0.5)} disabled={offline}>
+      <div className="mt-3 flex items-start justify-between px-0.5">
+        <Key label="Lower" aria="Lower the setpoint" onClick={() => press(-0.5)} disabled={offline}>
           <Minus className="size-[20px]" />
-        </button>
+        </Key>
+        <Key label="Mode" aria={`Mode: ${system}. Press for the next`} onClick={pressMode} disabled={offline}>
+          <SystemIcon className="size-[18px]" />
+        </Key>
         <div className="flex flex-col items-center gap-1.5">
-          <button className="rs-key h-9 px-4 text-[11px] font-medium tracking-[0.08em] uppercase" aria-label="Presence: comfort here and now" onClick={onPresence} disabled={offline}>
+          <button className="rs-key h-10 px-3 text-[11px] font-medium tracking-[0.08em] uppercase" aria-label="Presence: comfort here and now" onClick={onPresence} disabled={offline}>
             <Users className="mr-1.5 size-[15px]" />
             {localMode ? 'Auto' : 'Here'}
           </button>
           {leds}
         </div>
-        <button className="rs-key size-12" aria-label="Raise the setpoint" onClick={() => press(0.5)} disabled={offline}>
+        <Key label="Fan" aria={`Fan: ${fanMode}. Press for the next`} onClick={pressFan} disabled={offline}>
+          <Fan className="size-[18px]" />
+        </Key>
+        <Key label="Raise" aria="Raise the setpoint" onClick={() => press(0.5)} disabled={offline}>
           <Plus className="size-[20px]" />
-        </button>
+        </Key>
       </div>
     </div>
   )

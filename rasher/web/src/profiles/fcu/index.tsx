@@ -26,6 +26,9 @@ export type Room = {
   heatSp: number
   coolSp: number
   speed: number
+  /** the room unit's mode and fan keys */
+  system: 'Auto' | 'Heat' | 'Cool' | 'Fan only' | 'Off'
+  fanMode: 'Auto' | 'Low' | 'Medium' | 'High'
 }
 export type FcuRunning = Running & { room: Room }
 

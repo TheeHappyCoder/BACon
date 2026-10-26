@@ -33,6 +33,8 @@ def serve(state: dict, trend: dict) -> ThreadingHTTPServer:
             "class D extends R{constructor(...a){a.length?super(...a):super(T)}static now(){return T}};window.Date=D})()</script>")
     d = state["device"]
     devices = [{k: d[k] for k in ("instance", "name", "type", "ip", "port", "powered")}]
+    # the network settings, fixed: the device on its own address, no adapters, so the panel draws the same on any PC
+    network = {"mode": "extra", "ip": d["ip"], "port": d["port"], "adapter": None, "adapters": [], "admin": False, "devices": devices}
 
     class Handler(SimpleHTTPRequestHandler):
         def __init__(self, *a, **k):
@@ -54,7 +56,7 @@ def serve(state: dict, trend: dict) -> ThreadingHTTPServer:
                 if path.endswith("/state"):
                     body = {**state, "activity": state["activity"] if "since=0" in self.path else []}
                 else:
-                    body = trend if path.endswith("/trend") else devices if path == "/api/devices" else {}
+                    body = trend if path.endswith("/trend") else devices if path == "/api/devices" else network if path == "/api/network" else {}
                 return self.send(json.dumps(body).encode(), "application/json")
             if path == "/" or not os.path.isfile(os.path.join(WEB, path.lstrip("/"))):
                 with open(os.path.join(WEB, "index.html"), encoding="utf-8") as f:

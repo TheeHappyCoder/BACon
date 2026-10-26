@@ -577,6 +577,14 @@
    ],
    [
     19,
+    2
+   ],
+   [
+    19,
+    3
+   ],
+   [
+    19,
     1
    ],
    [
@@ -859,6 +867,85 @@
    "Standby",
    "Economy",
    "Frost protection"
+  ],
+  "status-flags": "(live)"
+ },
+ "multi-state-value,2": {
+  "current-command-priority": "(live)",
+  "description": "Set from the room unit's mode key: auto changeover, heat or cool only, fan only, or off",
+  "number-of-states": 5,
+  "object-identifier": [
+   19,
+   2
+  ],
+  "object-name": "System mode",
+  "object-type": 19,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 1,
+  "state-text": [
+   "Auto",
+   "Heat",
+   "Cool",
+   "Fan only",
+   "Off"
+  ],
+  "status-flags": "(live)"
+ },
+ "multi-state-value,3": {
+  "current-command-priority": "(live)",
+  "description": "Set from the room unit's fan key; Auto lets the controller choose the speed",
+  "number-of-states": 4,
+  "object-identifier": [
+   19,
+   3
+  ],
+  "object-name": "Fan mode",
+  "object-type": 19,
+  "out-of-service": 0,
+  "present-value": "(live)",
+  "priority-array": [
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-",
+   "-"
+  ],
+  "relinquish-default": 1,
+  "state-text": [
+   "Auto",
+   "Low",
+   "Medium",
+   "High"
   ],
   "status-flags": "(live)"
  },

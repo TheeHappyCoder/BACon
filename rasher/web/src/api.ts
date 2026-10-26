@@ -110,6 +110,8 @@ export type Control =
   | { action: 'iam' }
   // fcu
   | { action: 'offset'; value: number }
+  | { action: 'system'; value: 'Auto' | 'Heat' | 'Cool' | 'Fan only' | 'Off' }
+  | { action: 'fan'; value: 'Auto' | 'Low' | 'Medium' | 'High' }
   | { action: 'people'; value: number | null }
   | { action: 'window'; value: boolean }
   | { action: 'outside'; value: number | null }

@@ -30,7 +30,7 @@ export function RoomPanel({ s, control }: { s: FcuRunning; control: (c: Control)
               <span key={i} className="flex-1 rounded-full transition-colors" style={{ background: i <= Math.max(0, (fan.states ?? []).indexOf(fan.display)) ? 'var(--ink)' : 'var(--surface-track)' }} />
             ))}
           </div>
-          <div className="mt-1 h-4 truncate text-[11px] text-(--text-muted)">{fanHeld ? `Held at priority ${fan.activePriority}` : 'Auto'}</div>
+          <div className="mt-1 h-4 truncate text-[11px] text-(--text-muted)">{fanHeld ? `Held at priority ${fan.activePriority}` : r.fanMode && r.fanMode !== 'Auto' ? `${r.fanMode}, set on the unit` : r.system === 'Off' ? 'Unit off' : 'Auto'}</div>
         </div>
       </div>
 

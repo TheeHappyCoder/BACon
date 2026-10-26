@@ -1,5 +1,6 @@
 """RC-1, a room controller with a four-pipe fan coil: heating and cooling valves, a three-speed fan, CO2, a window
-contact and presence, in a meeting room.
+contact and presence, in a meeting room. Its room unit has keys for the setpoint, the system mode (auto changeover,
+heat or cool only, fan only, off) and the fan speed.
 
 The room is a small thermal model with no BACnet in it, so it can run ahead in time (the trend history is the model's
 own past). Everything is in simulated seconds; the clock can run faster than real time for demos. The profile below it
@@ -30,6 +31,9 @@ from .common import holidays, occupancy_schedule, occupied_by_schedule, office_p
 
 MODES = ["Comfort", "Standby", "Economy", "Frost protection"]
 FAN = ["Off", "Low", "Medium", "High"]
+# what the room unit's mode and fan keys choose between
+SYSTEM = ["Auto", "Heat", "Cool", "Fan only", "Off"]
+FAN_MODE = ["Auto", "Low", "Medium", "High"]
 
 # How far each mode lets the room drift from the setpoint before heating or cooling starts, in kelvin.
 BAND = {"Comfort": 0.5, "Standby": 2.0, "Economy": 4.0}
@@ -47,6 +51,8 @@ class Inputs:
     heat_cmd: float | None = None  # a valve or fan position someone else commands; None means the loop decides
     cool_cmd: float | None = None
     fan_cmd: str | None = None
+    system: str = "Auto"  # the room unit's mode key
+    fan_mode: str = "Auto"  # the room unit's fan key
 
 
 @dataclass
@@ -81,7 +87,7 @@ class Room:
 
         # setpoints for the mode: a band around setpoint + offset, or frost protection only
         sp = inp.setpoint + inp.offset
-        if inp.mode == "Frost protection":
+        if inp.mode == "Frost protection" or inp.system == "Off":  # off still keeps the room from freezing
             self.heat_sp, self.cool_sp = FROST, 40.0
         else:
             band = BAND.get(inp.mode, 0.5)
@@ -95,6 +101,12 @@ class Room:
         self._i_cool = min(100.0, max(0.0, self._i_cool + kp * e_cool * dt / ti)) if e_cool > -0.3 else 0.0
         self.heat_loop = round(min(100.0, max(0.0, kp * e_heat + self._i_heat)), 1)
         self.cool_loop = round(min(100.0, max(0.0, kp * e_cool + self._i_cool)), 1)
+        # the mode key: heat or cool only locks out the other loop; fan only and off condition nothing (off still heats
+        # against frost)
+        if inp.system in ("Cool", "Fan only"):
+            self.heat_loop, self._i_heat = 0.0, 0.0
+        if inp.system in ("Heat", "Fan only", "Off"):
+            self.cool_loop, self._i_cool = 0.0, 0.0
         if self.window_open:  # window interlock: no point conditioning the street
             self.heat_loop = self.cool_loop = 0.0
             self._i_heat = self._i_cool = 0.0
@@ -104,9 +116,11 @@ class Room:
 
         demand = max(self.heat, self.cool)
         auto_fan = "Off" if demand < 1 else "Low" if demand < 40 else "Medium" if demand < 75 else "High"
-        if inp.mode == "Comfort" and inp.occupied and auto_fan == "Off":
-            auto_fan = "Low"  # keep air moving while the room is in use
-        self.fan = inp.fan_cmd if inp.fan_cmd in FAN else auto_fan
+        if (inp.mode == "Comfort" and inp.occupied and inp.system != "Off") or inp.system == "Fan only":
+            auto_fan = "Low" if auto_fan == "Off" else auto_fan  # keep air moving while the room is in use
+        # the fan key fixes the speed, unless the unit is off; a BMS command on the fan output beats both
+        chosen = inp.fan_mode if inp.fan_mode in FAN[1:] and inp.system != "Off" else auto_fan
+        self.fan = inp.fan_cmd if inp.fan_cmd in FAN else chosen
         airflow = FAN.index(self.fan) / 3  # 0 .. 1
 
         # heat balance in kelvin per hour: losses to outside, the coil (only with air moving), people
@@ -143,6 +157,8 @@ class FCU(Profile):
     logs = [("trend-log", 1), ("trend-log", 2), ("trend-log", 3), ("trend-log", 4), ("trend-log-multiple", 1)]
     actions = {
         "offset": {"text": "The room unit's - and +: the setpoint offset, in half steps, written at priority 16", "value": {"type": "number", "min": -3, "max": 3, "step": 0.5, "units": "K"}},
+        "system": {"text": "The room unit's mode key: Auto, Heat, Cool, Fan only or Off, written at priority 16", "value": {"type": "string", "enum": SYSTEM}},
+        "fan": {"text": "The room unit's fan key: Auto, Low, Medium or High, written at priority 16", "value": {"type": "string", "enum": FAN_MODE}},
         "people": {"text": "How many people are in the room; null follows the office day", "value": {"type": "integer", "min": 0, "max": 20, "null": "follow the office day"}},
         "window": {"text": "Open or close the window: the contact alarms after 5 s, and heating and cooling stop", "value": {"type": "boolean"}},
         "outside": {"text": "Fix the outside air temperature; null for a normal day", "value": {"type": "number", "units": "°C", "null": "a normal day for the time"}},
@@ -220,6 +236,12 @@ class FCU(Profile):
             BVC(objectIdentifier=("binary-value", 1), objectName="Occupancy", presentValue="active", relinquishDefault="inactive",
                 statusFlags=flags(), activeText="Occupied", inactiveText="Unoccupied", outOfService=False,
                 description="Written by the occupancy schedule at priority 12"),
+            MSVC(objectIdentifier=("multi-state-value", 2), objectName="System mode", presentValue=1, relinquishDefault=1,
+                 numberOfStates=len(SYSTEM), stateText=ArrayOf(CharacterString)(SYSTEM), statusFlags=flags(), outOfService=False,
+                 description="Set from the room unit's mode key: auto changeover, heat or cool only, fan only, or off"),
+            MSVC(objectIdentifier=("multi-state-value", 3), objectName="Fan mode", presentValue=1, relinquishDefault=1,
+                 numberOfStates=len(FAN_MODE), stateText=ArrayOf(CharacterString)(FAN_MODE), statusFlags=flags(), outOfService=False,
+                 description="Set from the room unit's fan key; Auto lets the controller choose the speed"),
             MSVC(objectIdentifier=("multi-state-value", 1), objectName="Operating mode", presentValue=1, relinquishDefault=1,
                  numberOfStates=4, stateText=ArrayOf(CharacterString)(MODES), statusFlags=flags(), outOfService=False,
                  description="The controller sets this at priority 16 from occupancy and presence"),
@@ -273,6 +295,8 @@ class FCU(Profile):
             heat_cmd=float(heat_cmd) if heat_cmd is not None else None,
             cool_cmd=float(cool_cmd) if cool_cmd is not None else None,
             fan_cmd=FAN[int(fan_held) - 1] if fan_held is not None else None,
+            system=self._state(o("multi-state-value,2"), SYSTEM),
+            fan_mode=self._state(o("multi-state-value,3"), FAN_MODE),
         )
         room.step(now, d.speed, inp)
 
@@ -306,19 +330,38 @@ class FCU(Profile):
         # no controller: the valves close and the fan stops, but the room carries on getting warmer or colder
         self.room.step(now, self.dev.speed, Inputs(heat_cmd=0, cool_cmd=0, fan_cmd="Off", mode="Comfort", occupied=False))
 
+    @staticmethod
+    def _state(obj, names: list[str]) -> str:
+        i = int(obj.presentValue) - 1
+        return names[i] if 0 <= i < len(names) else names[0]
+
     def state(self) -> dict:
         r = self.room
+        o = self.dev.obj
         return {"room": {"temp": round(r.temp, 2), "humidity": round(r.humidity, 1), "co2": round(r.co2), "people": r.people,
                          "autoPeople": self.auto_people, "window": r.window_open, "outside": round(r.outside, 1),
                          "outsideOverride": r.outside_override, "heat": r.heat, "cool": r.cool, "heatLoop": r.heat_loop,
                          "coolLoop": r.cool_loop, "fan": r.fan, "heatSp": round(r.heat_sp, 2), "coolSp": round(r.cool_sp, 2),
-                         "speed": self.dev.speed}}
+                         "speed": self.dev.speed, "system": self._state(o("multi-state-value,2"), SYSTEM),
+                         "fanMode": self._state(o("multi-state-value,3"), FAN_MODE)}}
 
     async def act(self, action: str, value) -> bool:
         r = self.room
         if action == "offset":  # the room unit's + and -
             v = max(-3.0, min(3.0, round(float(value) * 2) / 2))
             await self.dev.write("analog-value,2", v, None, "Room unit")
+        elif action in ("system", "fan"):  # the room unit's mode and fan keys
+            names, key = (SYSTEM, "multi-state-value,2") if action == "system" else (FAN_MODE, "multi-state-value,3")
+            if isinstance(value, str):
+                match = [n for n in names if n.lower() == value.strip().lower()]
+                if not match:
+                    raise ValueError(f"{action} is one of {', '.join(names)}")
+                index = names.index(match[0]) + 1
+            else:
+                index = int(value)
+                if not 1 <= index <= len(names):
+                    raise ValueError(f"{action} is 1 to {len(names)}")
+            await self.dev.write(key, index, None, "Room unit")
         elif action == "people":
             self.auto_people = value is None
             if value is not None:
