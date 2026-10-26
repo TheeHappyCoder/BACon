@@ -112,7 +112,10 @@ export function ObjectTable({
   loading,
   onAddColumn,
   onRemoveColumn,
+  held,
 }: {
+  /** priority slots BACon commanded and has not released, by object key */
+  held?: Map<string, { priority: number | null }[]>
   onAddColumn: () => void
   onRemoveColumn: (column: string) => void
   rows: ObjectRow[]
@@ -192,6 +195,11 @@ export function ObjectTable({
                       <Tag>{r.values['Object type']}</Tag>
                       <Tag>#{r.instance}</Tag>
                       {showDevice ? <Tag className="min-w-0 shrink">{r.values['Device name'] || r.device}</Tag> : null}
+                      {held?.has(r.key) ? (
+                        <span title="BACon commanded this point and has not released it" className="inline-flex h-[18px] shrink-0 items-center rounded-full bg-(--status-info-bg) px-1.5 text-[10.5px] leading-none text-(--text-strong)">
+                          BACon P{held.get(r.key)!.map((h) => h.priority).join(', P')}
+                        </span>
+                      ) : null}
                     </span>
                   </span>
                   <StatusChip status={r.status} />

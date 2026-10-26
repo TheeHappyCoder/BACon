@@ -33,8 +33,9 @@ import { cn } from '../ui/utils'
 import { Detail, EmptyState, Group, PaneSearch, PaneTitle } from './Inspector'
 import { Pane, PaneToggle } from './Layout'
 import { SPIN, useSpin } from './spin'
+import { ScheduleEditor } from './ScheduleEditor'
 
-const { ArrowRight, CalendarClock, ChevronLeft, ChevronRight, ReloadIcon } = Hugeicons
+const { ArrowRight, CalendarClock, ChevronLeft, ChevronRight, PencilEdit, ReloadIcon } = Hugeicons
 
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const HATCH = 'repeating-linear-gradient(135deg, rgba(41,41,41,0.05) 0 6px, transparent 6px 12px)'
@@ -94,6 +95,7 @@ export function SchedulesView({
   const [view, setView] = useState<'week' | 'month'>('week')
   const [anchor, setAnchor] = useState(() => new Date())
   const [rereading, spinReread] = useSpin()
+  const [editing, setEditing] = useState<string | null>(null)
 
   const rowsByKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows])
   const calendars = useMemo(() => calendarsOf(rows), [rows])
@@ -128,6 +130,7 @@ export function SchedulesView({
 
   const pick = (key: string) => {
     setSelectedKey(key)
+    setEditing(null)
     setAnchor(new Date())
   }
 
@@ -279,6 +282,12 @@ export function SchedulesView({
                   </span>
                 </div>
               </div>
+              {p.s.weekly && editing !== row.key ? (
+                <Button size="sm" variant="secondary" disabled={!status.connected || row.typeId !== 17} title={status.connected ? 'Change the week, exceptions, default and holiday dates' : 'Connect to edit'} onClick={() => setEditing(row.key)}>
+                  <PencilEdit />
+                  Edit
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 variant="white"
@@ -291,7 +300,17 @@ export function SchedulesView({
               </Button>
             </div>
 
-            {!p.s.weekly ? (
+            {editing === row.key ? (
+              <ScheduleEditor
+                row={row}
+                ctx={p.ctx}
+                color={p.color}
+                calendars={calendars}
+                rowsByKey={rowsByKey}
+                onClose={() => setEditing(null)}
+                onSaved={(cals) => void onReread(row, [...calendarRefs, ...cals])}
+              />
+            ) : !p.s.weekly ? (
               !row.detail ? (
                 <EmptyState
                   icon={<CalendarClock className="size-5" />}

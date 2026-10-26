@@ -6,9 +6,9 @@ import { LAYOUT } from '../ui/motion'
 import { AppMark, MARK_STATUS_LABEL, type MarkStatus } from './AppMark'
 import { phaseOf, UpdateGlyph, updateSummary, UpdateTip, type UpdateStatus } from './Updates'
 
-const { Notification, CalendarClock, CircleDot, LineChart, Radar, WifiCog } = Hugeicons
+const { Notification, CalendarClock, CircleDot, History, LineChart, Radar, WifiCog } = Hugeicons
 
-export type Place = 'objects' | 'trends' | 'schedules' | 'alarms' | 'network'
+export type Place = 'objects' | 'trends' | 'schedules' | 'alarms' | 'network' | 'activity'
 
 function RailButton({ label, tip, active, onClick, children, badge }: { label: string; tip?: ReactNode; active?: boolean; onClick: () => void; children: ReactNode; badge?: ReactNode }) {
   return (
@@ -46,6 +46,7 @@ export function Rail({
   unacked,
   issues,
   capturing,
+  held = 0,
   onNetwork,
   update,
   onUpdates,
@@ -62,6 +63,8 @@ export function Rail({
   unacked: number
   issues: number
   capturing: boolean
+  /** priority slots BACon commanded and has not released */
+  held?: number
   onNetwork: () => void
   update: UpdateStatus | null
   onUpdates: () => void
@@ -104,6 +107,20 @@ export function Rail({
           }
         >
           <Notification className="size-[19px]" />
+        </RailButton>
+        <RailButton
+          label={held ? `Activity · BACon holds ${held} priority slot${held === 1 ? '' : 's'}` : 'Activity · what BACon did'}
+          active={place === 'activity'}
+          onClick={() => onPlace('activity')}
+          badge={
+            held ? (
+              <span className="absolute top-[3px] right-[3px] inline-flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-(--rail-bg) bg-(--status-info) px-1 text-[10px] font-medium text-[#292929]">
+                {held}
+              </span>
+            ) : null
+          }
+        >
+          <History className="size-[19px]" />
         </RailButton>
         <RailButton
           label={['Network', capturing ? 'capturing' : '', issues ? `${issues} issues` : ''].filter(Boolean).join(' · ')}

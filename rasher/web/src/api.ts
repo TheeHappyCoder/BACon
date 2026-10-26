@@ -7,6 +7,8 @@ export type Settings = { adapter: string; ip: string; mode: 'extra' | 'own'; ins
 export type ProfileInfo = { type: string; label: string; model: string; prefix: string }
 export type Setup = { settings: Settings; adapters: Adapter[]; admin: boolean; leftover: string[]; windowed: boolean; profiles: ProfileInfo[] }
 export type DeviceSummary = { instance: number; name: string; type: string; ip: string; port: number; powered: boolean }
+/** How the devices are addressed (GET /api/network). */
+export type Network = { mode: 'extra' | 'own'; ip: string; port: number; adapter: Adapter | null; adapters: Adapter[]; admin: boolean; devices: DeviceSummary[] }
 export type IpCheck = { state: 'free' | 'taken' | 'yours' | 'invalid'; text: string; mac?: string }
 
 export type Write = { by: string; at: number; property: string; value: string; priority: number | null }
@@ -123,6 +125,9 @@ export const api = {
   test: (ip: string, adapter: string) => post<IpCheck>('/api/test', { ip, adapter }),
   start: (body: { adapter: string; mode: 'extra' | 'own'; ip: string; port: number; instance: number; prefix: string; type: string }) => post<{ instance: number }>('/api/start', body),
   devices: () => call<DeviceSummary[]>('/api/devices'),
+  network: () => call<Network>('/api/network'),
+  /** re-address every running device: own addresses on 47808 from ip up, or this PC's address from port up */
+  move: (body: { mode: 'extra' | 'own'; ip?: string; port?: number }) => post<{ problems: string[]; devices: DeviceSummary[] }>('/api/network', body),
   profiles: () => call<ProfileInfo[]>('/api/profiles'),
   /** count more like the newest device, or count of a type */
   add: (count: number, type?: string) => post<{ instances: number[] }>('/api/devices', type ? { devices: [{ type, count }] } : { count }),

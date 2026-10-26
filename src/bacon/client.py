@@ -1,6 +1,6 @@
 """BACnet/IP client: discovery and read-everything-from-a-device.
 
-Read-only: nothing in here ever writes to a device.
+Point writes are handled separately by control.py using this connection.
 
 Reading an object tries, in order:
   1. ReadPropertyMultiple(ALL)

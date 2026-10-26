@@ -95,13 +95,14 @@ class Host:
             new.append(instance)
         return new
 
-    def free_addresses(self, first: str, a: dict, count: int) -> list[str]:
+    def free_addresses(self, first: str, a: dict, count: int, reuse: bool = False) -> list[str]:
         """Free addresses from `first` upwards, skipping any in use. Each is checked with ARP and ping, several at a
-        time, since a free address only shows itself by not answering."""
+        time, since a free address only shows itself by not answering. With reuse, addresses Rasher's devices hold
+        count as free (they are moving)."""
         from concurrent.futures import ThreadPoolExecutor
 
         net = ipaddress.IPv4Network(f"{a['ip']}/{a['prefix']}", strict=False)
-        running = {e.dev.ip for e in self.devices.values()}
+        running = set() if reuse else {e.dev.ip for e in self.devices.values()}
         candidate = ipaddress.IPv4Address(first) if first else net.network_address + 230
         out: list[str] = []
         with ThreadPoolExecutor(8) as pool:
@@ -120,18 +121,69 @@ class Host:
         return out[:count]
 
     def free_port(self, first: int, ip: str = "") -> int:
-        """The first UDP port from `first` up that no device here, and no other program, is using."""
-        taken = {e.dev.port for e in self.devices.values()}
+        """The first UDP port from `first` up that no device here, and no other program, is using; never 47808, the
+        scanner's port on this PC's address."""
+        taken = {e.dev.port for e in self.devices.values()} | {47808}
         port = first
-        while True:
-            if port not in taken:
-                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-                    try:
-                        s.bind((ip, port))
-                        return port
-                    except OSError:
-                        pass
+        while port in taken or not _udp_free(ip, port):
             port += 1
+        return port
+
+    async def move_all(self, cfg: dict) -> list[str]:
+        """Every device to the addressing in cfg, in instance order: own addresses on 47808 from cfg["ip"] up, or this
+        PC's address from cfg["port"] up. New addresses go on in one administrator prompt and the old ones come off in
+        another. A device that can't open its new address stays where it was; the rest still move."""
+        a = _adapter(cfg["adapter"])
+        entries = [self.devices[i] for i in sorted(self.devices)]
+        extra = cfg["mode"] == "extra"
+        if extra:
+            ips = await asyncio.to_thread(self.free_addresses, cfg["ip"], a, len(entries), True)
+            try:
+                await asyncio.to_thread(netip.add_many, ips, a["prefix"], a["name"])
+            except RuntimeError as e:
+                raise HTTPException(400, f"Couldn't add {', '.join(ips)} to {a['name']}: {e}")
+            targets = [(ip, 47808) for ip in ips]
+        else:
+            targets, taken = [], set()
+            for _ in entries:
+                port = int(cfg["port"])
+                while port in taken or not self._port_ok(port, a["ip"]):
+                    port += 1
+                taken.add(port)
+                targets.append((a["ip"], port))
+        moving = [(e, t, (e.dev.ip, e.dev.prefix, e.dev.port)) for e, t in zip(entries, targets) if (e.dev.ip, e.dev.port) != t]
+        # all off their addresses first, so devices can take each other's (a shifted range, a swap)
+        for e, _, _ in moving:
+            e.dev.detach()
+        problems: list[str] = []
+        unused: list[str] = []  # to take off: the old addresses of devices that moved, the new ones of any that didn't
+        for e, (ip, port), was in moving:
+            try:
+                await e.dev.attach(ip, a["prefix"], port, was)
+            except Exception as err:
+                problems.append(str(err))
+                if extra:
+                    unused.append(ip)
+                continue
+            if e.extra_ip and e.extra_ip != ip:
+                unused.append(e.extra_ip)
+            e.extra_ip = ip if extra else None
+        unused = [ip for ip in unused if ip not in {e.extra_ip for e in self.devices.values()}]
+        if unused:
+            try:
+                await asyncio.to_thread(netip.remove_many, unused)
+            except RuntimeError:
+                pass  # ActiveStore addresses go at the next reboot anyway; Setup offers to take them off
+        return problems
+
+    def _port_ok(self, port: int, ip: str) -> bool:
+        """Free on this PC, or held by one of these devices (they are all moving off first). Never 47808 on this PC's
+        address: that is the scanner's."""
+        if port == 47808:
+            return False
+        if any((e.dev.ip, e.dev.port) == (ip, port) for e in self.devices.values()):
+            return True
+        return _udp_free(ip, port)
 
     async def remove(self, instance: int) -> None:
         entry = self.devices.pop(instance, None)
@@ -157,6 +209,19 @@ class Host:
 
 
 host = Host()
+
+
+def _udp_free(ip: str, port: int) -> bool:
+    """Nothing on this PC has the port: an exclusive bind, since a plain one succeeds next to a program that shares it
+    (bacpypes3 and most BACnet tools set SO_REUSEADDR)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        try:
+            s.bind((ip, port))
+            return True
+        except OSError:
+            return False
 
 
 def _quiet_remove(ip: str) -> None:
@@ -222,6 +287,40 @@ async def update_apply():
 def setup():
     return {"settings": settings(), "adapters": netip.adapters(), "admin": netip.is_admin(), "leftover": netip.added(), "windowed": host.windows is not None,
             "profiles": profiles()}
+
+
+class NetworkBody(BaseModel):
+    mode: str  # "extra" or "own", as for /api/start
+    ip: str = ""  # the first own address
+    port: int = 47809  # the first port on this PC's address
+    adapter: str | None = None
+
+
+@app.get("/api/network")
+def network():
+    """How the devices are addressed now, for the network settings."""
+    cfg = settings()
+    a = next((x for x in netip.adapters() if x["name"] == cfg["adapter"]), None)
+    return {"mode": cfg["mode"], "ip": cfg["ip"], "port": cfg["port"], "adapter": a, "adapters": netip.adapters(), "admin": netip.is_admin(),
+            "devices": list_devices()}
+
+
+@app.post("/api/network")
+async def change_network(body: NetworkBody):
+    """Re-address every running device, and make it the pattern for devices added after."""
+    if body.mode not in ("extra", "own"):
+        raise HTTPException(400, "The mode is extra (own addresses) or own (this PC's address).")
+    cfg = {**settings(), "mode": body.mode, "adapter": body.adapter or settings()["adapter"]}
+    if body.mode == "extra":
+        cfg["ip"] = body.ip.strip()
+    else:
+        if not 1024 <= body.port <= 65535:
+            raise HTTPException(400, "Pick a UDP port between 1024 and 65535.")
+        cfg["port"] = body.port
+    async with lock:
+        problems = await host.move_all(cfg)
+    save_settings(cfg)
+    return {"problems": problems, "devices": list_devices()}
 
 
 @app.get("/api/profiles")

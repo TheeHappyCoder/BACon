@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Device, ObjectRow, Status } from '../api'
+import { api, type Device, type ObjectRow, type Status } from '../api'
+import { propertyLabel } from '../actions'
+import { INLINE_KINDS } from '../fields'
+import { useControl } from './ControlState'
+import { PropertyWrite } from './PropertyWrite'
 import { TRANSITION_LABEL, ago, clock, conditionText, isAlarmObject, notificationClassOf, stateLabel, stateOf, type AlarmState, type Live, type Severity } from '../alarms'
 import { unitShort } from '../schedule'
 import { Button } from '../ui/components/button'
@@ -365,7 +369,9 @@ export function AlarmsView({
               <ScrollArea scrollFade className="min-h-0 w-full">
                 <aside key={selected.row.key} className="nc-view-in flex w-full min-w-0 flex-col gap-2.5 pb-1">
                   <AlarmCard item={selected} now={now} onClose={() => setSelectedKey(null)} deviceName={deviceName(selected.row.device)} />
+                  <Acknowledge item={selected} canWrite={status.connected} onDone={() => onCheck([selected.row.device], [selected.row])} />
                   <Setup row={selected.row} condition={selected.condition} />
+                  <ChangeSetup row={selected.row} canWrite={status.connected} onWritten={() => onCheck([selected.row.device], [selected.row])} />
                   <NotificationClass row={selected.row} rows={rows} />
                   <History state={selected.state} />
                   <div className="flex gap-2">
@@ -545,6 +551,64 @@ function History({ state }: { state: AlarmState }) {
         })}
       </div>
       {state.source === 'live' ? <p className="m-0 mt-2 text-[11.5px] text-(--text-faint)">State and acknowledgements as the controller reports them now.</p> : null}
+    </Group>
+  )
+}
+
+/** Acknowledge each transition the controller is waiting on, with the controller's own time stamp for it. */
+function Acknowledge({ item, canWrite, onDone }: { item: Item; canWrite: boolean; onDone: () => void }) {
+  const control = useControl()
+  const [busy, setBusy] = useState<number | null>(null)
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
+  const pending = [0, 1, 2].filter((i) => !item.state.acked[i])
+  if (!pending.length && !note) return null
+  return (
+    <Group label="Waiting for acknowledgement" aside={pending.length > 1 ? <Button size="xs" variant="ghost" className="-my-1" disabled={!canWrite || busy !== null} onClick={async () => { for (const i of pending) await ack(i) }}>All</Button> : null}>
+      <div className="flex flex-col gap-1.5">
+        {pending.map((i) => (
+          <div key={i} className="flex items-center justify-between gap-3 text-[12.5px]">
+            <span>
+              {TRANSITION_LABEL[i]}
+              {item.state.stamps[i] ? <span className="text-(--text-muted)"> · {clock(item.state.stamps[i]!)}</span> : null}
+            </span>
+            <Button size="xs" loading={busy === i} disabled={!canWrite || (busy !== null && busy !== i)} onClick={() => void ack(i)}>Acknowledge</Button>
+          </div>
+        ))}
+        {note ? <p role="status" className={cn('m-0 rounded-[9px] px-2.5 py-1.5 text-[11.5px]', note.ok ? 'bg-(--status-ok-bg)' : 'bg-(--status-alarm-bg)')}>{note.text}</p> : null}
+      </div>
+    </Group>
+  )
+
+  async function ack(i: number) {
+    setBusy(i)
+    try {
+      const r = await api.acknowledge(item.row, i)
+      setNote({ ok: r.state === 'verified', text: r.state === 'verified' ? `${TRANSITION_LABEL[i]} acknowledged by BACon.` : r.message ?? r.state })
+    } catch (e) {
+      setNote({ ok: false, text: e instanceof Error ? e.message : String(e) })
+    } finally {
+      setBusy(null)
+      control.refresh()
+      onDone()
+    }
+  }
+}
+
+/** The alarm's settings, written on the point itself: limits, deadband, delays, what is reported and to whom. */
+function ChangeSetup({ row, canWrite, onWritten }: { row: ObjectRow; canWrite: boolean; onWritten: () => void }) {
+  const control = useControl()
+  const fields = control.fieldsOf(row)
+  const alarm = (control.writable?.alarm ?? []).map((p) => fields.find(([q]) => q === p)).filter((f): f is (typeof fields)[number] => !!f && INLINE_KINDS.has(f[1].kind))
+  if (!alarm.length) return null
+  const units = unitShort(row.values.units ?? '')
+  return (
+    <Group label="Change set up" aside={<span className="text-[11px] text-(--text-faint)">{canWrite ? 'written to the point' : 'connect to change'}</span>}>
+      <div className="-mx-2 flex flex-col">
+        {alarm.map(([property, spec]) => (
+          <PropertyWrite key={property} row={row} property={property} spec={spec} label={propertyLabel(property)} canWrite={canWrite} onWritten={onWritten}
+            shapeOf={(f) => ({ kind: f.kind, choices: f.choices, bits: f.bits, units: f.kind === 'real' && ['high-limit', 'low-limit', 'deadband'].includes(property) ? units : undefined })} />
+        ))}
+      </div>
     </Group>
   )
 }

@@ -176,10 +176,26 @@ def add_many(ips: list[str], prefix: int, adapter: str) -> None:
             raise RuntimeError(f"{ip} is already one of this PC's addresses.")
     todo = [ip for ip in ips if ip not in local]
     if todo:
-        _powershell("; ".join(
-            f"New-NetIPAddress -InterfaceAlias '{adapter}' -IPAddress {ip} -PrefixLength {prefix} -SkipAsSource $true -PolicyStore ActiveStore | Out-Null"
-            for ip in todo
-        ))
+        # On an adapter that gets its address from DHCP (most Wi-Fi), Windows switches the adapter to static when a
+        # static address is added, unless DHCP/static coexistence is on: the DHCP gateway and DNS go and the PC loses
+        # the internet while staying connected. So turn coexistence on first, and if DHCP still ends up off, take the
+        # addresses off again and put DHCP back before anything else happens.
+        was_off = _coexistence(adapter) is False
+        added_ips = ", ".join(f"'{ip}'" for ip in todo)
+        _powershell(
+            f"$dhcp = (Get-NetIPInterface -InterfaceAlias '{adapter}' -AddressFamily IPv4).Dhcp; "
+            f"if ($dhcp -eq 'Enabled') {{ netsh interface ipv4 set interface '{adapter}' dhcpstaticipcoexistence=enabled | Out-Null; if ($LASTEXITCODE) {{ throw 'Windows would not let DHCP and extra addresses share {adapter}, so nothing was added.' }} }}; "
+            + "; ".join(
+                f"New-NetIPAddress -InterfaceAlias '{adapter}' -IPAddress {ip} -PrefixLength {prefix} -SkipAsSource $true -PolicyStore ActiveStore | Out-Null"
+                for ip in todo
+            )
+            + f"; if ($dhcp -eq 'Enabled' -and (Get-NetIPInterface -InterfaceAlias '{adapter}' -AddressFamily IPv4).Dhcp -ne 'Enabled') {{ "
+            f"foreach ($a in @({added_ips})) {{ Remove-NetIPAddress -IPAddress $a -Confirm:$false -ErrorAction SilentlyContinue }}; "
+            f"Set-NetIPInterface -InterfaceAlias '{adapter}' -AddressFamily IPv4 -Dhcp Enabled; "
+            f"throw 'Windows switched {adapter} off DHCP when the addresses went on, so they were taken off again and DHCP put back.' }}"
+        )
+        if was_off and _coexistence(adapter):
+            _coexist_on(adapter)  # Rasher turned it on, so Rasher turns it off again
         # remember them straight away: added() only lists addresses that are on the PC, so read the file directly
         _remember(sorted(set(_saved()) | set(todo)))
     deadline = time.time() + 10
@@ -201,6 +217,56 @@ def add_many(ips: list[str], prefix: int, adapter: str) -> None:
 
 
 def remove(ip: str) -> None:
-    if ip in local_ips():
-        _powershell(f"Remove-NetIPAddress -IPAddress {ip} -Confirm:$false")
-    _remember([x for x in _saved() if x != ip])
+    remove_many([ip])
+
+
+def remove_many(ips: list[str]) -> None:
+    """Take the addresses off in one go (one administrator prompt). With the last one gone, coexistence goes back off
+    on the adapters Rasher turned it on for, leaving the adapter as it found it."""
+    local = local_ips()
+    todo = [ip for ip in ips if ip in local]
+    left = [x for x in added() if x not in ips]
+    undo = [] if left else _coexist_adapters()
+    script = [f"Remove-NetIPAddress -IPAddress {ip} -Confirm:$false" for ip in todo]
+    script += [f"netsh interface ipv4 set interface '{a}' dhcpstaticipcoexistence=disabled | Out-Null" for a in undo]
+    if script:
+        _powershell("; ".join(script))
+    _remember([x for x in _saved() if x not in ips])
+    if undo:
+        _coexist_off()
+
+
+COEXIST = "coexistence.json"
+
+
+def _coexistence(adapter: str) -> bool | None:
+    """Is DHCP/static coexistence on for the adapter (None when netsh won't say)."""
+    try:
+        out = subprocess.run(["netsh", "interface", "ipv4", "show", "interface", adapter], capture_output=True, text=True, timeout=5,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        if "coexistence" in line.lower():
+            return line.split(":")[-1].strip().lower() == "enabled"
+    return None
+
+
+def _coexist_adapters() -> list[str]:
+    try:
+        with open(os.path.join(data_dir(), COEXIST), encoding="utf-8") as f:
+            return list(json.load(f))
+    except (OSError, ValueError):
+        return []
+
+
+def _coexist_on(adapter: str) -> None:
+    with open(os.path.join(data_dir(), COEXIST), "w", encoding="utf-8") as f:
+        json.dump(sorted(set(_coexist_adapters()) | {adapter}), f)
+
+
+def _coexist_off() -> None:
+    try:
+        os.remove(os.path.join(data_dir(), COEXIST))
+    except OSError:
+        pass

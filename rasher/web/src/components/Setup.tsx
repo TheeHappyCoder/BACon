@@ -43,12 +43,12 @@ export function Setup({ onStarted }: { onStarted: (instance: number) => void }) 
       const s = d.settings
       const a = d.adapters.find((x) => x.name === s.adapter) ?? d.adapters.find((x) => x.up) ?? d.adapters[0]
       setAdapter(a?.name ?? '')
-      setMode(s.mode)
+      // always offer an address of its own first: acting like a controller on the LAN is the point
       setIp(s.ip || (a ? suggest(a.ip) : ''))
       setPrefix(s.prefix)
       setInstance(String(s.instance))
       setType(d.profiles.some((p) => p.type === s.type) ? s.type : (d.profiles[0]?.type ?? 'fcu'))
-      if (s.mode === 'own' && s.port !== 47808) setPort(String(s.port))
+      if (s.port !== 47808) setPort(String(s.port))
     })
   }, [])
 

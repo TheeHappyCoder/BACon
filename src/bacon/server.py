@@ -16,7 +16,9 @@ import psutil
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StrictFloat, StrictInt
+from urllib.parse import urlsplit
+from .control import Control
 
 from .client import BACnetError, BacnetClient, ConnectError, Device, error_text, probe_port
 from .netmon import install_tap, monitor
@@ -32,6 +34,92 @@ devices: dict[int, Device] = {}
 objects: dict[int, dict[str, dict]] = {}  # device instance -> object key -> row
 jobs: dict[str, dict] = {}
 job_tasks: dict[str, asyncio.Task] = {}
+control = Control(client, devices)
+
+
+@app.middleware('http')
+async def protect_control(request: Request, call_next):
+    if request.url.path.startswith('/api/control') and request.method == 'POST':
+        from fastapi.responses import JSONResponse
+        origin = request.headers.get('origin')
+        allowed = {request.headers.get('host'), '127.0.0.1:5173', 'localhost:5173'}
+        if request.headers.get('x-bacon-control') != '1' or (origin and urlsplit(origin).netloc not in allowed):
+            return JSONResponse({'detail': 'Control requests must come from BACon.'}, status_code=403)
+    return await call_next(request)
+
+
+class ControlTarget(BaseModel):
+    device: int
+    typeId: int
+    instance: int
+    key: str
+    property: str | None = None  # present-value when left out
+
+
+class ControlPrepare(BaseModel):
+    targets: list[ControlTarget] = Field(max_length=2000)
+
+
+class ControlWrite(BaseModel):
+    token: str
+    # a number for present value; any JSON the property's kind takes for the rest (see props.py)
+    value: StrictFloat | StrictInt | bool | str | list | dict | None = None
+    priority: StrictInt | None = None
+    release: bool = False
+
+
+@app.post('/api/control/prepare')
+async def control_prepare(body: ControlPrepare):
+    return await control.prepare([t.model_dump() for t in body.targets])
+
+
+@app.post('/api/control/write')
+async def control_write(body: ControlWrite):
+    try:
+        return await control.execute(body.token, body.value, body.priority, body.release)
+    except BACnetError as e:
+        raise _fail(e)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+class ControlAck(BaseModel):
+    target: ControlTarget
+    transition: StrictInt
+
+
+@app.post('/api/control/acknowledge')
+async def control_acknowledge(body: ControlAck):
+    try:
+        return await control.acknowledge(body.target.model_dump(), body.transition)
+    except BACnetError as e:
+        raise _fail(e)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.get('/api/control/actions')
+def control_actions(limit: int = 500):
+    return control.actions(max(1, min(limit, 5000)))
+
+
+@app.get('/api/control/writable')
+def control_writable():
+    """What BACon can write on each object type, {typeId: {property: {kind, enum?, bits?}}}, the enumerations' choices
+    once each, and the properties that make up an alarm."""
+    from .props import ALARM_PROPS, WRITABLE, describe
+    types, enums = {}, {}
+    for type_id in range(0, 64):
+        found = {}
+        for p in sorted(WRITABLE):
+            d = describe(type_id, p)
+            if d is not None:
+                if 'enum' in d:
+                    enums[d['enum']] = d.pop('choices')
+                found[p] = d
+        if found:
+            types[type_id] = found
+    return {'types': types, 'enums': enums, 'alarm': ALARM_PROPS}
 
 
 def _fail(err) -> HTTPException:
@@ -43,14 +131,34 @@ def _fail(err) -> HTTPException:
 # ---- network ------------------------------------------------------------
 
 
+def _not_this_pc() -> set[str]:
+    """Addresses on this PC that are not its own: added with SkipAsSource, as Rasher does for each simulated
+    controller. Windows never uses them for the PC's traffic, so BACon (the BMS, on the PC's own address) must not
+    either."""
+    if sys.platform != "win32":
+        return set()
+    try:
+        out = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+             "Get-NetIPAddress -AddressFamily IPv4 | Where-Object SkipAsSource | ForEach-Object IPAddress"],
+            capture_output=True, text=True, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    return {line.strip() for line in out.splitlines() if line.strip()}
+
+
 @app.get("/api/interfaces")
 def interfaces():
     stats = psutil.net_if_stats()
+    nics = psutil.net_if_addrs()
+    # the check costs PowerShell's start-up, so only when an adapter has more than one address to tell apart
+    skip = _not_this_pc() if any(sum(a.family == 2 for a in addrs) > 1 for addrs in nics.values()) else set()
     out = []
-    for name, addrs in psutil.net_if_addrs().items():
+    for name, addrs in nics.items():
         for a in addrs:
-            if a.family != 2 or a.address.startswith("127.") or a.address.startswith("169.254."):
-                continue  # IPv4 only, skip loopback and link-local
+            if a.family != 2 or a.address.startswith("127.") or a.address.startswith("169.254.") or a.address in skip:
+                continue  # IPv4 only, skip loopback, link-local and addresses that aren't this PC's own
             prefix = ipaddress.IPv4Network(f"0.0.0.0/{a.netmask or '255.255.255.0'}").prefixlen
             out.append({
                 "name": name,
@@ -273,7 +381,7 @@ async def start_read(body: ReadBody):
                 continue
         job_id = uuid.uuid4().hex[:8]
         jobs[job_id] = {"id": job_id, "device": inst, "state": "running", "done": 0, "total": 0,
-                        "error": "", "retry": body.retryFailed}
+                        "error": "", "retry": body.retryFailed, "only": bool(body.objects)}
         job_tasks[job_id] = asyncio.create_task(_run_read(job_id, d, only))
         started.append(jobs[job_id])
     return started

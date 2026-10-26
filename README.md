@@ -37,7 +37,34 @@ lets you choose the columns.
   controller (GetEventInformation), what sets it off and who gets notified.
 - **Network**: live BACnet traffic, issue detection (duplicate IDs, I-Am storms, error replies) and
   `.pcap` capture for Wireshark.
-- **Read-only**: BACon never writes to a device.
+- **Change anything writable**: command a point at a priority, release it, and change any property the
+  controller lets a workstation write (defaults, limits, alarm setup, schedules, calendars), on one point or
+  hundreds at once. Every write is reviewed, read back, and kept in BACon's own record.
+- **Activity**: what BACon did, kept apart from what the controllers report: before, requested, read back.
+  The priority slots BACon still holds are listed to release before leaving site, and any change can be undone.
+
+### Writing
+
+**One point.** Click it. The drawer's Overview shows the live value, a command box (value, priority, Write,
+Release), the 16-level priority array with BACon's own slots marked, every other writable setting, the alarm
+on the point, and what BACon did to it. Each setting is read live when you edit it, shown as before → after,
+then written and read back.
+
+**Many points.** Filter the table (`setpoint`, `Operating mode`, a query), then **Write N shown**. Choose present
+value or any property they share. BACon groups points that take the same value the same way, so one choice of
+"Standby" writes each controller's own state number. Review, send, and every result is listed.
+
+**Schedules.** In Schedules, **Edit** lays out the week with a preview bar per day, the default, exceptions and
+the holiday calendar the exceptions use. Only the properties you change are written.
+
+**Alarms.** Set up intrinsic alarming on a point from its drawer (limits, deadband, delays, which transitions
+report, notification class), and acknowledge from Alarms with the controller's own event time stamp.
+
+Every write is checked against what was reviewed, so a value someone else changed in the meantime is refused
+rather than overwritten. Commands default to priority 8. A timeout can mean the result is unknown: reload and
+look before trying again. Read-back verifies BACnet values, not the equipment. Saved-site devices must be
+rediscovered live before writing. The device has the last word: a property it refuses is reported as rejected.
+The action log is `%LOCALAPPDATA%\BACon\control\actions.jsonl`.
 
 | Trends | Network |
 |---|---|

@@ -526,12 +526,12 @@ class Device:
 
     # ---- lifecycle ---------------------------------------------------------
 
-    async def start(self) -> None:
+    def _open(self) -> "RasherApp":
+        """The BACnet application on this device's address, with only its device object."""
         args = SimpleArgumentParser().parse_args([
             "--address", f"{self.ip}/{self.prefix}:{self.port}", "--instance", str(self.instance),
             "--name", self.name, "--vendoridentifier", str(VENDOR_ID),
         ])
-        self.history()
         app = RasherApp.from_args(args)
         app.owner = self
         dev = app.device_object
@@ -542,6 +542,11 @@ class Device:
         dev.applicationSoftwareVersion = "Rasher 0.1"
         dev.location = self.profile.location
         dev.description = self.profile.description
+        return app
+
+    async def start(self) -> None:
+        self.history()
+        app = self._open()
         for obj in self.profile.build():
             app.add_object(obj)
             self.objs[str(obj.objectIdentifier)] = obj
@@ -572,6 +577,41 @@ class Device:
             if transport is not None:
                 off, done = ctypes.c_uint32(0), ctypes.c_uint32()
                 wsa_ioctl(transport.get_extra_info("socket").fileno(), 0x9800000C, ctypes.byref(off), 4, None, 0, ctypes.byref(done), None, None)
+
+    def detach(self) -> None:
+        """Off its address, ahead of a move: COV subscriptions go (the subscriber knew the old address); the objects,
+        values, priority arrays, logs and alarms stay and carry on."""
+        self.drop_subscriptions()
+        if self.app:
+            self.app.close()
+        self.app = None
+
+    async def attach(self, ip: str, prefix: int, port: int, was: tuple[str, int, int]) -> None:
+        """Onto a new address after detach(), like re-addressing a controller; back at was if it can't be opened."""
+        try:
+            await self._reopen(ip, prefix, port)
+        except Exception as e:
+            self.log("Rasher", "Network", f"Couldn't move to {ip}:{port} ({e}); staying at {was[0]}:{was[2]}", kind="dropped")
+            await self._reopen(*was)
+            raise RuntimeError(f"{self.name} couldn't open {ip}:{port}: {e}") from e
+        self.log("Rasher", "Network", f"Moved from {was[0]}:{was[2]} to {ip}:{port}", kind="local")
+        self.i_am()  # announce at the new address, as a re-addressed controller does
+
+    async def _reopen(self, ip: str, prefix: int, port: int) -> None:
+        self.ip, self.prefix, self.port = ip, prefix, port
+        app = self._open()
+        try:
+            for obj in self.objs.values():
+                app.add_object(obj)
+            self.app = app
+            await self.ignore_port_unreachable()
+            # bacpypes3 opens the socket in a task of its own, so a refused bind only shows as no socket
+            if not all(getattr(getattr(link, "server", None), "local_transport", None) for link in app.link_layers.values()):
+                raise RuntimeError("the address couldn't be opened")
+        except Exception:
+            app.close()
+            self.app = None
+            raise
 
     async def stop(self) -> None:
         for task in (self._task, self._storm):

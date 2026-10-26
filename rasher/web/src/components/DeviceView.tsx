@@ -2,6 +2,7 @@ import { Button } from '@ui/components/button'
 import { Switch } from '@ui/components/switch'
 import type { Control, Running } from '../api'
 import { ago, when } from '../format'
+import { NetworkSettings } from './NetworkSettings'
 import type { ProfileUI } from '../profiles'
 
 function Card({ title, children, aside }: { title: string; children: React.ReactNode; aside?: React.ReactNode }) {
@@ -125,6 +126,8 @@ export function DeviceView({ s, control, faults }: { s: Running; control: (c: Co
         </div>
         <p className="mt-2 text-[11.5px] text-(--text-muted)">A cold restart also clears every command in the priority arrays, as a real controller does.</p>
       </Card>
+
+      <NetworkSettings />
     </div>
   )
 }

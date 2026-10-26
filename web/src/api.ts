@@ -1,3 +1,33 @@
+export type ControlPoint = {
+  key: string; device: number; typeId: number; instance: number; name: string; token: string; error?: string
+  kind: 'analog' | 'binary' | 'multistate'; datatype: string; units: string; labelsComplete: boolean
+  choices: { value: number; label: string }[]; current: number; commandable: boolean; slots: (number | null)[] | null
+  minimum: number | null; maximum: number | null
+  relinquishDefault: number | null
+}
+export type ControlResult = { key: string; state: string; message: string; current?: number }
+
+/** What a writable property takes (see props.py): the editor to show, and how to read its JSON value. */
+export type FieldKind =
+  | 'real' | 'unsigned' | 'integer' | 'boolean' | 'string' | 'enumerated' | 'bits' | 'string-array' | 'unsigned-array'
+  | 'atomic' | 'weekly' | 'exceptions' | 'date-range' | 'date-list'
+export type FieldSpec = { kind: FieldKind; enum?: string; bits?: string[] }
+export type Writable = { types: Record<string, Record<string, FieldSpec>>; enums: Record<string, { value: number; label: string }[]>; alarm: string[] }
+/** A property reviewed for writing: its live value and the token that lets one write go through. */
+export type ControlField = {
+  key: string; device: number; typeId: number; instance: number; property: string; name: string; token: string; error?: string
+  kind: FieldKind; choices?: { value: number; label: string }[]; bits?: string[]; current: unknown
+}
+export type FieldResult = { key: string; property: string; state: string; message: string; current?: unknown; before?: unknown; value?: unknown }
+/** One entry of BACon's action log: what it asked for, what the property was before, and what it read back. */
+export type ControlAction = {
+  id: string; at: number; key: string; device: number; typeId: number; instance: number; name: string
+  property: string; kind: string; units?: string; choices?: { value: number; label: string }[] | null; bits?: string[] | null
+  before: unknown; value: unknown; priority: number | null; release: boolean; slotBefore?: number | null; slotAfter?: number | null
+  state: 'sending' | 'verified' | 'rejected' | 'unknown'; message?: string; current?: unknown; transition?: number
+}
+export type ControlLog = { actions: ControlAction[]; held: ControlAction[] }
+type Target = Pick<ObjectRow, 'device' | 'typeId' | 'instance' | 'key'>
 export type NetInterface = { name: string; ip: string; prefix: number; up: boolean }
 
 export type Status = {
@@ -63,6 +93,8 @@ export type Job = {
   total: number
   error: string
   retry: boolean
+  /** read just some objects again (after a write), not the whole device */
+  only?: boolean
 }
 
 export type TrendPoint = {
@@ -153,7 +185,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   try {
     res = await fetch(path, {
       method,
-      headers: body && !(body instanceof Blob) ? { 'Content-Type': 'application/json' } : undefined,
+      headers: body && !(body instanceof Blob) ? { 'Content-Type': 'application/json', ...(path.startsWith('/api/control/') ? { 'X-BACon-Control': '1' } : {}) } : undefined,
       body: body instanceof Blob ? body : body ? JSON.stringify(body) : undefined,
     })
   } catch {
@@ -173,6 +205,16 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 }
 
 export const api = {
+  controlPrepare: (targets: ObjectRow[]) => call<ControlPoint[]>('POST', '/api/control/prepare', { targets: targets.map(({ device, typeId, instance, key }) => ({ device, typeId, instance, key })) }),
+  controlWrite: (token: string, value: number | null, priority: number | null, release: boolean) => call<ControlResult>('POST', '/api/control/write', { token, value, priority, release }),
+  /** review other properties for writing; one entry per target, in order */
+  fieldPrepare: (targets: Target[], property: string) =>
+    call<ControlField[]>('POST', '/api/control/prepare', { targets: targets.map(({ device, typeId, instance, key }) => ({ device, typeId, instance, key, property })) }),
+  fieldWrite: (token: string, value: unknown) => call<FieldResult>('POST', '/api/control/write', { token, value }),
+  acknowledge: (target: Target, transition: number) =>
+    call<ControlAction>('POST', '/api/control/acknowledge', { target: { device: target.device, typeId: target.typeId, instance: target.instance, key: target.key }, transition }),
+  controlLog: (limit = 1000) => call<ControlLog>('GET', `/api/control/actions?limit=${limit}`),
+  writable: () => call<Writable>('GET', '/api/control/writable'),
   interfaces: () => call<NetInterface[]>('GET', '/api/interfaces'),
   status: () => call<Status>('GET', '/api/status'),
   portCheck: (ip: string, port: number) => call<PortCheck>('GET', `/api/port-check?ip=${encodeURIComponent(ip)}&port=${port}`),

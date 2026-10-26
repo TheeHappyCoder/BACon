@@ -9,6 +9,10 @@ import { HealthCheck, runChecks, type SavedCheck } from './components/HealthChec
 import { evaluate, parse } from './query'
 import { NetworkTree, type Selection } from './components/NetworkTree'
 import { ObjectTable, type Sort } from './components/ObjectTable'
+import { WritePointsSheet } from './components/WritePointsSheet'
+import { ActivityView } from './components/ActivityView'
+import { ControlProvider, useControl } from './components/ControlState'
+import { WRITABLE_TYPES } from './control'
 import { PropertiesPanel } from './components/PropertiesPanel'
 import { NetworkView } from './components/NetworkView'
 import { LayoutProvider, Pane, PaneToggle } from './components/Layout'
@@ -57,6 +61,8 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const isTrendLog = (r: ObjectRow) => r.typeId === 20 || r.typeId === 27
 
 function Workspace() {
+  const [writeRows, setWriteRows] = useState<ObjectRow[] | null>(null)
+  const control = useControl()
   const toast = useToast()
   const clock = useClock()
 
@@ -151,7 +157,8 @@ function Workspace() {
           const d = devices.find((x) => x.instance === j.device)
           const name = d?.name || `Device ${j.device}`
           if (j.state === 'failed') toast(`${name}: the read stopped. ${j.error}`, { kind: 'error' })
-          if (j.state === 'done') toast(`${name} read: ${j.total} objects`)
+          // a few objects read again after a write report themselves where the write was made
+          if (j.state === 'done' && !j.only) toast(`${name} read: ${j.total} objects`)
         }
       } catch (e) {
         toast(message(e), { kind: 'error' })
@@ -522,6 +529,16 @@ function Workspace() {
         ? { status: 'degraded', text: 'Some objects could not be read' }
         : { status: 'healthy', text: `Connected on ${status.settings?.ip}:${status.settings?.port}` }
 
+  // bulk writes act on what the filter shows; a single point is commanded from the drawer
+  const writableShown = view === 'objects' && filtered.length > 0 ? filtered.filter((r) => r.typeId !== 8 && (WRITABLE_TYPES.has(r.typeId) || control.fieldsOf(r).length > 0)).slice(0, 2000) : []
+  // after a write, read just those objects again so the table shows what the controller now reports
+  const rereadRows = (targets: ObjectRow[]) => {
+    for (const device of new Set(targets.map((r) => r.device))) {
+      void api.read([device], false, targets.filter((r) => r.device === device).map((r) => [r.typeId, r.instance]))
+        .then((next) => setJobs((old) => [...old, ...next])).catch((e) => toast(message(e)))
+    }
+  }
+
   const doExport = async (kind: 'csv' | 'xlsx') => {
     try {
       const cols = exportColumns(columns, includeIdentity)
@@ -604,6 +621,7 @@ function Workspace() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-(--surface-page) text-(--text-strong)">
+      {writeRows && <WritePointsSheet rows={writeRows} onClose={() => setWriteRows(null)} onWritten={() => { control.refresh(); rereadRows(writeRows) }} />}
       <Rail
         status={booted ? mark.status : 'busy'}
         statusText={booted ? mark.text : 'Starting…'}
@@ -614,6 +632,7 @@ function Workspace() {
         unacked={alarmCounts.unacked}
         issues={netIssues}
         capturing={capturing}
+        held={control.log.held.length}
         onNetwork={() => setConnectOpen(true)}
         update={update}
         onUpdates={() => setUpdateOpen(true)}
@@ -648,6 +667,14 @@ function Workspace() {
           onShowInObjects={showRow}
           onReread={(r) => rereadObjects(r.device, [[r.typeId, r.instance]])}
           onGoToObjects={() => setPlace('objects')}
+        />
+      ) : place === 'activity' ? (
+        <ActivityView
+          status={status}
+          rows={allRows}
+          devices={visibleDevices}
+          onShowInObjects={showRow}
+          onReread={(targets) => rereadRows(targets.map((t) => allRows.find((r) => r.device === t.device && r.typeId === t.typeId && r.instance === t.instance)).filter((r): r is ObjectRow => !!r))}
         />
       ) : place === 'network' ? (
         <NetworkView status={status} devices={visibleDevices} />
@@ -741,6 +768,11 @@ function Workspace() {
                     </div>
                   ) : null}
                 </div>
+                {writableShown.length > 0 ? (
+                  <Button size="sm" variant="secondary" disabled={!status.connected} title={status.connected ? undefined : 'Connect to the network to write'} onClick={() => setWriteRows(writableShown)}>
+                    Write {writableShown.length} shown
+                  </Button>
+                ) : null}
                 <Menu>
                   <MenuTrigger render={<Button size="sm" disabled={!scopeRows.length} />}>
                     Export
@@ -854,6 +886,7 @@ function Workspace() {
                     <Empty title="No objects match" text="Try a shorter search, or switch the filter to All." />
                   ) : (
                     <ObjectTable
+                      held={control.heldByKey}
                       rows={filtered}
                       columns={columns}
                       sort={sort}
@@ -908,6 +941,8 @@ function Workspace() {
             trendLabel={subject && isTrendLog(subject) ? 'Show history' : undefined}
             trended={!!subject && !isTrendLog(subject) && trends.points.some((p) => p.device === subject.device && p.typeId === subject.typeId && p.instance === subject.instance)}
             focusSignal={focusSignal}
+            onWritten={() => subject && rereadRows([subject])}
+            onOpenSchedules={() => setPlace('schedules')}
           />
           </Pane>
         </div>
@@ -980,7 +1015,9 @@ export default function App() {
       <TooltipProvider delay={300}>
         <ToastProvider>
           <LayoutProvider>
-            <Workspace />
+            <ControlProvider>
+              <Workspace />
+            </ControlProvider>
           </LayoutProvider>
         </ToastProvider>
       </TooltipProvider>

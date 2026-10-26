@@ -7,16 +7,20 @@ import { Hugeicons } from '../ui/components/hugeicons'
 import { Input } from '../ui/components/input'
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from '../ui/components/menu'
 import { ScrollArea } from '../ui/components/scroll-area'
+import { Tabs, TabsList, TabsTab } from '../ui/components/tabs'
 import { cn } from '../ui/utils'
 import { useToast } from './Toasts'
+import { PointControl } from './PointControl'
+import { useControl } from './ControlState'
 
 const { ArrowUp, ArrowDown, XIcon, Undo, Bookmark, ChevronDown, Search, LineChart } = Hugeicons
 
 type Prop = { name: string; count: number }
 
 /**
- * YABE's property grid with one addition: every property has a tick box, and a ticked property is a column in the
- * table and the export. With an object picked it shows that object's values; otherwise how many objects have each one.
+ * The right-hand drawer. With a point picked, Overview shows its live value, a command box and the priority array;
+ * Properties is YABE's property grid with one addition: every property has a tick box, and a ticked property is a
+ * column in the table and the export. With nothing picked it shows how many objects have each property.
  */
 export function PropertiesPanel({
   subject,
@@ -31,6 +35,8 @@ export function PropertiesPanel({
   onReread,
   canRead,
   focusSignal,
+  onWritten,
+  onOpenSchedules,
   onTrend,
   trendLabel,
   trended,
@@ -51,12 +57,27 @@ export function PropertiesPanel({
   onReread: () => void
   canRead: boolean
   focusSignal: number
+  /** a command was sent to the subject: read it again so the table catches up */
+  onWritten: () => void
+  onOpenSchedules?: () => void
 }) {
+  const control = useControl()
   const toast = useToast()
   const [query, setQuery] = useState('')
   const [naming, setNaming] = useState(false)
   const [presetName, setPresetName] = useState('')
+  const [tab, setTab] = useState<'overview' | 'properties'>('overview')
+  const [reloadSignal, setReloadSignal] = useState(0)
   const searchRef = useRef<HTMLInputElement>(null)
+  // a point, or anything else with settings BACon can write (not the device itself), gets the Overview tab
+  const isPoint = !!subject && subject.typeId !== 8 && (subject.values['present-value'] !== undefined || control.fieldsOf(subject).length > 0)
+  const showing = isPoint ? tab : 'properties'
+  // asking to find a property switches to the tab that has the field
+  const [seenSignal, setSeenSignal] = useState(focusSignal)
+  if (focusSignal !== seenSignal) {
+    setSeenSignal(focusSignal)
+    setTab('properties')
+  }
   useEffect(() => {
     if (focusSignal) searchRef.current?.focus()
   }, [focusSignal])
@@ -164,6 +185,26 @@ export function PropertiesPanel({
         ) : null}
       </div>
 
+      {isPoint ? (
+        <div className="px-[18px] pb-2">
+          <Tabs value={showing} onValueChange={(v) => setTab(v as typeof tab)}>
+            <TabsList className="w-full">
+              <TabsTab value="overview" className="flex-1">Overview</TabsTab>
+              <TabsTab value="properties" className="flex-1">Properties</TabsTab>
+            </TabsList>
+          </Tabs>
+        </div>
+      ) : null}
+
+      {showing === 'overview' && subject ? (
+        <ScrollArea scrollFade className="min-h-0 flex-1">
+          {subject.status !== 'ok' ? (
+            <div className="mx-[18px] mb-1 rounded-[12px] bg-(--status-alarm-bg) px-3 py-2 text-[12px] leading-snug">{subject.values['Read status']}</div>
+          ) : null}
+          <PointControl key={subject.key} row={subject} canWrite={canRead} reloadSignal={reloadSignal} onWritten={onWritten} onOpenSchedules={onOpenSchedules} />
+        </ScrollArea>
+      ) : (
+      <>
       <div className="px-[18px] pb-2">
         <div className="mb-2 flex items-start gap-2 rounded-[12px] bg-(--surface-card-muted) px-3 py-2.5 text-[12px] leading-snug text-(--text-muted)">
           <Checkbox checked aria-hidden tabIndex={-1} className="pointer-events-none mt-px" />
@@ -194,8 +235,10 @@ export function PropertiesPanel({
           </div>
         </ScrollArea>
       )}
+      </>
+      )}
 
-      {naming ? (
+      {naming && showing === 'properties' ? (
         <form
           className="flex gap-2 border-t border-(--border-subtle) px-[18px] py-2.5"
           onSubmit={(e) => {
@@ -219,6 +262,7 @@ export function PropertiesPanel({
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-(--border-subtle) px-[18px] py-3">
+        {showing === 'overview' ? <span /> : (
         <Menu>
           <MenuTrigger render={<Button size="sm" variant="secondary" />}>
             <Bookmark />
@@ -278,6 +322,7 @@ export function PropertiesPanel({
             ) : null}
           </MenuPopup>
         </Menu>
+        )}
         {subject ? (
           <span className="flex gap-1.5">
             {onTrend ? (
@@ -286,7 +331,7 @@ export function PropertiesPanel({
                 {trended ? (trendLabel ? 'In Trends' : 'Trending') : trendLabel ?? 'Trend'}
               </Button>
             ) : null}
-            <Button size="sm" variant="secondary" onClick={onReread} disabled={!canRead}>
+            <Button size="sm" variant="secondary" onClick={() => { onReread(); setReloadSignal((n) => n + 1) }} disabled={!canRead}>
               Read again
             </Button>
           </span>

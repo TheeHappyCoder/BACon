@@ -1,7 +1,7 @@
 /**
  * Alarms as BACnet keeps them: intrinsic reporting on the object itself (event-state, limits or alarm values,
  * event-enable, acked-transitions, event-time-stamps, a notification class) or an Event Enrollment object watching
- * another object. BACon only reads them; nothing here acknowledges or writes.
+ * another object. Acknowledging and changing the setup go through BACon's control service and its action log.
  */
 import type { DeviceEvent, ObjectRow } from './api'
 import { unitShort } from './schedule'
