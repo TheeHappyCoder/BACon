@@ -5,7 +5,7 @@
 <h1 align="center">BACon</h1>
 
 <p align="center"><b>BACnet, on site.</b><br>
-Scan a BACnet/IP network, read every property of every object, and export what you pick to Excel.</p>
+Scan a BACnet/IP network, read every property of every object, change what needs changing, and export what you pick to Excel.</p>
 
 <p align="center">
   <a href="https://github.com/TheeHappyCoder/BACon/releases/latest">Download for Windows</a>
@@ -26,11 +26,13 @@ lets you choose the columns.
 - **Read everything**: every object and every property, standard and vendor-specific, with clean
   handling of properties a device doesn't have and objects that fail to read.
 - **Pick and export**: choose any property as a column from Columns (every device, coverage shown), filter with plain words or queries
-  like `present-value > 20`, then export to Excel or CSV.
+  like `present-value > 20` and by object type, tick the rows you want, then export them (or everything shown) to Excel or CSV.
 - **Health check**: saved checks that run against every site you open.
 - **Compare**: save a site to a `.bxsite` file and see what changed since.
-- **Trends**: record points by COV, falling back to polling, then chart and export them. Trend logs
-  bring the controller's own history with them (ReadRange), so you see last night straight away.
+- **Trends**: group the points that belong together (a chiller, an AHU, a floor), each group with its own interval
+  and start button, recorded by COV with polling as the fallback. Every point is a lane on one time line with its
+  time-weighted average, change, runtime and starts. Trend logs bring the controller's own history with them
+  (ReadRange), groups and 30 days of history survive a restart.
 - **Schedules**: every Schedule object laid out by week or month as the controller runs it, with
   exceptions, calendars, the value now and the next change.
 - **Alarms**: every object with an alarm set up, its state and acknowledgements live from the
@@ -50,9 +52,12 @@ Release), the 16-level priority array with BACon's own slots marked, every other
 on the point, and what BACon did to it. Each setting is read live when you edit it, shown as before → after,
 then written and read back.
 
-**Many points.** Filter the table (`setpoint`, `Operating mode`, a query), then **Write N shown** from the … menu above the table. Choose present
-value or any property they share. BACon groups points that take the same value the same way, so one choice of
-"Standby" writes each controller's own state number. Review, send, and every result is listed.
+**Many points.** Tick them (Shift-click for a range, or tick every row shown), then **Write** in the bar over the
+table. Choose present value or any property they share. BACon groups points by what they are and what they take:
+the same name on every controller, one kind of unit (°C and °F are converted), the same state labels whatever
+number each controller uses for them, so one choice of "Standby" writes each controller's own number. Set a value or
+change each by an amount; values outside a point's limits are flagged on the group before you review. Review, send,
+and every result is listed.
 
 **Schedules.** In Schedules, **Edit** lays out the week with a preview bar per day, the default, exceptions and
 the holiday calendar the exceptions use. Only the properties you change are written.
@@ -96,24 +101,33 @@ doesn't matter. `!=` also matches objects that don't have the property at all, s
 
 ### Keep a query as a health check
 
-Save a query as a check and it runs on every site you open, next to the built-in checks for faults,
-alarms, manual overrides, duplicate names and missing descriptions.
+Health shows what BACon flagged first, worst first, with the objects behind each, and what passed below. Save a
+query as a check and it runs on every site you open, next to the built-in checks for faults, alarms, manual
+overrides, duplicate names and missing descriptions.
 
-![Saving a query as a health check](docs/gifs/health.gif)
+![The health check: what BACon flagged and what passed](docs/gifs/health.gif)
 
 ### Pick the columns, export to Excel
 
 Open Columns and choose any property, standard or vendor-specific. It becomes a column in the table and in every
-export, for every device, and the list shows how many objects have it.
+export, for every device, and the list shows how many objects have it. Tick rows to export just those.
 
-![Ticking properties as columns and exporting](docs/gifs/export.gif)
+![Ticking rows, choosing columns and exporting just those rows](docs/gifs/export.gif)
 
-### See last night straight away
+### Write to many points at once
 
-Add a controller's Trend Log and its stored history is on the chart in seconds, before you've
-recorded anything. Each channel of a Trend Log Multiple becomes its own line.
+Tick the points, choose Write, switch on a group and give it a value. Every write is shown as before and after,
+sent, read back and listed.
 
-![Adding trend logs and their history appearing](docs/gifs/trendlog.gif)
+![Writing a new comfort setpoint to three controllers](docs/gifs/write.gif)
+
+### Trend in groups, with last night included
+
+Tick points in Objects and choose Trend: put them in a group or make one, with the interval it needs. A Trend Log's
+stored history is on the time line in seconds, before you've recorded anything, and each channel of a Trend Log
+Multiple becomes its own lane.
+
+![Putting trend logs in a new group and their history appearing](docs/gifs/trendlog.gif)
 
 ### Read a schedule the way the controller runs it
 
@@ -133,7 +147,7 @@ them off, and who gets notified.
 
 Download `BACon.exe` from the [latest release](https://github.com/TheeHappyCoder/BACon/releases/latest)
 and run it. There's no installer and nothing else to install. When a new release is out, BACon shows
-a dot on the update button in the rail; one click downloads it, checks its SHA-256 and restarts.
+a dot on the update button in the top bar; one click downloads it, checks its SHA-256 and restarts.
 
 Close YABE and other BACnet tools first, or pick another UDP port: many controllers only answer on 47808.
 
@@ -177,7 +191,12 @@ python scripts/build.py                          # dist/BACon.exe + BACon.exe.sh
 python scripts/release.py 0.2.0 "What changed"   # bump, build, tag, push, GitHub release
 ```
 
-The app updates from the newest GitHub release that has `BACon.exe` and `BACon.exe.sha256` attached.
+The app updates from the newest GitHub release that has `BACon.exe` and `BACon.exe.sha256` attached, which must
+stay GitHub's "latest": Rasher's releases are tagged `rasher-vX.Y.Z` and never marked latest, and
+`scripts/guard_latest.py` (run by both release scripts and by a GitHub Action) puts the mark back if it moves.
+
+`python scripts/docs_media.py` remakes the README's and the site's screenshots and GIFs from the app as it is, against
+a Rasher and a BACon of its own.
 
 ## Credits
 

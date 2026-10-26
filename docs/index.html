@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BACon · BACnet, on site</title>
-<meta name="description" content="A free, read-only BACnet/IP explorer for Windows. Read every property, vendor ones included, export to Excel, find faults with one-line queries, and see schedules, alarms and trend logs.">
+<meta name="description" content="A free BACnet/IP tool for Windows. Read every property, vendor ones included, find faults with one-line queries, write to one point or hundreds with every write reviewed and read back, trend in groups, and export to Excel.">
 <meta property="og:title" content="BACon · BACnet, on site">
-<meta property="og:description" content="Read every property of every BACnet object, vendor ones included. Query, export, schedules, alarms, trend logs. Free, read-only, one exe.">
+<meta property="og:description" content="Read every property of every BACnet object, vendor ones included. Query, write, trend, export, schedules and alarms. Free, one exe.">
 <meta property="og:image" content="https://theehappycoder.github.io/BACon/images/objects.png">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -29,13 +29,13 @@
       </svg>
       BACon
     </a>
-    <a class="badge" href="https://github.com/TheeHappyCoder/BACon/releases/latest" title="Schedules and alarms are in" data-release="bacon" data-version="bacon" style="text-decoration:none">v0.1.0</a>
+    <a class="badge" href="https://github.com/TheeHappyCoder/BACon/releases/latest" title="Writes and trend groups are in" data-release="bacon" data-version="bacon" style="text-decoration:none">v0.1.0</a>
   </div>
   <div class="side">
     <nav class="links" aria-label="Sections">
       <a href="#features">Features</a>
       <a href="#queries">Queries</a>
-      <a href="#read-only">Read-only</a>
+      <a href="#writes">Writes</a>
       <a href="#rasher">Rasher</a>
       <a href="#faq">FAQ</a>
     </nav>
@@ -49,7 +49,7 @@
     <div class="hero">
       <div class="hero-copy">
         <h1>BACnet, <em>on site.</em></h1>
-        <p class="lead">Read every property of every object, find faults in one line, and export it all to Excel.</p>
+        <p class="lead">Read every property of every object, find faults in one line, change what needs changing, and export it all to Excel.</p>
         <div class="ctas">
           <a class="btn btn-lg btn-light" href="https://github.com/TheeHappyCoder/BACon/releases/latest/download/BACon.exe" data-download="bacon">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.2H3V5.1Zm0 13.8 7.4 1.1v-7.1H3v6Zm8.2 1.2L21 21.5v-8.6h-9.8v7.2ZM11.2 3.9v7.3H21V2.5l-9.8 1.4Z"/></svg>
@@ -111,7 +111,7 @@
         </div>
         <div class="tile facts reveal">
           <div class="fact"><b>20<small>MB</small></b><span>One exe. Runs from a USB stick.</span></div>
-          <div class="fact dark"><b>0<small>writes</small></b><span>It only reads. Never changes a value.</span></div>
+          <div class="fact dark"><b>1<small>record</small></b><span>Every write, before and after, kept on your PC.</span></div>
           <div class="fact"><b>1<small>line</small></b><span>To find every point in fault.</span></div>
         </div>
       </div>
@@ -136,26 +136,26 @@
     </div>
   </section>
 
-  <!-- read-only -->
-  <section class="block" id="read-only">
+  <!-- writes -->
+  <section class="block" id="writes">
     <div class="wrap">
       <div class="head reveal">
-        <span class="badge">Read-only</span>
-        <h2>It looks. <em>It never touches.</em></h2>
-        <p>Plug into a live building without a second thought. COV subscriptions even expire on their own if your laptop disappears.</p>
+        <span class="badge">Writes</span>
+        <h2>It reads first. <em>It writes with care.</em></h2>
+        <p>Nothing changes until you've seen it as before and after and pressed Send. COV subscriptions even expire on their own if your laptop disappears.</p>
       </div>
       <div class="split reveal">
         <div class="half yes">
-          <h3>What it sends <span class="badge">Reads</span></h3>
-          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Reads every property</b><span>ReadPropertyMultiple</span></div></div>
-          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Pulls trend log history</b><span>ReadRange</span></div></div>
-          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Asks for active alarms</b><span>GetEventInformation</span></div></div>
+          <h3>What it reads <span class="badge">Always</span></h3>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Every property</b><span>ReadPropertyMultiple</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Trend log history</b><span>ReadRange</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Active alarms</b><span>GetEventInformation</span></div></div>
         </div>
-        <div class="half no">
-          <h3>What it never sends <span class="badge">Never</span></h3>
-          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></span><div class="txt"><b>Changes a value</b><span>WriteProperty</span></div></div>
-          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></span><div class="txt"><b>Acknowledges an alarm</b><span>AcknowledgeAlarm</span></div></div>
-          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></span><div class="txt"><b>Restarts a device</b><span>ReinitializeDevice</span></div></div>
+        <div class="half no ink">
+          <h3>How it writes <span class="badge">When you say</span></h3>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Reviewed, then read back</b><span>WriteProperty</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Holds a priority, then releases it</b><span>priority-array</span></div></div>
+          <div class="op"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span><div class="txt"><b>Acknowledges with the controller's time</b><span>AcknowledgeAlarm</span></div></div>
         </div>
       </div>
     </div>
@@ -197,6 +197,7 @@
         <details><summary>"Windows protected your PC". Is it safe?<span class="plus"></span></summary><div class="a">That's SmartScreen, shown for apps without a paid code-signing certificate. Click <b>More info</b>, then <b>Run anyway</b>. The release lists the exe's SHA-256 if you want to check it.</div></details>
         <details><summary>It won't connect, or finds no devices<span class="plus"></span></summary><div class="a">Close YABE and other BACnet tools first; only one program can own UDP 47808, and BACon tells you who holds it. Across routers, register with a BBMD or add the controller by IP.</div></details>
         <details><summary>Does it read vendor properties?<span class="plus"></span></summary><div class="a">Yes. Every property a controller reports, named with YABE's vendor mappings, like the Siemens <code>Input/Output address [3019]</code>.</div></details>
+        <details><summary>Will it change anything on my site?<span class="plus"></span></summary><div class="a">Only what you ask it to. Reading never writes. Every write is shown as before and after, sent, read back and kept in Activity, where anything BACon still holds at a priority is listed to release before you leave.</div></details>
         <details><summary>Can I use it without a network?<span class="plus"></span></summary><div class="a">Save a site to a <code>.bxsite</code> file while connected, then open it anywhere to browse, query, export, and see schedules and alarms as they were read.</div></details>
       </div>
     </div>
@@ -207,7 +208,7 @@
     <div class="sky-panel reveal">
       <span class="badge" data-version="bacon">v0.1.0</span>
       <h2>Take it to <em>your next site.</em></h2>
-      <p>Free, open source (MIT) and read-only. Tell me what's missing.</p>
+      <p>Free and open source (MIT). Tell me what's missing.</p>
       <div class="ctas">
         <a class="btn btn-lg btn-light" href="https://github.com/TheeHappyCoder/BACon/releases/latest/download/BACon.exe" data-download="bacon">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.2H3V5.1Zm0 13.8 7.4 1.1v-7.1H3v6Zm8.2 1.2L21 21.5v-8.6h-9.8v7.2ZM11.2 3.9v7.3H21V2.5l-9.8 1.4Z"/></svg>
@@ -246,11 +247,12 @@
 
   // ---- features: the tabs on the left play their GIF on the right, then move on to the next ----
   const FEATURES = [
-    ["Find what's wrong", 'ReadPropertyMultiple', 'Type a query and press Enter. Points in fault, values too high, across every device.', 'gifs/query.gif', 19.3],
-    ['Pick columns, export', 'ReadProperty · ALL', 'Tick any property, vendor ones included, and export to Excel or CSV.', 'gifs/export.gif', 21.0],
-    ['Keep it as a check', 'Saved queries', 'Save a query as a health check. It runs on every site you open.', 'gifs/health.gif', 21.5],
-    ['Last night, straight away', 'ReadRange', 'Add a Trend Log and its stored history is on the chart in seconds.', 'gifs/trendlog.gif', 21.0],
-    ['Schedules as they run', 'weekly-schedule', 'Week or month, with calendars and exceptions laid over by priority.', 'gifs/schedules.gif', 16.7],
+    ["Find what's wrong", 'ReadPropertyMultiple', 'Type a query and press Enter. Points in fault, values too high, across every device.', 'gifs/query.gif', 22.3],
+    ['Pick columns, export', 'ReadProperty · ALL', 'Tick the rows you want, pick any property as a column, vendor ones included, and export to Excel or CSV.', 'gifs/export.gif', 28.6],
+    ['Write to many at once', 'WriteProperty', 'Tick the points and choose Write. One value per group, in each controller\'s own units and states, reviewed and read back.', 'gifs/write.gif', 40.1],
+    ['Health at a glance', 'Saved queries', 'What BACon flagged on top, what passed below. Save any query as a check of your own.', 'gifs/health.gif', 10.5],
+    ['Trends in groups', 'ReadRange · COV', 'Group a chiller or a floor, give it an interval, and see every point on one time line, last night included.', 'gifs/trendlog.gif', 49.3],
+    ['Schedules as they run', 'weekly-schedule', 'Week or month, with calendars and exceptions laid over by priority.', 'gifs/schedules.gif', 14.0],
     ['In alarm, and why', 'GetEventInformation', 'State and acknowledgements live from the controller, and who gets told.', 'gifs/alarms.gif', 12.2],
   ]
   const tabs = document.getElementById('tabs')
