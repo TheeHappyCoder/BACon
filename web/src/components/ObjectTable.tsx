@@ -196,16 +196,17 @@ export function ObjectTable({
   return (
     <div ref={root} data-scrolled={scrolled ? 'true' : undefined} className="group/table" style={{ minWidth: layout.minWidth }}>
       <div
-        className="sticky top-0 z-[2] grid h-9 items-center gap-3 border-b border-(--border-subtle) bg-(--surface-card) px-6 text-[12px] text-(--text-muted)"
+        className="sticky top-0 z-[2] grid h-9 items-center gap-3 border-b border-(--border-subtle) bg-(--surface-card-muted) px-6 text-[11.5px] text-(--text-muted)"
         style={layout}
       >
-        <span className="sticky left-0 z-[1] -mr-3 -ml-6 flex h-full items-center gap-3.5 bg-(--surface-card) pr-3 pl-6 transition-shadow group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)]">
+        <span className="sticky left-0 z-[1] -mr-3 -ml-6 flex h-full items-center gap-3.5 bg-(--surface-card-muted) pr-3 pl-6 font-medium text-(--text-strong) transition-shadow group-data-[scrolled=true]/table:shadow-[1px_0_0_var(--border-subtle)]">
           <Tick
             state={allPicked ? true : somePicked ? 'some' : false}
             label={allPicked ? 'Untick every row' : 'Tick every row shown'}
             onClick={() => onPickAll(!allPicked)}
           />
           <SortHead label="Object" column="object-name" sort={sort} onSort={onSort} />
+          <span className="-ml-2 font-normal text-(--text-faint) tabular-nums">{rows.length}</span>
         </span>
         <SortHead label="Type" column="Object type" sort={sort} onSort={onSort} />
         <SortHead label="#" column="Instance" sort={sort} onSort={onSort} end />

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type CaptureFile, type Device, type NetStatus, type PacketInfo, type Status, type Talker } from '../api'
 import { Button } from '../ui/components/button'
+import { Input } from '../ui/components/input'
 import { Hugeicons } from '../ui/components/hugeicons'
 import { ScrollArea } from '../ui/components/scroll-area'
 import { Switch } from '../ui/components/switch'
@@ -8,11 +9,14 @@ import { Tabs, TabsList, TabsTab } from '../ui/components/tabs'
 import { cn } from '../ui/utils'
 import { SERIES, TrendChart } from './TrendChart'
 import { Pane, PaneToggle } from './Layout'
+import { PanelBody, PanelHeader, SidePanel } from './SidePanel'
 import { useToast } from './Toasts'
 
-const { Download, XIcon, Check, ArrowDown, ArrowUp, Trash2 } = Hugeicons
+const { Download, XIcon, Check, ArrowDown, ArrowUp, Trash2, Search, ChevronLeft, ChevronRight } = Hugeicons
 
 const KEEP_CAPTURES = 10
+const PAGE = 50
+const PACKET_GRID = 'grid-cols-[104px_20px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)_86px]'
 
 /** 75 → "1:15", 4000 → "1:06:40" */
 function duration(sec: number) {
@@ -72,6 +76,11 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
   const [anchor, setAnchor] = useState<string | null>(null)
   const [show, setShow] = useState<'all' | 'broadcast' | 'problems'>('all')
   const [paused, setPaused] = useState(false)
+  const [dir, setDir] = useState<'any' | 'in' | 'out'>('any')
+  const [find, setFind] = useState('')
+  const [page, setPage] = useState(0)
+  // looking at an older page holds the list still, like Pause
+  const frozen = paused || page > 0
   const [captures, setCaptures] = useState<CaptureFile[]>([])
   const loadCaptures = () => api.captures().then(setCaptures).catch(() => {})
 
@@ -104,7 +113,7 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
   }, [net.capturing])
 
   useEffect(() => {
-    if (!status.connected || paused) return
+    if (!status.connected || frozen) return
     let stop = false
     const load = async () => {
       try {
@@ -120,7 +129,7 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
       stop = true
       clearInterval(t)
     }
-  }, [status.connected, paused, selectedKey])
+  }, [status.connected, frozen, selectedKey])
 
   const nameOf = useMemo(() => new Map(devices.map((d) => [d.instance, d.name])), [devices])
   const talkerName = (t: Talker) => (t.device !== null ? nameOf.get(t.device) || `Device ${t.device}` : 'Unknown device')
@@ -145,7 +154,14 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
     }
     setAnchor(address)
   }
-  const shown = packets.filter((p) => (show === 'broadcast' ? p.broadcast : show === 'problems' ? ['error', 'reject', 'abort'].includes(p.kind) : true))
+  const q = find.trim().toLowerCase()
+  const shown = packets.filter(
+    (p) =>
+      (show === 'broadcast' ? p.broadcast : show === 'problems' ? ['error', 'reject', 'abort'].includes(p.kind) : true) &&
+      (dir === 'any' || p.dir === dir) &&
+      (!q || [p.src, p.dst, p.service, p.bvlc, p.kind, p.note].some((v) => (v ?? '').toLowerCase().includes(q))),
+  )
+  const page_ = shown.slice(page * PAGE, (page + 1) * PAGE)
   const issues = net.events.filter((e) => e.severity !== 'low').length
   const now = Date.now() / 1000
 
@@ -291,16 +307,18 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
                         <span className="block text-[11px] text-(--text-muted)">packets</span>
                       </span>
                     </a>
-                    <Button
-                      aria-label={`Delete ${c.name}`}
-                      title="Delete"
-                      variant="ghost"
-                      size="icon-xs"
-                      className="absolute top-1/2 right-2 -translate-y-1/2 opacity-0 group-hover/cap:opacity-100 focus-visible:opacity-100"
-                      onClick={() => removeCapture(c.name)}
-                    >
-                      <Trash2 />
-                    </Button>
+                    <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center">
+                      <Button
+                        aria-label={`Delete ${c.name}`}
+                        title="Delete"
+                        variant="ghost"
+                        size="icon-xs"
+                        className="pointer-events-auto opacity-0 group-hover/cap:opacity-100 focus-visible:opacity-100"
+                        onClick={() => removeCapture(c.name)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </span>
                   </div>
                 ),
               )}
@@ -328,7 +346,7 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
               <div className="min-w-0 flex-1">
                 <h1 className="m-0 text-[20px] font-medium tracking-[-0.02em]">BACnet traffic</h1>
                 <div className="mt-1 text-[12px] leading-snug text-(--text-muted)">
-                  Every broadcast on UDP {status.settings?.port} and this PC's own requests. Traffic between other devices needs a mirror port on the switch.
+                  Broadcasts on UDP {status.settings?.port}, and this PC's own traffic.
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -406,42 +424,65 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
                   )}
                 </div>
 
-                <div className="overflow-hidden rounded-[14px] border border-(--border-subtle)">
-                  <div className="flex flex-wrap items-center gap-2 px-4 pt-3 pb-2.5">
+                <div className="overflow-hidden rounded-[16px] bg-(--surface-card) shadow-[0_0_0_1px_var(--border-subtle)]">
+                  {/* which packets: kind, direction, a device from the list, or anything typed */}
+                  <div className="flex flex-wrap items-center gap-2 px-4 pt-3.5 pb-3">
                     <span className="mr-1 text-[13px] font-medium">Packets</span>
-                    <Tabs value={show} onValueChange={(v) => setShow(v as typeof show)}>
+                    <Tabs value={show} onValueChange={(v) => { setShow(v as typeof show); setPage(0) }}>
                       <TabsList>
                         <TabsTab value="all">All</TabsTab>
                         <TabsTab value="broadcast">Broadcasts</TabsTab>
                         <TabsTab value="problems">Errors</TabsTab>
                       </TabsList>
                     </Tabs>
+                    <Tabs value={dir} onValueChange={(v) => { setDir(v as typeof dir); setPage(0) }}>
+                      <TabsList>
+                        <TabsTab value="any">Both ways</TabsTab>
+                        <TabsTab value="in">
+                          <ArrowDown className="size-3.5" />
+                          Received
+                        </TabsTab>
+                        <TabsTab value="out">
+                          <ArrowUp className="size-3.5" />
+                          Sent
+                        </TabsTab>
+                      </TabsList>
+                    </Tabs>
                     {selected.length ? (
-                      <span className="inline-flex h-7 items-center gap-1 rounded-[8px] bg-(--surface-track) pr-0.5 pl-2.5 text-[12.5px]">
+                      <span className="inline-flex h-7 items-center gap-1 rounded-full bg-(--ink) pr-0.5 pl-3 text-[12.5px] text-white">
                         {sel ? talkerName(sel) : `${selected.length} devices`}
-                        <button aria-label="Show every device" onClick={clearSelection} className="inline-flex size-6 items-center justify-center rounded-[6px] text-(--text-muted) hover:bg-(--surface-card)">
+                        <button aria-label="Show every device" onClick={clearSelection} className="inline-flex size-6 items-center justify-center rounded-full text-white/70 hover:bg-white/15 hover:text-white">
                           <XIcon className="size-3" />
                         </button>
                       </span>
                     ) : null}
                     <span className="flex-1" />
-                    <label className="flex items-center gap-2 text-[12.5px] text-(--text-muted)">
+                    <label className="flex h-8 w-[240px] items-center gap-2 rounded-full border border-(--border-default) bg-(--surface-input) px-3 transition-colors focus-within:border-(--ring) hover:border-(--border-strong)">
+                      <Search className="size-3.5 shrink-0 text-(--text-faint)" />
+                      <Input unstyled nativeInput aria-label="Search packets" className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none" placeholder="Address, service or note" value={find} onChange={(e) => { setFind(e.target.value); setPage(0) }} />
+                      {find ? (
+                        <button aria-label="Clear search" onClick={() => setFind('')} className="inline-flex size-5 items-center justify-center rounded-full text-(--text-faint) hover:bg-(--surface-track) hover:text-(--text-strong)">
+                          <XIcon className="size-3" />
+                        </button>
+                      ) : null}
+                    </label>
+                    <label className="flex items-center gap-2 pl-1 text-[12.5px] text-(--text-muted)">
                       Pause
-                      <Switch checked={paused} onCheckedChange={setPaused} />
+                      <Switch checked={frozen} onCheckedChange={(v) => { setPaused(v); if (!v) setPage(0) }} />
                     </label>
                   </div>
-                  <div className="grid grid-cols-[104px_20px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)_86px] gap-3 border-t border-(--border-divider) bg-(--surface-card-muted) px-4 py-1.5 text-[11.5px] text-(--text-muted)">
-                    <span>Time</span>
+                  <div className={cn('grid h-9 items-center gap-3 border-y border-(--border-subtle) bg-(--surface-card-muted) px-4 text-[11.5px] text-(--text-muted)', PACKET_GRID)}>
+                    <span className="font-medium text-(--text-strong)">Time</span>
                     <span />
                     <span>From</span>
                     <span>To</span>
                     <span>Service</span>
                     <span>Kind</span>
                   </div>
-                  {shown.slice(0, 250).map((p, i) => (
-                    <div key={`${p.t}-${i}`} className="grid grid-cols-[104px_20px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)_86px] items-center gap-3 border-t border-(--border-divider) px-4 py-[7px] text-[12.5px]">
+                  {page_.map((p, i) => (
+                    <div key={`${p.t}-${i}`} className={cn('grid min-h-9 items-center gap-3 border-b border-(--border-divider) px-4 py-1.5 text-[12.5px] last:border-b-0', PACKET_GRID)}>
                       <span className="tabular-nums text-(--text-muted)">{clock(p.t)}</span>
-                      <span className="text-(--text-faint)">{p.dir === 'in' ? <ArrowDown className="size-3.5" /> : <ArrowUp className="size-3.5" />}</span>
+                      <span className="text-(--text-faint)" title={p.dir === 'in' ? 'Received' : 'Sent by this PC'}>{p.dir === 'in' ? <ArrowDown className="size-3.5" /> : <ArrowUp className="size-3.5" />}</span>
                       <span className="truncate tabular-nums">{p.src}</span>
                       <span className="truncate tabular-nums text-(--text-muted)">{p.broadcast ? 'broadcast' : p.dst}</span>
                       <span className="truncate" title={p.note}>
@@ -460,25 +501,43 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
                       </span>
                     </div>
                   ))}
-                  {!shown.length ? <div className="border-t border-(--border-divider) px-4 py-4 text-center text-[12.5px] text-(--text-muted)">No packets match.</div> : null}
+                  {!shown.length ? <div className="px-4 py-6 text-center text-[12.5px] text-(--text-muted)">{packets.length ? 'No packets match.' : 'Listening…'}</div> : null}
+                  {/* pages: looking back holds the list still, so rows do not slide away while you read */}
+                  {shown.length > PAGE ? (
+                    <div className="flex h-11 items-center gap-2 px-4 text-[12px] text-(--text-muted)">
+                      <span className="tabular-nums">
+                        {page * PAGE + 1}–{Math.min(shown.length, (page + 1) * PAGE)} of {shown.length}
+                      </span>
+                      {page > 0 ? (
+                        <>
+                          <span className="text-(--text-faint)">· held while you look back</span>
+                          <button onClick={() => setPage(0)} className="ml-1 rounded-full px-2 py-0.5 font-medium text-(--text-strong) hover:bg-(--surface-track)">
+                            Back to newest
+                          </button>
+                        </>
+                      ) : null}
+                      <span className="flex-1" />
+                      <Button variant="ghost" size="icon-xs" aria-label="Newer packets" disabled={page === 0} onClick={() => setPage((n) => Math.max(0, n - 1))}>
+                        <ChevronLeft />
+                      </Button>
+                      <Button variant="ghost" size="icon-xs" aria-label="Older packets" disabled={(page + 1) * PAGE >= shown.length} onClick={() => setPage((n) => n + 1)}>
+                        <ChevronRight />
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </ScrollArea>
           </section>
 
-          {sel ? (
-            <Pane side="right">
-            <aside className="nc-view-in flex w-full min-w-0 flex-col overflow-hidden bg-(--surface-card)">
-              <div className="flex items-start gap-3 px-[18px] pt-4 pb-3">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[11.5px] text-(--text-faint)">{sel.address}</div>
-                  <div className="mt-0.5 truncate text-[17px] font-medium tracking-[-0.01em]">{talkerName(sel)}</div>
-                </div>
-                <Button aria-label="Close" variant="secondary" size="icon-xs" onClick={clearSelection}>
-                  <XIcon />
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2 px-[18px]">
+        </div>
+      </main>
+      <SidePanel open={!!sel} subjectKey={sel?.address}>
+        {sel ? (
+          <>
+            <PanelHeader eyebrow={sel.address} title={talkerName(sel)} onClose={clearSelection} />
+            <PanelBody>
+              <div className="grid grid-cols-2 gap-2">
                 {[
                   ['Packets', sel.packets.toLocaleString()],
                   ['Broadcasts', sel.broadcasts.toLocaleString()],
@@ -491,8 +550,8 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
                   </div>
                 ))}
               </div>
-              <div className="px-[18px] pt-4 pb-1 text-[12px] text-(--text-muted)">Services</div>
-              <div className="flex flex-col gap-2 px-[18px] pb-4">
+              <div className="pt-2 text-[12px] text-(--text-muted)">Services</div>
+              <div className="flex flex-col gap-2">
                 {sel.services.map(([name, n]) => (
                   <div key={name}>
                     <div className="flex justify-between text-[12.5px]">
@@ -513,11 +572,10 @@ export function NetworkView({ status, devices }: { status: Status; devices: Devi
                   </div>
                 ) : null}
               </div>
-            </aside>
-            </Pane>
-          ) : null}
-        </div>
-      </main>
+            </PanelBody>
+          </>
+        ) : null}
+      </SidePanel>
     </>
   )
 }

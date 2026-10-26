@@ -68,9 +68,36 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
  * mid-animation. Dragging well past the minimum closes it; double-clicking the edge resets the width.
  * `gap` is the flex gap beside the pane, pulled back when collapsed so the main sheet reaches the edge.
  */
-export function Pane({ side, children, className, gap = 0 }: { side: Side; children: ReactNode; className?: string; gap?: number }) {
+export function Pane({
+  side,
+  children,
+  className,
+  gap = 0,
+  open = true,
+  onHidden,
+}: {
+  side: Side
+  children: ReactNode
+  className?: string
+  gap?: number
+  /** false slides the pane shut; onHidden runs once it is */
+  open?: boolean
+  onHidden?: () => void
+}) {
   const { state, setWidth, setCollapsed } = useLayout()
-  const { width, collapsed } = state[side]
+  const { width, collapsed: shut } = state[side]
+  // a right pane grows in from nothing when it first appears, rather than pushing the page aside at once
+  const [entered, setEntered] = useState(side === 'left')
+  useEffect(() => {
+    if (entered) return
+    const r = requestAnimationFrame(() => requestAnimationFrame(() => setEntered(true)))
+    return () => cancelAnimationFrame(r)
+  }, [entered])
+  const collapsed = shut || !entered || !open
+  // already shut when it is closed: there is no slide to wait for
+  useEffect(() => {
+    if (!open && (shut || !entered)) onHidden?.()
+  }, [open, shut, entered, onHidden])
   const [dragging, setDragging] = useState(false)
   const start = useRef({ x: 0, w: 0 })
   const { min, max, initial } = LIMITS[side]
@@ -80,14 +107,17 @@ export function Pane({ side, children, className, gap = 0 }: { side: Side; child
     <div
       className={cn('relative flex shrink-0', className)}
       data-pane={side}
-      data-open={collapsed ? undefined : ''}
       style={{
         width: collapsed ? 0 : width,
         [side === 'left' ? 'marginRight' : 'marginLeft']: collapsed ? -gap : 0,
-        transition: dragging ? 'none' : 'width 240ms cubic-bezier(.2,.8,.2,1), margin 240ms cubic-bezier(.2,.8,.2,1)',
+        transition: dragging ? 'none' : 'width 280ms cubic-bezier(.2,.8,.2,1), margin 280ms cubic-bezier(.2,.8,.2,1)',
       }}
       aria-hidden={collapsed || undefined}
       inert={collapsed || undefined}
+      data-open={collapsed ? undefined : ''}
+      onTransitionEnd={(e) => {
+        if (e.target === e.currentTarget && e.propertyName === 'width' && !open) onHidden?.()
+      }}
     >
       {/* clip the content while closed or closing; the drag edge sits outside this clip */}
       <div className="h-full min-h-0 w-full overflow-hidden">

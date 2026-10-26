@@ -255,7 +255,7 @@ export function NetworkTree({
                 label={d.name || `Device ${d.instance}`}
                 sub={
                   <>
-                    {[d.model || d.vendorName || `#${d.instance}`, d.objectCount ? `${d.objectCount} objects` : 'not read'].filter(Boolean).join(' · ')}
+                    {d.objectCount ? d.model || d.vendorName || `#${d.instance}` : 'not read'}
                     {flagged?.fault ? (
                       <span className="text-(--status-alarm-strong)"> · {flagged.fault} in fault</span>
                     ) : flagged?.alarm ? (

@@ -151,7 +151,7 @@ def run():
                     for _ in range(20):  # the controller marks the transition unacknowledged on its next tick
                         page.get_by_role('button', name='Check now').click()
                         page.wait_for_timeout(1000)
-                        if page.get_by_role('button', name='Not acknowledged 1').count():
+                        if page.get_by_role('tab', name='Not acknowledged 1').count():
                             break
                     page.get_by_text('Room temperature', exact=True).first.click()
                     expect(page.get_by_text('Waiting for acknowledgement')).to_be_visible(timeout=15000)

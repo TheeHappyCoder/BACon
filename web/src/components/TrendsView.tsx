@@ -218,7 +218,7 @@ export function TrendsView({
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-[13.5px] font-medium tracking-[-0.005em]">{g.name}</span>
                     <span className="truncate text-[11.5px] text-(--text-muted)">
-                      {g.pointIds.length} point{g.pointIds.length === 1 ? '' : 's'} · {g.running ? `recording ${clockOf(g.startedAt, now)}` : howItRecords(g)}
+                      {g.running ? `Recording ${clockOf(g.startedAt, now)}` : howItRecords(g)}
                     </span>
                   </span>
                 </button>
@@ -262,11 +262,7 @@ export function TrendsView({
     )
   }
 
-  const facts = [
-    `${points.length} point${points.length === 1 ? '' : 's'}${devicesIn > 1 ? ` on ${devicesIn} devices` : points[0] ? ` on ${points[0].deviceName}` : ''}`,
-    `records ${howItRecords(group)}`,
-    group.samples ? `${group.samples.toLocaleString()} samples` : '',
-  ].filter(Boolean)
+  const facts = [devicesIn === 1 && points[0] ? points[0].deviceName : '', `Records ${howItRecords(group)}`].filter(Boolean)
 
   return (
     <>

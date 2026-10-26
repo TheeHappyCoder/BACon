@@ -6,7 +6,7 @@ import { Hugeicons } from '../ui/components/hugeicons'
 import { cn } from '../ui/utils'
 import { useToast } from './Toasts'
 
-const { ChevronRight, Check, FileSpreadsheet, Trash2 } = Hugeicons
+const { ChevronDown, Check, FileSpreadsheet, Trash2, AlertTriangle, XIcon } = Hugeicons
 
 type Severity = 'critical' | 'high' | 'low'
 type Hit = { row: ObjectRow; detail: string }
@@ -93,11 +93,13 @@ export function runChecks(rows: ObjectRow[], saved: SavedCheck[] = []): CheckRes
   return out
 }
 
-const SEV: Record<Severity, { label: string; chip: string; dot: string }> = {
-  critical: { label: 'critical', chip: 'bg-(--color-ns-red)', dot: 'bg-(--status-alarm-strong)' },
-  high: { label: 'high', chip: 'bg-(--color-ns-yellow)', dot: 'bg-(--status-warn-strong)' },
-  low: { label: 'low', chip: 'bg-(--color-ns-cyan-light)', dot: 'bg-(--status-info-strong)' },
+const SEV: Record<Severity, { label: string; chip: string; dot: string; tile: string }> = {
+  critical: { label: 'critical', chip: 'bg-(--color-ns-red)', dot: 'bg-(--status-alarm-strong)', tile: 'bg-(--color-ns-red) text-(--ink)' },
+  high: { label: 'high', chip: 'bg-(--color-ns-yellow)', dot: 'bg-(--status-warn-strong)', tile: 'bg-(--color-ns-yellow) text-(--ink)' },
+  low: { label: 'low', chip: 'bg-(--color-ns-cyan-light)', dot: 'bg-(--status-info-strong)', tile: 'bg-(--color-ns-cyan-light) text-(--ink)' },
 }
+/** The Flagged tile takes the colour of the worst check flagged. */
+const TILE: Record<Severity, string> = { critical: 'bg-(--color-ns-red-light)', high: 'bg-(--color-ns-yellow-light)', low: 'bg-(--color-ns-cyan-light)' }
 
 export function HealthCheck({
   rows,
@@ -118,9 +120,10 @@ export function HealthCheck({
   const checks = useMemo(() => runChecks(rows, saved), [rows, saved])
   const failing = checks.filter((c) => c.hits.length)
   const passed = checks.filter((c) => !c.hits.length)
-  const [open, setOpen] = useState<Set<string>>(() => new Set(failing.slice(0, 1).map((c) => c.id)))
+  // every flagged check is open until you fold it; one that starts failing later opens too
+  const [closed, setClosed] = useState<Set<string>>(() => new Set())
   const toggle = (id: string) =>
-    setOpen((o) => {
+    setClosed((o) => {
       const n = new Set(o)
       if (n.has(id)) n.delete(id)
       else n.add(id)
@@ -153,96 +156,147 @@ export function HealthCheck({
 
   if (!rows.length) return null
 
+  const RANK: Record<Severity, number> = { critical: 0, high: 1, low: 2 }
+  const ordered = [...failing].sort((a, b) => RANK[a.severity] - RANK[b.severity])
+  const worst = ordered[0]?.severity
+  const showDevice = new Set(rows.map((r) => r.device)).size > 1
+  const GRID = showDevice ? 'grid-cols-[minmax(220px,1.4fr)_150px_56px_minmax(120px,0.8fr)_minmax(180px,1.3fr)]' : 'grid-cols-[minmax(220px,1.4fr)_150px_56px_minmax(180px,1.5fr)]'
+
   return (
-    <div className="nc-view-in flex flex-col gap-3 px-[18px] pb-6">
-      <div className="flex items-center gap-3 rounded-[14px] bg-(--surface-card-muted) px-4 py-3">
-        <span className={cn('inline-flex size-9 shrink-0 items-center justify-center rounded-full', failing.length ? 'bg-(--color-ns-yellow)' : 'bg-(--color-ns-green)')}>
-          {failing.length ? <span className="text-[14px] font-medium tabular-nums">{failing.length}</span> : <Check className="size-4" />}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-medium">
-            {failing.length ? `${failing.length} of ${checks.length} checks need attention` : 'Everything passed'}
+    <div className="nc-view-in flex flex-col gap-5 px-6 pt-5 pb-8">
+      {/* the score: what BACon flagged, what passed */}
+      <div className="flex items-stretch gap-3">
+        <div className={cn('flex min-w-0 flex-1 items-center gap-4 rounded-[16px] px-5 py-4', failing.length ? TILE[worst!] : 'bg-(--surface-card-muted)')}>
+          <span className={cn('flex size-11 shrink-0 items-center justify-center rounded-[12px] [&_svg]:size-5', failing.length ? 'bg-(--ink) text-white' : 'bg-(--surface-card) text-(--text-faint)')}>
+            <AlertTriangle />
           </span>
-          <span className="block truncate text-[12px] text-(--text-muted)">Checked {rows.length} objects in {scopeLabel}. Nothing was sent to the network.</span>
-        </span>
-        <Button size="sm" variant="white" onClick={exportReport}>
-          <FileSpreadsheet />
-          Export report
-        </Button>
+          <span className="flex flex-col">
+            <span className="text-[30px] leading-8 font-medium tracking-[-0.02em] tabular-nums">{failing.length}</span>
+            <span className="text-[12.5px]">{failing.length === 1 ? 'check flagged' : 'checks flagged'}</span>
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-1 items-center gap-4 rounded-[16px] bg-(--color-ns-green-light) px-5 py-4">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-[12px] bg-(--ink) text-(--color-ns-green) [&_svg]:size-5">
+            <Check />
+          </span>
+          <span className="flex flex-col">
+            <span className="text-[30px] leading-8 font-medium tracking-[-0.02em] tabular-nums">{passed.length}</span>
+            <span className="text-[12.5px]">{passed.length === 1 ? 'check passed' : 'checks passed'}</span>
+          </span>
+        </div>
+        <div className="flex shrink-0 flex-col items-end justify-center gap-1.5 pl-2">
+          <Button size="sm" variant="secondary" onClick={exportReport}>
+            <FileSpreadsheet />
+            Export report
+          </Button>
+          <span className="text-[11.5px] text-(--text-faint)">From the last read of {scopeLabel}</span>
+        </div>
       </div>
 
-      {failing.map((c) => {
-        const isOpen = open.has(c.id)
-        return (
-          <div key={c.id} className="overflow-hidden rounded-[14px] border border-(--border-subtle)">
-            <button onClick={() => toggle(c.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-(--surface-hover)">
-              <ChevronRight className={cn('size-4 shrink-0 text-(--text-muted) transition-transform', isOpen && 'rotate-90')} />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className="text-[14px] font-medium">{c.title}</span>
-                  <span className={cn('rounded-full px-2 py-px text-[11px] lowercase', SEV[c.severity].chip)}>{SEV[c.severity].label}</span>
-                  {c.custom ? <span className="rounded-full bg-(--surface-track) px-2 py-px text-[11px] text-(--text-muted)">yours</span> : null}
+      {/* the checklist: flagged first, worst first, then what passed */}
+      <div className="overflow-hidden rounded-[16px] bg-(--surface-card) shadow-[0_0_0_1px_var(--border-subtle)]">
+        {ordered.length ? <ListHead tone="flagged" label="Flagged" count={ordered.length} /> : null}
+        {ordered.map((c) => {
+          const isOpen = !closed.has(c.id)
+          return (
+            <section key={c.id} className="border-b border-(--border-divider) last:border-b-0">
+              <button onClick={() => toggle(c.id)} aria-expanded={isOpen} className="flex w-full items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_2.5%,transparent)]">
+                <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-[9px] [&_svg]:size-4', SEV[c.severity].tile)}>
+                  <XIcon />
                 </span>
-                <span className="mt-0.5 block text-[12.5px] text-(--text-muted)">{c.why}</span>
-              </span>
-              <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-(--surface-track) px-2 text-[12px] tabular-nums">{c.hits.length}</span>
-            </button>
-            {c.custom ? (
-              <div className="flex justify-end border-t border-(--border-divider) px-3 py-1.5">
-                <button className="inline-flex items-center gap-1 text-[12px] text-(--text-muted) hover:text-(--text-strong)" onClick={() => onDeleteCheck(c.id)}>
-                  <Trash2 className="size-3.5" />
-                  Delete this check
-                </button>
-              </div>
-            ) : null}
-            {isOpen ? (
-              <div className="border-t border-(--border-divider) px-2 py-1">
-                {c.hits.slice(0, 500).map((h) => (
-                  <button
-                    key={h.row.key}
-                    onClick={() => onSelect(h.row)}
-                    data-selected={selectedKey === h.row.key ? 'true' : undefined}
-                    className="flex w-full items-center gap-3 rounded-[9px] px-2 py-2 text-left transition-colors hover:bg-(--surface-hover) data-[selected=true]:bg-(--paper-3)"
-                  >
-                    <span className={cn('size-1.5 shrink-0 rounded-full', SEV[c.severity].dot)} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium">{h.row.values['object-name'] || 'Unnamed'}</span>
-                      <span className="mt-0.5 flex items-center gap-1">
-                        <span className="rounded-full bg-(--surface-track) px-2 text-[11px] leading-[18px] text-(--text-muted)">{h.row.values['Object type']}</span>
-                        <span className="rounded-full bg-(--surface-track) px-2 text-[11px] leading-[18px] text-(--text-muted)">#{h.row.instance}</span>
-                        <span className="truncate rounded-full bg-(--surface-track) px-2 text-[11px] leading-[18px] text-(--text-muted)">{h.row.values['Device name'] || h.row.device}</span>
-                      </span>
-                    </span>
-                    <span className="max-w-[45%] shrink-0 truncate text-right text-[12.5px] text-(--text-muted)" title={h.detail}>
-                      {h.detail}
-                    </span>
-                  </button>
-                ))}
-                {c.hits.length > 500 ? <div className="px-2 py-2 text-[12px] text-(--text-muted)">The first 500 are shown. The report has all {c.hits.length}.</div> : null}
-              </div>
-            ) : null}
-          </div>
-        )
-      })}
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="text-[13.5px] font-medium">{c.title}</span>
+                    <span className={cn('rounded-full px-2 py-px text-[11px] lowercase', SEV[c.severity].chip)}>{SEV[c.severity].label}</span>
+                    {c.custom ? <span className="rounded-full bg-(--surface-track) px-2 py-px text-[11px] text-(--text-muted)">yours</span> : null}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[12px] text-(--text-muted)">{c.why}</span>
+                </span>
+                <span className="shrink-0 rounded-full bg-(--ink) px-2.5 py-0.5 text-[12px] font-medium text-white tabular-nums">
+                  {c.hits.length} {c.hits.length === 1 ? 'object' : 'objects'}
+                </span>
+                <ChevronDown className={cn('size-4 shrink-0 text-(--text-muted) transition-transform duration-200', !isOpen && '-rotate-90')} />
+              </button>
+              {isOpen ? (
+                <div className="mx-4 mb-3 overflow-hidden rounded-[12px] border border-(--border-subtle)">
+                  <div className={cn('grid h-8 items-center gap-4 bg-(--surface-card-muted) px-4 text-[11.5px] text-(--text-muted)', GRID)}>
+                    <span>Object</span>
+                    <span>Type</span>
+                    <span className="text-right">#</span>
+                    {showDevice ? <span>Device</span> : null}
+                    <span>Issue</span>
+                  </div>
+                  {c.hits.slice(0, 500).map((h) => {
+                    const on = selectedKey === h.row.key
+                    return (
+                      <button
+                        key={h.row.key}
+                        onClick={() => onSelect(h.row)}
+                        className={cn(
+                          'relative grid min-h-10 w-full items-center gap-4 border-t border-(--border-divider) px-4 py-1.5 text-left text-[12.5px] transition-colors',
+                          on ? 'bg-(--surface-selected)' : 'hover:bg-[color-mix(in_srgb,var(--ink)_2.5%,transparent)]',
+                          GRID,
+                        )}
+                      >
+                        {on ? <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] rounded-r-full bg-(--ink)" /> : null}
+                        <span className="truncate text-[13px] font-medium">{h.row.values['object-name'] || 'Unnamed'}</span>
+                        <span className="truncate text-[12px] text-(--text-muted)">{h.row.values['Object type']}</span>
+                        <span className="text-right text-[12px] tabular-nums text-(--text-muted)">{h.row.instance}</span>
+                        {showDevice ? <span className="truncate text-[12px] text-(--text-muted)">{h.row.values['Device name'] || h.row.device}</span> : null}
+                        <span className="truncate" title={h.detail}>
+                          {h.detail}
+                        </span>
+                      </button>
+                    )
+                  })}
+                  {c.hits.length > 500 ? <div className="border-t border-(--border-divider) px-4 py-2.5 text-[12px] text-(--text-muted)">The first 500 are shown. The report has them all.</div> : null}
+                  {c.custom ? (
+                    <div className="flex justify-end border-t border-(--border-divider) px-4 py-1.5">
+                      <button className="inline-flex items-center gap-1 text-[12px] text-(--text-muted) hover:text-(--text-strong)" onClick={() => onDeleteCheck(c.id)}>
+                        <Trash2 className="size-3.5" />
+                        Delete this check
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
+          )
+        })}
 
-      {passed.length ? (
-        <div className="rounded-[14px] border border-(--border-subtle) px-4 py-3">
-          <div className="mb-2 text-[12px] text-(--text-muted)">Passed</div>
-          <div className="flex flex-wrap gap-1.5">
-            {passed.map((c) => (
-              <span
-                key={c.id}
-                title={c.skipped ? 'This site does not have the properties this check uses.' : c.custom ? c.why : undefined}
-                className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px]', c.skipped ? 'bg-(--surface-track) text-(--text-muted)' : 'bg-(--status-ok-bg)')}
-              >
-                {c.skipped ? null : <Check className="size-3" />}
-                {c.title}
-                {c.skipped ? ' · not on this site' : ''}
+        {passed.length ? <ListHead tone="passed" label="Passed" count={passed.length} /> : null}
+        {passed.map((c) => (
+          <div key={c.id} className="flex items-center gap-3.5 border-b border-(--border-divider) px-4 py-3 last:border-b-0">
+            <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-[9px] [&_svg]:size-4', c.skipped ? 'bg-(--surface-track) text-(--text-faint)' : 'bg-(--color-ns-green-light) text-(--status-ok-strong)')}>
+              <Check />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-2">
+                <span className={cn('text-[13.5px]', c.skipped ? 'text-(--text-muted)' : 'font-medium')}>{c.title}</span>
+                {c.custom ? <span className="rounded-full bg-(--surface-track) px-2 py-px text-[11px] text-(--text-muted)">yours</span> : null}
               </span>
-            ))}
+              <span className="mt-0.5 block truncate text-[12px] text-(--text-muted)">{c.skipped ? 'This site does not have the properties this check uses.' : c.why}</span>
+            </span>
+            <span className={cn('shrink-0 text-[12px] font-medium', c.skipped ? 'text-(--text-faint)' : 'text-(--status-ok-strong)')}>{c.skipped ? 'Not on this site' : 'Passed'}</span>
+            {c.custom ? (
+              <button aria-label={`Delete ${c.title}`} title="Delete this check" className="inline-flex size-7 items-center justify-center rounded-full text-(--text-faint) hover:bg-(--surface-track) hover:text-(--text-strong)" onClick={() => onDeleteCheck(c.id)}>
+                <Trash2 className="size-3.5" />
+              </button>
+            ) : null}
           </div>
-        </div>
-      ) : null}
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** A heading inside the checklist: Flagged or Passed, with how many. */
+function ListHead({ tone, label, count }: { tone: 'flagged' | 'passed'; label: string; count: number }) {
+  return (
+    <div className="flex h-9 items-center gap-2 border-b border-(--border-subtle) bg-(--surface-card-muted) px-4 text-[11.5px] font-medium tracking-[0.02em] text-(--text-muted) uppercase">
+      <span className={cn('size-1.5 rounded-full', tone === 'flagged' ? 'bg-(--status-alarm-strong)' : 'bg-(--status-ok-strong)')} />
+      {label}
+      <span className="font-normal text-(--text-faint) tabular-nums">{count}</span>
     </div>
   )
 }

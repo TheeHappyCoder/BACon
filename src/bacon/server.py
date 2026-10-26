@@ -41,9 +41,13 @@ control = Control(client, devices)
 async def protect_control(request: Request, call_next):
     if request.url.path.startswith('/api/control') and request.method == 'POST':
         from fastapi.responses import JSONResponse
+        # BACon's own page: served here, or by the dev server or a preview on this PC (any loopback port; a proxy
+        # in between may rewrite Host). Another website cannot send the custom header without a CORS preflight,
+        # which is never allowed, so a write from a remote page fails either way.
         origin = request.headers.get('origin')
-        allowed = {request.headers.get('host'), '127.0.0.1:5173', 'localhost:5173'}
-        if request.headers.get('x-bacon-control') != '1' or (origin and urlsplit(origin).netloc not in allowed):
+        netloc = urlsplit(origin).netloc if origin else ''
+        local = (urlsplit(origin).hostname or '') in ('localhost', '127.0.0.1', '::1') if origin else False
+        if request.headers.get('x-bacon-control') != '1' or (origin and netloc != request.headers.get('host') and not local):
             return JSONResponse({'detail': 'Control requests must come from BACon.'}, status_code=403)
     return await call_next(request)
 

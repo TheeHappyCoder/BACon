@@ -17,9 +17,10 @@ import { ControlProvider, useControl } from './components/ControlState'
 import { WRITABLE_TYPES } from './control'
 import { PropertiesPanel } from './components/PropertiesPanel'
 import { NetworkView } from './components/NetworkView'
-import { LayoutProvider, Pane, PaneToggle, useLayout } from './components/Layout'
+import { LayoutProvider, Pane, PaneToggle } from './components/Layout'
 import { TopBar, type Place } from './components/TopBar'
 import { SelectionBar } from './components/SelectionBar'
+import { SidePanel } from './components/SidePanel'
 import { TrendsView } from './components/TrendsView'
 import { TrendTargetDialog } from './components/TrendGroupDialog'
 import { SchedulesView } from './components/SchedulesView'
@@ -129,7 +130,6 @@ function Workspace() {
   const [capturing, setCapturing] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const siteFileRef = useRef<HTMLInputElement>(null)
-  const { setCollapsed } = useLayout()
 
   const refreshInterfaces = useCallback(async () => {
     const list = await api.interfaces()
@@ -688,11 +688,6 @@ function Workspace() {
 
   const selectedKey = openKey
   const selectedRow = selectedKey ? deviceRows.find((r) => r.key === selectedKey) ?? null : null
-  // the drawer mounts with a selection; a pane the user collapsed earlier opens again so it is never invisible
-  const hasSelectedRow = !!selectedRow
-  useEffect(() => {
-    if (hasSelectedRow) setCollapsed('right', false)
-  }, [hasSelectedRow, setCollapsed])
   const scopeJob = scopeDevice ? [...jobs].reverse().find((j) => j.device === scopeDevice.instance) : undefined
   const running = jobs.filter((j) => j.state === 'running' && !hidden.has(j.device))
   const loading = scopeDevice ? scopeJob?.state === 'running' : running.length > 0
@@ -826,9 +821,9 @@ function Workspace() {
   const title = !scopeDevice ? 'All devices' : scopeName
   const meta = !scopeDevice
     ? status.connected
-      ? `${status.settings?.ip}:${status.settings?.port} · ${plural(visibleDevices.length, 'device')} · ${plural(allRows.length, 'object')}`
+      ? `${status.settings?.ip}:${status.settings?.port}`
       : visibleDevices.length
-        ? `Not connected · ${plural(visibleDevices.length, 'device')} from a file`
+        ? 'Not connected · opened from a file'
         : 'Not connected'
     : [`#${scopeDevice.instance}`, scopeDevice.address, scopeDevice.vendorName, scopeDevice.model].filter(Boolean).join(' · ')
   const examples = EXAMPLES.filter((e) => available.some((p) => p.name === e.prop))
@@ -1215,8 +1210,8 @@ function Workspace() {
         </div>
       </main>
 
-      {selectedRow ? (
-        <Pane side="right">
+      <SidePanel open={!!selectedRow} subjectKey={selectedRow?.key}>
+        {selectedRow ? (
           <PropertiesPanel
             subject={selectedRow}
             columns={columns}
@@ -1240,8 +1235,8 @@ function Workspace() {
             onWritten={() => rereadRows([selectedRow])}
             onOpenSchedules={() => setPlace('schedules')}
           />
-        </Pane>
-      ) : null}
+        ) : null}
+      </SidePanel>
       </>
       )}
       </div>

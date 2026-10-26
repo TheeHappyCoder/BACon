@@ -31,7 +31,8 @@ import { ScrollArea } from '../ui/components/scroll-area'
 import { Tooltip, TooltipPopup, TooltipTrigger } from '../ui/components/tooltip'
 import { cn } from '../ui/utils'
 import { Detail, EmptyState, Group, PaneSearch, PaneTitle } from './Inspector'
-import { Pane, PaneToggle } from './Layout'
+import { Pane, PaneToggle, useLayout } from './Layout'
+import { PanelBody, PanelFooter, PanelHeader, SidePanel } from './SidePanel'
 import { SPIN, useSpin } from './spin'
 import { ScheduleEditor } from './ScheduleEditor'
 
@@ -91,6 +92,7 @@ export function SchedulesView({
 }) {
   const now = useNow(30_000)
   const [search, setSearch] = useState('')
+  const { setCollapsed } = useLayout()
   const [selectedKey, setSelectedKey] = useState<string | null>(() => localStorage.getItem('bx.schedule'))
   const [view, setView] = useState<'week' | 'month'>('week')
   const [anchor, setAnchor] = useState(() => new Date())
@@ -404,105 +406,106 @@ export function SchedulesView({
             )}
           </section>
 
-          <Pane side="right">
-            <ScrollArea scrollFade className="min-h-0 w-full">
-              <aside key={row.key} className="nc-view-in flex w-full min-w-0 flex-col gap-2.5 p-3">
-                <NowCard p={p} current={current} next={next} now={now} calendars={calendars} />
-                <Group label="Behaviour">
-                  <dl className="m-0">
-                    <Detail label="Default value">{valueLabel(p.s.fallback, p.ctx)}</Detail>
-                    <Detail label="Writes at priority">{row.values['priority-for-writing'] ? `P${row.values['priority-for-writing']}` : '–'}</Detail>
-                    <Detail label="In effect">{describeEffective(p.s)}</Detail>
-                    <Detail label="Status">{faulty ? <span className="text-(--status-alarm-strong)">{reliability}</span> : outOfService ? 'Out of service' : 'Normal'}</Detail>
-                  </dl>
-                </Group>
-                <Group label={refs.length === 1 ? 'Drives' : `Drives ${refs.length || ''}`}>
-                  {refs.length ? (
-                    <div className="-mx-2 flex flex-col">
-                      {refs.map(({ ref, row: target }, i) => (
-                        <button
-                          key={i}
-                          disabled={!target}
-                          onClick={() => target && onShowInObjects(target)}
-                          className="flex min-h-10 items-center gap-2 rounded-[10px] px-2 text-left text-[12.5px] transition-colors hover:bg-(--surface-hover) disabled:hover:bg-transparent"
-                        >
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-medium">{target?.values['object-name'] || `${ref.object[0]},${ref.object[1]}`}</span>
-                            <span className="block truncate text-[11.5px] text-(--text-muted)">
-                              {target?.values['Object type'] ?? 'not read'} {ref.object[1]} · {ref.property}
-                              {ref.device !== null && ref.device !== row.device ? ` · device ${ref.device}` : ''}
-                            </span>
-                          </span>
-                          {target?.values['present-value'] !== undefined ? (
-                            <span className="shrink-0 tabular-nums text-(--text-muted)">{target.values['present-value']}</span>
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="m-0 text-[12.5px] text-(--text-muted)">No points listed. The schedule only keeps its own present value.</p>
-                  )}
-                </Group>
-                <Group label={`Exceptions${p.s.exceptions.length ? ` ${p.s.exceptions.length}` : ''}`}>
-                  {p.s.exceptions.length ? (
-                    <div className="flex flex-col gap-2">
-                      {p.s.exceptions
-                        .map((ex, i) => ({ ex, i, next: nextDate(p, i, calendars, now) }))
-                        .sort((a, b) => (a.next?.getTime() ?? Infinity) - (b.next?.getTime() ?? Infinity))
-                        .map(({ ex, i, next: on }) => {
-                          const cal = ex.period && 'calendar' in ex.period ? calendars.get(`${row.device}:${ex.period.calendar[1]}`) : undefined
-                          return (
-                            <div key={i} className="rounded-[12px] border border-dashed border-(--border-default) px-3 py-2.5">
-                              <div className="flex items-start gap-2">
-                                <div className="min-w-0 flex-1">
-                                  <div className="truncate text-[12.5px] font-medium">{describePeriod(ex.period, row.device, calendars)}</div>
-                                  <div className="mt-0.5 text-[11.5px] text-(--text-muted)">
-                                    {on ? (sameDay(on, now) ? 'Today' : `Next ${fmtDay(on, { weekday: 'short', day: 'numeric', month: 'short' })}`) : 'No date in the coming year'}
-                                    {cal ? ` · calendar, ${cal.entries.length} ${cal.entries.length === 1 ? 'entry' : 'entries'}` : ''}
-                                  </div>
-                                </div>
-                                <span className="shrink-0 rounded-full bg-(--surface-track) px-2 text-[11px] leading-5 tabular-nums text-(--text-muted)" title="Exception priority: 1 wins over 16">
-                                  P{ex.priority}
-                                </span>
-                              </div>
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {ex.times.length ? (
-                                  ex.times.map((t, k) => (
-                                    <span key={k} className="inline-flex h-6 items-center gap-1.5 rounded-full bg-(--surface-card-muted) pr-2.5 pl-1.5 text-[11.5px] tabular-nums">
-                                      <span className="size-2 rounded-full" style={{ background: t.value.type === 'null' ? 'transparent' : fillOf(p.color(t.value)), boxShadow: 'inset 0 0 0 1px rgba(41,41,41,0.12)' }} />
-                                      {t.time?.slice(0, 5) ?? '--:--'} {valueLabel(t.value, p.ctx)}
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className="text-[11.5px] text-(--text-muted)">No times: the weekly schedule runs as normal.</span>
-                                )}
-                              </div>
-                              {cal && cal.entries.length ? (
-                                <ul className="m-0 mt-2 flex list-none flex-col gap-0.5 border-t border-(--border-divider) p-0 pt-2 text-[11.5px] text-(--text-muted)">
-                                  {cal.entries.slice(0, 8).map((e, k) => (
-                                    <li key={k} className="truncate">
-                                      {describeEntry(e)}
-                                    </li>
-                                  ))}
-                                  {cal.entries.length > 8 ? <li>and {cal.entries.length - 8} more</li> : null}
-                                </ul>
-                              ) : null}
-                            </div>
-                          )
-                        })}
-                    </div>
-                  ) : (
-                    <p className="m-0 text-[12.5px] text-(--text-muted)">None. The weekly schedule runs every week.</p>
-                  )}
-                </Group>
-                <Button size="sm" variant="secondary" onClick={() => onShowInObjects(row)}>
-                  Show in Objects
-                </Button>
-              </aside>
-            </ScrollArea>
-          </Pane>
         </div>
       </main>
+      <SidePanel open subjectKey={row.key}>
+        <PanelHeader eyebrow={`${row.values['Device name'] || `Device ${row.device}`} · schedule ${row.instance}`} title={p.name} onClose={() => setCollapsed('right', true)} />
+        <PanelBody>
+            <NowCard p={p} current={current} next={next} now={now} calendars={calendars} />
+            <Group label="Behaviour">
+              <dl className="m-0">
+                <Detail label="Default value">{valueLabel(p.s.fallback, p.ctx)}</Detail>
+                <Detail label="Writes at priority">{row.values['priority-for-writing'] ? `P${row.values['priority-for-writing']}` : '–'}</Detail>
+                <Detail label="In effect">{describeEffective(p.s)}</Detail>
+                <Detail label="Status">{faulty ? <span className="text-(--status-alarm-strong)">{reliability}</span> : outOfService ? 'Out of service' : 'Normal'}</Detail>
+              </dl>
+            </Group>
+            <Group label={refs.length === 1 ? 'Drives' : `Drives ${refs.length || ''}`}>
+              {refs.length ? (
+                <div className="-mx-2 flex flex-col">
+                  {refs.map(({ ref, row: target }, i) => (
+                    <button
+                      key={i}
+                      disabled={!target}
+                      onClick={() => target && onShowInObjects(target)}
+                      className="flex min-h-10 items-center gap-2 rounded-[10px] px-2 text-left text-[12.5px] transition-colors hover:bg-(--surface-hover) disabled:hover:bg-transparent"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{target?.values['object-name'] || `${ref.object[0]},${ref.object[1]}`}</span>
+                        <span className="block truncate text-[11.5px] text-(--text-muted)">
+                          {target?.values['Object type'] ?? 'not read'} {ref.object[1]} · {ref.property}
+                          {ref.device !== null && ref.device !== row.device ? ` · device ${ref.device}` : ''}
+                        </span>
+                      </span>
+                      {target?.values['present-value'] !== undefined ? (
+                        <span className="shrink-0 tabular-nums text-(--text-muted)">{target.values['present-value']}</span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="m-0 text-[12.5px] text-(--text-muted)">No points listed. The schedule only keeps its own present value.</p>
+              )}
+            </Group>
+            <Group label={`Exceptions${p.s.exceptions.length ? ` ${p.s.exceptions.length}` : ''}`}>
+              {p.s.exceptions.length ? (
+                <div className="flex flex-col gap-2">
+                  {p.s.exceptions
+                    .map((ex, i) => ({ ex, i, next: nextDate(p, i, calendars, now) }))
+                    .sort((a, b) => (a.next?.getTime() ?? Infinity) - (b.next?.getTime() ?? Infinity))
+                    .map(({ ex, i, next: on }) => {
+                      const cal = ex.period && 'calendar' in ex.period ? calendars.get(`${row.device}:${ex.period.calendar[1]}`) : undefined
+                      return (
+                        <div key={i} className="rounded-[12px] border border-dashed border-(--border-default) px-3 py-2.5">
+                          <div className="flex items-start gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[12.5px] font-medium">{describePeriod(ex.period, row.device, calendars)}</div>
+                              <div className="mt-0.5 text-[11.5px] text-(--text-muted)">
+                                {on ? (sameDay(on, now) ? 'Today' : `Next ${fmtDay(on, { weekday: 'short', day: 'numeric', month: 'short' })}`) : 'No date in the coming year'}
+                                {cal ? ` · calendar, ${cal.entries.length} ${cal.entries.length === 1 ? 'entry' : 'entries'}` : ''}
+                              </div>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-(--surface-track) px-2 text-[11px] leading-5 tabular-nums text-(--text-muted)" title="Exception priority: 1 wins over 16">
+                              P{ex.priority}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {ex.times.length ? (
+                              ex.times.map((t, k) => (
+                                <span key={k} className="inline-flex h-6 items-center gap-1.5 rounded-full bg-(--surface-card-muted) pr-2.5 pl-1.5 text-[11.5px] tabular-nums">
+                                  <span className="size-2 rounded-full" style={{ background: t.value.type === 'null' ? 'transparent' : fillOf(p.color(t.value)), boxShadow: 'inset 0 0 0 1px rgba(41,41,41,0.12)' }} />
+                                  {t.time?.slice(0, 5) ?? '--:--'} {valueLabel(t.value, p.ctx)}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[11.5px] text-(--text-muted)">No times: the weekly schedule runs as normal.</span>
+                            )}
+                          </div>
+                          {cal && cal.entries.length ? (
+                            <ul className="m-0 mt-2 flex list-none flex-col gap-0.5 border-t border-(--border-divider) p-0 pt-2 text-[11.5px] text-(--text-muted)">
+                              {cal.entries.slice(0, 8).map((e, k) => (
+                                <li key={k} className="truncate">
+                                  {describeEntry(e)}
+                                </li>
+                              ))}
+                              {cal.entries.length > 8 ? <li>and {cal.entries.length - 8} more</li> : null}
+                            </ul>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                </div>
+              ) : (
+                <p className="m-0 text-[12.5px] text-(--text-muted)">None. The weekly schedule runs every week.</p>
+              )}
+            </Group>
+        </PanelBody>
+        <PanelFooter>
+          <Button size="sm" variant="secondary" onClick={() => onShowInObjects(row)}>
+            Show in Objects
+          </Button>
+        </PanelFooter>
+      </SidePanel>
     </>
   )
 }

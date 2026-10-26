@@ -4,9 +4,9 @@ import { SYNTHETIC_COLUMNS } from '../exporters'
 import { Button } from '../ui/components/button'
 import { Hugeicons } from '../ui/components/hugeicons'
 import { Input } from '../ui/components/input'
-import { ScrollArea } from '../ui/components/scroll-area'
 import { Tabs, TabsList, TabsTab } from '../ui/components/tabs'
 import { PointControl } from './PointControl'
+import { PanelBody, PanelFooter, PanelHeader } from './SidePanel'
 import { useControl } from './ControlState'
 
 const { Plus, XIcon, LineChart } = Hugeicons
@@ -122,46 +122,34 @@ export function PropertiesPanel({
     )
 
   return (
-    <aside className="flex w-full min-w-0 flex-col overflow-hidden bg-(--surface-card)">
-      <div key={subject.key} className="nc-view-in flex items-start gap-3 px-[18px] pt-4 pb-3">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] text-(--text-faint)">
-            {subject.values['Object type']} · {subject.instance}
-          </div>
-          <div className="mt-0.5 truncate text-[17px] font-medium tracking-[-0.01em]">{subject.values['object-name'] || 'Unnamed object'}</div>
-        </div>
-        <Button aria-label="Close this object" title="Close" variant="secondary" size="icon-xs" onClick={onClearSubject}>
-          <XIcon />
-        </Button>
-      </div>
-
-      {isPoint ? (
-        <div className="px-[18px] pb-2">
+    <>
+      <PanelHeader eyebrow={`${subject.values['Object type']} · ${subject.instance}`} title={subject.values['object-name'] || 'Unnamed object'} onClose={onClearSubject} closeLabel="Close this object">
+        {isPoint ? (
           <Tabs value={showing} onValueChange={(v) => setTab(v as typeof tab)}>
             <TabsList className="w-full">
               <TabsTab value="overview" className="flex-1">Overview</TabsTab>
               <TabsTab value="properties" className="flex-1">Properties</TabsTab>
             </TabsList>
           </Tabs>
-        </div>
-      ) : null}
+        ) : null}
+      </PanelHeader>
 
       {showing === 'overview' ? (
-        <ScrollArea scrollFade className="min-h-0 flex-1">
+        <PanelBody padded={false}>
           {subject.status !== 'ok' ? (
             <div className="mx-[18px] mb-1 rounded-[12px] bg-(--status-alarm-bg) px-3 py-2 text-[12px] leading-snug">{subject.values['Read status']}</div>
           ) : null}
           <PointControl key={subject.key} row={subject} canWrite={canRead} reloadSignal={reloadSignal} onWritten={onWritten} onOpenSchedules={onOpenSchedules} />
-        </ScrollArea>
+        </PanelBody>
       ) : (
         <>
-          <div className="px-[18px] pb-2">
+          <div className="shrink-0 px-[18px] pb-2">
             <Input size="sm" placeholder="Find a property, e.g. address, units, 3019" value={query} onChange={(e) => setQuery(e.target.value)} />
             {subject.status !== 'ok' ? (
               <div className="mt-2 rounded-[12px] bg-(--status-alarm-bg) px-3 py-2 text-[12px] leading-snug">{subject.values['Read status']}</div>
             ) : null}
           </div>
-          <ScrollArea scrollFade className="min-h-0 flex-1">
+          <PanelBody padded={false}>
             <div className="flex flex-col px-2.5 pb-3">
               {renderSection('Vendor-specific', 'not in an EDE export', !vendor.length, vendor.map(renderRow))}
               {renderSection('Standard', undefined, !standard.length, standard.map(renderRow))}
@@ -169,23 +157,21 @@ export function PropertiesPanel({
                 <p className="m-0 px-2 py-4 text-center text-[12px] text-(--text-muted)">No property matches. Try a shorter search.</p>
               ) : null}
             </div>
-          </ScrollArea>
+          </PanelBody>
         </>
       )}
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-(--border-subtle) px-[18px] py-3">
-        <span className="flex gap-1.5">
-          {onTrend ? (
-            <Button size="sm" variant="secondary" onClick={onTrend} disabled={trended}>
-              <LineChart />
-              {trended ? (trendLabel ? 'In Trends' : 'Trending') : trendLabel ?? 'Trend'}
-            </Button>
-          ) : null}
-          <Button size="sm" variant="secondary" onClick={() => { onReread(); setReloadSignal((n) => n + 1) }} disabled={!canRead}>
-            Read again
+      <PanelFooter>
+        {onTrend ? (
+          <Button size="sm" variant="secondary" onClick={onTrend} disabled={trended}>
+            <LineChart />
+            {trended ? (trendLabel ? 'In Trends' : 'Trending') : trendLabel ?? 'Trend'}
           </Button>
-        </span>
-      </div>
-    </aside>
+        ) : null}
+        <Button size="sm" variant="secondary" onClick={() => { onReread(); setReloadSignal((n) => n + 1) }} disabled={!canRead}>
+          Read again
+        </Button>
+      </PanelFooter>
+    </>
   )
 }
