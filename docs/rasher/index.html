@@ -52,7 +52,7 @@
   }
 </style>
 </head>
-<body>
+<body data-motion="rasher">
 
 <header class="nav" id="nav">
   <div class="side">
@@ -252,13 +252,15 @@
 </footer>
 
 <script src="https://unpkg.com/lenis@1/dist/lenis.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/ScrollTrigger.min.js"></script>
 <script src="../releases.js" defer></script>
 <script>
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
 
   // ---- smooth scroll (Lenis); the in-page links glide too, landing clear of the fixed nav ----
   if (!reduce && window.Lenis) {
-    new Lenis({ autoRaf: true, anchors: { offset: -90 } })
+    window.lenis = new Lenis({ autoRaf: true, anchors: { offset: -90 } })
   }
 
   // ---- inside: the tabs on the left show that view on the right, then move on to the next ----
@@ -338,5 +340,6 @@
   addEventListener('scroll', onScroll, { passive: true })
   onScroll()
 </script>
+<script src="../motion.js"></script>
 </body>
 </html>

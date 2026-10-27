@@ -268,3 +268,23 @@ footer .by { display: inline-flex; align-items: center; gap: 12px; }
     .hero { height: 760px; }
   .hero-copy { padding-top: 104px; }
 }
+
+/* ---- the scroll motion's pieces (motion.js adds these elements; without it none exist) ---- */
+.m-w { display: inline-block; white-space: nowrap; }
+.m-in, .m-c { display: inline-block; will-change: transform; }
+.m-c.m-hot { color: var(--lime); }
+/* BACon: a lime bar sweeps across a heading and leaves it behind */
+.m-wiped { position: relative; }
+.m-wipe { opacity: var(--shown, 0); }
+.m-bar { position: absolute; inset: 0.02em -0.12em 0.04em; border-radius: 10px; background: var(--lime); transform: scaleX(0); }
+/* BACon: the console's scan line */
+.console { position: relative; }
+.m-scan { position: absolute; left: 0; right: 0; height: 2px; background: var(--lime); box-shadow: 0 0 24px 4px rgba(198, 245, 111, 0.45); opacity: 0; pointer-events: none; }
+/* Rasher: sparks spitting off the pan */
+.m-sparks { position: absolute; z-index: 0; left: 50%; top: clamp(400px, 57%, 600px); width: 0; height: 0; pointer-events: none; }
+.m-sparks i { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: radial-gradient(circle, #fff 20%, #ffb9a2 70%); box-shadow: 0 0 10px 2px rgba(255, 185, 162, 0.7); opacity: 0; }
+/* Rasher: a glitch splits text into red and cyan */
+.m-glitch, .m-glitch * { text-shadow: 2px 0 rgba(255, 40, 90, 0.75), -2px 0 rgba(0, 220, 255, 0.75); }
+@media (max-width: 960px) {
+  .m-sparks { top: 56%; }
+}
